@@ -1,0 +1,37 @@
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.ui-button:active {
+  transform: scale(0.98);
+}
+
+.ui-button--primary {
+  border: none;
+  background: var(--pastel-gradient-primary);
+  color: #fff;
+  box-shadow: 0 12px 24px var(--pastel-shadow);
+}
+
+.ui-button--harvest {
+  border: none;
+  background: var(--pastel-gradient-harvest);
+  color: #fff;
+  box-shadow: 0 12px 24px var(--pastel-shadow);
+}
+
+.ui-button--ghost {
+  border: 1px solid var(--pastel-border);
+  background: var(--pastel-bg-surface);
+  color: var(--pastel-text-accent);
+}

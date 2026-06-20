@@ -1,0 +1,428 @@
+.water-hold {
+  margin: 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: var(--pastel-bg-surface);
+  border: 1px solid var(--pastel-border);
+  box-shadow: 0 10px 28px var(--pastel-shadow);
+}
+
+.water-hold__title {
+  margin: 0 0 18px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pastel-text-sky);
+  text-align: center;
+}
+
+.water-hold__btn {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #fff8ee 0%, #f5e6cc 52%, #e8d4a8 100%);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  box-shadow:
+    inset 0 0 0 2px rgba(220, 190, 140, 0.5),
+    0 6px 20px rgba(180, 150, 100, 0.18);
+}
+
+.water-hold__btn--active {
+  transform: scale(0.98);
+  background: radial-gradient(circle at 50% 38%, #fdf4e4 0%, #f0dcb8 52%, #e4c898 100%);
+}
+
+.water-hold__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.water-hold__ring-bg {
+  fill: none;
+  stroke: #efe4dc;
+  stroke-width: 16;
+  opacity: 0.9;
+}
+
+.water-hold__ring-fill {
+  fill: none;
+  stroke: #e8c8b8;
+  stroke-width: 16;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.water-hold__ring-fill--active {
+  stroke: #ddb8a8;
+  filter: drop-shadow(0 0 6px rgba(221, 184, 168, 0.5));
+}
+
+.water-hold__ring-tip {
+  fill: #fffaf6;
+  stroke: #ddb8a8;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.water-hold__gauge-pct {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c9a898;
+  letter-spacing: 0.02em;
+}
+
+.water-hold__inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+}
+
+.water-hold__status {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pastel-text-sky);
+}
+
+.water-hold__timer {
+  margin: 8px 0 0;
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--pastel-text-accent);
+  line-height: 1;
+}
+
+.water-hold__target {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--pastel-text-muted);
+}
+
+.water-hold__warn {
+  margin: 16px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pastel-text-warm);
+}
+
+.water-hold__footer {
+  margin: 10px 0 0;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--pastel-bg-muted);
+  font-size: 11px;
+  color: var(--pastel-text-soft);
+  text-align: center;
+}
+
+.water-hold--harvest {
+  text-align: center;
+}
+
+.water-hold--harvest .water-hold__harvest-headline {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--pastel-text-mint);
+}
+
+.water-hold__harvest-desc {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  color: var(--pastel-text-soft);
+}
+
+.water-hold__harvest-btn {
+  width: 100%;
+  padding: 16px 20px;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #f0d8a8 0%, #e4b878 50%, #d4a060 100%);
+  color: #3d2818;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 236, 0.9),
+    0 8px 20px rgba(160, 110, 50, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px solid #c89850;
+}
+
+.water-hold__harvest-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.water-hold__harvest-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.water-hold__harvest-action {
+  font-size: 16px;
+  font-weight: 800;
+  color: #3d2818;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.water-hold__harvest-reward {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff8f0;
+  white-space: nowrap;
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9a6030 0%, #7a4820 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.water-hold__harvest-coin {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff8f0;
+  white-space: nowrap;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9a6030 0%, #7a4820 100%);
+}
+
+/* 배경 위 오버레이 (중앙 하단) */
+.water-hold--embedded {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.water-hold--embedded .water-hold__ring-bg {
+  fill: none;
+  stroke: #f0e6de;
+  stroke-width: 12;
+  opacity: 0.95;
+}
+
+.water-hold--embedded .water-hold__ring-fill {
+  fill: none;
+  stroke: #e8c8b8;
+  stroke-width: 13;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.water-hold--embedded .water-hold__ring-fill--active {
+  stroke: #d8b0a0;
+  stroke-width: 14;
+  filter: drop-shadow(0 0 6px rgba(216, 176, 160, 0.55));
+}
+
+.water-hold--embedded .water-hold__ring-tip {
+  fill: #fffaf6;
+  stroke: #d8b0a0;
+  stroke-width: 2;
+}
+
+.water-hold--embedded .water-hold__ring-edge {
+  fill: #e8c8b8;
+  stroke: #fff8f0;
+  stroke-width: 2;
+  opacity: 1;
+}
+
+.water-hold--embedded .water-hold__btn {
+  background: radial-gradient(circle at 50% 38%, #fff8ee 0%, #f5e6cc 52%, #e8d4a8 100%);
+  backdrop-filter: blur(4px);
+  box-shadow:
+    inset 0 0 0 2px rgba(220, 190, 140, 0.55),
+    0 8px 22px rgba(180, 150, 100, 0.2);
+  animation: water-heartbeat 1.35s ease-in-out infinite;
+}
+
+.water-hold--embedded .water-hold__btn--active {
+  animation: none;
+  transform: scale(0.96);
+  background: radial-gradient(circle at 50% 38%, #fdf4e4 0%, #f0dcb8 52%, #e4c898 100%);
+}
+
+.water-hold--embedded .water-hold__inner {
+  width: 68%;
+  height: 68%;
+  margin: auto;
+  padding: 8px 6px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: linear-gradient(165deg, #fffcf4 0%, #f8ecd8 48%, #f0e0c4 100%);
+  box-shadow:
+    inset 0 2px 10px rgba(255, 255, 255, 0.8),
+    inset 0 -4px 10px rgba(200, 170, 120, 0.12);
+}
+
+.water-hold--embedded .water-hold__status {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #b89878;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.water-hold--embedded .water-hold__timer {
+  margin: 4px 0 0;
+  font-size: 22px;
+  line-height: 1;
+  color: #a88868;
+}
+
+.water-hold--embedded .water-hold__gauge-pct {
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.water-hold--embedded .water-hold__warn {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--pastel-text-warm);
+}
+
+.water-hold__reward-hint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: #906840;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.85);
+}
+
+.water-hold__drink-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+}
+
+.water-hold__drink-line {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #7a5030;
+  text-align: center;
+}
+
+.water-hold--embedded.water-hold--drink .water-hold__drink-line {
+  font-size: 12px;
+}
+
+.water-hold--embedded.water-hold--drink .water-hold__reward-hint {
+  margin-top: 3px;
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
+.water-hold--embedded.water-hold--drink .water-hold__btn {
+  animation: none;
+}
+
+@keyframes water-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(1.07);
+  }
+  24% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(1.11);
+  }
+  48% {
+    transform: scale(1);
+  }
+}
+
+.water-hold--embedded.water-hold--harvest {
+  width: 100%;
+  text-align: center;
+}
+
+.water-hold--embedded.water-hold--harvest .water-hold__harvest-btn {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 18px 10px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #f2dcb0 0%, #e8c080 42%, #d8a858 100%);
+  border: 2px solid #c09048;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 250, 236, 0.95),
+    inset 0 -3px 8px rgba(140, 90, 30, 0.12),
+    0 8px 22px rgba(150, 100, 40, 0.3);
+  gap: 6px;
+}
+
+.water-hold--embedded.water-hold--harvest .water-hold__harvest-action {
+  font-size: 15px;
+  font-weight: 800;
+  color: #2e1e10;
+  text-shadow: 0 1px 0 rgba(255, 248, 236, 0.5);
+}
+
+.water-hold--embedded.water-hold--harvest .water-hold__harvest-icon {
+  font-size: 18px;
+}
+
+.water-hold--embedded.water-hold--harvest .water-hold__harvest-reward {
+  font-size: 13px;
+  padding: 4px 14px;
+  background: linear-gradient(180deg, #8a5428 0%, #6a3c18 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 2px 6px rgba(60, 30, 10, 0.2);
+}
+
+.water-hold--embedded.water-hold--harvest .water-hold__harvest-btn:active {
+  transform: scale(0.98);
+  box-shadow:
+    inset 0 2px 6px rgba(140, 90, 30, 0.2),
+    0 4px 12px rgba(150, 100, 40, 0.22);
+}

@@ -1,0 +1,76 @@
+:root {
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* 파스텔 배경 */
+  --pastel-bg-outer: #ebe6f5;
+  --pastel-bg-app: #faf8ff;
+  --pastel-bg-surface: #fffcff;
+  --pastel-bg-muted: #f3effa;
+  --pastel-bg-card: #f7f4fc;
+
+  /* 파스텔 컬러 */
+  --pastel-lavender: #ddd4f5;
+  --pastel-lavender-deep: #c4b8ee;
+  --pastel-mint: #c8eedd;
+  --pastel-mint-deep: #a8dfc8;
+  --pastel-peach: #fce4d8;
+  --pastel-peach-deep: #f8cdb8;
+  --pastel-sky: #d4eaf8;
+  --pastel-sky-deep: #b8d9f0;
+  --pastel-lemon: #fef3d8;
+  --pastel-lemon-deep: #fce8b8;
+  --pastel-pink: #f8dcea;
+  --pastel-pink-deep: #f0c4dc;
+
+  /* 텍스트 */
+  --pastel-text: #6e6888;
+  --pastel-text-soft: #9a94b0;
+  --pastel-text-muted: #b5afc4;
+  --pastel-text-accent: #9b8fd4;
+  --pastel-text-warm: #c9a0a8;
+  --pastel-text-mint: #6aab8a;
+  --pastel-text-lemon: #c9a878;
+  --pastel-text-sky: #7a9ec4;
+
+  /* 테두리·그림자 */
+  --pastel-border: #e8e2f2;
+  --pastel-border-soft: #f0ecf8;
+  --pastel-shadow: rgba(150, 130, 190, 0.1);
+  --pastel-shadow-deep: rgba(150, 130, 190, 0.18);
+
+  /* 그라데이션 */
+  --pastel-gradient-growth: linear-gradient(90deg, #fce8b8, #f8d4c8);
+  --pastel-gradient-water: radial-gradient(circle at 50% 38%, #fef8f4 0%, #fce8dc 62%, #f5d8e8 100%);
+  --pastel-gradient-water-active: radial-gradient(circle at 50% 38%, #fdf4f8 0%, #f8dce8 62%, #f0cce0 100%);
+  --pastel-gradient-water-inner: linear-gradient(165deg, #fffcfe 0%, #fceef6 48%, #f8dce8 100%);
+  --pastel-gradient-harvest: linear-gradient(180deg, #c8eedd, #b0e4d0);
+  --pastel-gradient-win: linear-gradient(180deg, #fce8b8, #f8d0c8);
+  --pastel-gradient-primary: linear-gradient(180deg, #f0c4dc, #e4b4d4);
+
+  color: var(--pastel-text);
+  background: var(--pastel-bg-outer);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}

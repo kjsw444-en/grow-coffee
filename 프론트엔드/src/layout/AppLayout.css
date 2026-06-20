@@ -1,0 +1,28 @@
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 0;
+  background: var(--pastel-bg-outer);
+}
+
+.app-layout__phone {
+  width: 100%;
+  max-width: 390px;
+  min-height: 100vh;
+  background: var(--pastel-bg-app);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+@media (min-width: 420px) {
+  .app-layout {
+    padding: 16px;
+  }
+
+  .app-layout__phone {
+    min-height: 92vh;
+    border-radius: 28px;
+    box-shadow: 0 20px 50px var(--pastel-shadow-deep);
+  }
+}

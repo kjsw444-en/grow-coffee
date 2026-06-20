@@ -1,0 +1,7 @@
+.ui-card {
+  background: var(--pastel-bg-surface);
+  border: 1px solid var(--pastel-border);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 10px 30px var(--pastel-shadow);
+}

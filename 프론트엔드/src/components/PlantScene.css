@@ -1,0 +1,144 @@
+.plant-scene {
+  padding: 0 16px;
+}
+
+.plant-scene__frame {
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--pastel-peach);
+  border: 2px solid #fff;
+  box-shadow: 0 8px 24px var(--pastel-shadow);
+}
+
+.plant-scene__art-wrap {
+  position: relative;
+  width: 100%;
+  line-height: 0;
+}
+
+.plant-scene__bg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 473 / 1024;
+  object-fit: contain;
+  object-position: center top;
+  pointer-events: none;
+  user-select: none;
+}
+
+.plant-scene__plant-slot {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  width: 42%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.plant-scene__plant-slot--pot {
+  bottom: 18%;
+  width: 58%;
+}
+
+.plant-scene__plant-slot--complete {
+  bottom: 20%;
+  width: 52%;
+}
+
+.plant-scene__plant-visual {
+  transition: transform 0.25s ease;
+}
+
+.plant-scene__plant-img {
+  display: block;
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 14px var(--pastel-shadow-deep));
+}
+
+.plant-scene__plant-img--pot {
+  max-width: 220px;
+}
+
+.plant-scene__plant-img--complete {
+  max-width: 190px;
+}
+
+.plant-scene__stage-emoji {
+  font-size: clamp(40px, 14vw, 56px);
+  filter: drop-shadow(0 3px 6px var(--pastel-shadow));
+}
+
+.plant-scene__action-slot {
+  position: absolute;
+  left: 50%;
+  bottom: 3%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.plant-scene__frame--complete .plant-scene__bg {
+  aspect-ratio: auto;
+}
+
+.plant-scene__frame--complete.plant-scene__frame--ready {
+  box-shadow: 0 0 0 3px #d8a858;
+}
+
+.plant-scene__action-slot--drink {
+  bottom: 4%;
+  width: calc(100% - 32px);
+}
+
+.plant-scene__frame--water .plant-scene__plant-visual {
+  animation: plant-sway 0.9s ease-in-out infinite;
+}
+
+.plant-scene__frame--ready {
+  box-shadow: 0 0 0 3px var(--pastel-mint-deep);
+}
+
+.plant-scene__frame--ready .plant-scene__plant-visual {
+  animation: plant-glow 1.4s ease-in-out infinite;
+}
+
+.plant-scene__frame--bounce .plant-scene__art-wrap {
+  animation: plant-bounce 0.3s ease;
+}
+
+@keyframes plant-sway {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes plant-glow {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes plant-bounce {
+  50% {
+    transform: scale(1.02);
+  }
+}
