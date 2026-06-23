@@ -85,12 +85,16 @@ export async function initPlayerSession(
 
   try {
     return await ensureGuestSession(displayName)
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : '게스트 세션을 만들지 못했습니다.'
+    console.warn('Guest session failed, falling back to mock session', error)
     return {
       userId: '',
       displayName: DEFAULT_DISPLAY_NAME,
       source: 'mock',
       balanceRules: DEFAULT_BALANCE_RULES,
+      connectionError: message,
     }
   }
 }

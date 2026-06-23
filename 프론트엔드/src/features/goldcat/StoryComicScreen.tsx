@@ -77,7 +77,7 @@ function EpisodeCard({
       <div className="comic-episode-copy">
         <strong>{episode.subtitle}</strong>
         <small>{episode.description}</small>
-        <span className="comic-episode-cta">광고 보고 보기</span>
+        <span className="comic-episode-cta">잠깐 후 보기</span>
       </div>
     </button>
   );
@@ -254,7 +254,7 @@ export function StoryComicScreen({
             <section className="comic-hero">
               <strong>공짜 썰만화</strong>
               <p>시리즈를 선택하세요</p>
-              <small>시리즈·편 목록까지는 무료, 편을 고르면 광고 후 볼 수 있어요.</small>
+              <small>시리즈·편 목록까지는 무료, 편을 고르면 잠깐 멈춤 후 볼 수 있어요.</small>
             </section>
 
             <section className="comic-episode-select">
@@ -291,7 +291,7 @@ export function StoryComicScreen({
             <section className="comic-hero">
               <strong>{getComicSeriesDisplayTitle(currentSeries!)}</strong>
               <p>{currentSeries!.summary}</p>
-              <small>원하는 편을 고르면 광고 시청 후 볼 수 있어요.</small>
+              <small>원하는 편을 고르면 잠깐 멈춤 후 볼 수 있어요.</small>
             </section>
 
             <section className="comic-episode-select">

@@ -11,14 +11,21 @@ export function roundGrowth(value) {
 export function normalizePassiveQuota(raw) {
   const today = getPassiveDayKey()
   const dayKey = String(raw?.passiveDayKey || '')
+  const dailyPassiveGrowth = roundGrowth(Math.max(0, Number(raw?.dailyPassiveGrowth ?? 0)))
+  const passiveCoffeesClaimed = Math.max(0, Math.floor(Number(raw?.passiveCoffeesClaimed ?? 0)))
+
+  if (!dayKey) {
+    return { passiveDayKey: today, dailyPassiveGrowth, passiveCoffeesClaimed }
+  }
 
   if (dayKey !== today) {
-    return { passiveDayKey: today, dailyPassiveGrowth: 0 }
+    return { passiveDayKey: today, dailyPassiveGrowth: 0, passiveCoffeesClaimed: 0 }
   }
 
   return {
     passiveDayKey: today,
-    dailyPassiveGrowth: roundGrowth(raw?.dailyPassiveGrowth ?? 0),
+    dailyPassiveGrowth,
+    passiveCoffeesClaimed,
   }
 }
 
@@ -44,34 +51,36 @@ export function parseGrowthAccrualSyncedAt(raw) {
   return new Date(repaired)
 }
 
+/** 방치 누적(dailyPassiveGrowth) — 성장 게이지 100%·마시기와 무관하게 일일 캡까지 계속 */
 export function canAccruePassiveGrowth(state) {
-  return !state.redeemed && Number(state.growth) < 100
+  const passive = normalizePassiveQuota(state)
+
+  return !state.redeemed && passive.dailyPassiveGrowth < DAILY_PASSIVE_GROWTH_CAP
 }
 
 export function calculatePassiveGrowthDelta({
   from,
   to,
-  growth,
   dailyPassiveGrowth,
   redeemed,
 }) {
-  if (!canAccruePassiveGrowth({ growth, redeemed })) {
-    return 0
+  if (redeemed || dailyPassiveGrowth >= DAILY_PASSIVE_GROWTH_CAP) {
+    return { quotaDelta: 0, growthDelta: 0 }
   }
 
   const fromMs = from instanceof Date ? from.getTime() : new Date(from).getTime()
   const toMs = to instanceof Date ? to.getTime() : new Date(to).getTime()
 
   if (toMs <= fromMs) {
-    return 0
+    return { quotaDelta: 0, growthDelta: 0 }
   }
 
   const seconds = (toMs - fromMs) / 1000
   const raw = seconds * PASSIVE_GROWTH_PER_SECOND
   const roomInDaily = Math.max(0, DAILY_PASSIVE_GROWTH_CAP - dailyPassiveGrowth)
-  const roomToMax = Math.max(0, 100 - growth)
+  const quotaDelta = roundGrowth(Math.min(raw, roomInDaily))
 
-  return roundGrowth(Math.min(raw, roomInDaily, roomToMax))
+  return { quotaDelta, growthDelta: 0 }
 }
 
 export function settlePassiveGrowth(state, now = new Date()) {
@@ -79,10 +88,9 @@ export function settlePassiveGrowth(state, now = new Date()) {
   const passiveQuota = normalizePassiveQuota(current)
   const syncedAt = parseGrowthAccrualSyncedAt(current)
 
-  const delta = calculatePassiveGrowthDelta({
+  const { quotaDelta } = calculatePassiveGrowthDelta({
     from: syncedAt,
     to: now,
-    growth: current.growth,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
     redeemed: current.redeemed,
   })
@@ -90,8 +98,7 @@ export function settlePassiveGrowth(state, now = new Date()) {
   return {
     ...current,
     ...passiveQuota,
-    growth: roundGrowth(Math.min(100, current.growth + delta)),
-    dailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + delta),
+    dailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + quotaDelta),
     growthAccrualSyncedAt: now.toISOString(),
   }
 }
@@ -106,10 +113,9 @@ export function syncPassiveQuota(state, now = new Date()) {
   const passiveQuota = normalizePassiveQuota(current)
   const syncedAt = parseGrowthAccrualSyncedAt(current)
 
-  const delta = calculatePassiveGrowthDelta({
+  const { quotaDelta } = calculatePassiveGrowthDelta({
     from: syncedAt,
     to: now,
-    growth: current.growth,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
     redeemed: current.redeemed,
   })
@@ -117,7 +123,7 @@ export function syncPassiveQuota(state, now = new Date()) {
   return {
     ...current,
     ...passiveQuota,
-    dailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + delta),
+    dailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + quotaDelta),
     growthAccrualSyncedAt: now.toISOString(),
   }
 }
@@ -126,19 +132,20 @@ export function previewPassiveGrowth(state, now = new Date()) {
   const passiveQuota = normalizePassiveQuota(state)
   const syncedAt = parseGrowthAccrualSyncedAt(state)
 
-  const delta = calculatePassiveGrowthDelta({
+  const { quotaDelta } = calculatePassiveGrowthDelta({
     from: syncedAt,
     to: now,
-    growth: state.growth,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
     redeemed: state.redeemed,
   })
 
   return {
-    delta,
+    delta: 0,
+    quotaDelta,
     from: syncedAt.toISOString(),
     to: now.toISOString(),
-    projectedGrowth: roundGrowth(Math.min(100, state.growth + delta)),
+    projectedGrowth: roundGrowth(Math.min(100, Math.max(0, state.growth))),
+    projectedDailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + quotaDelta),
     canAccrue: canAccruePassiveGrowth(state),
   }
 }

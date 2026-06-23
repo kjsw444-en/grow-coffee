@@ -1,10 +1,10 @@
-import { formatWon, formatGrowthPercent } from './utils';
+import { formatTreeGrowthPercent, formatWon } from './utils';
 
 
 
 /** 행동 후 대화창이 사라지기까지 대기(ms) */
 
-export const SCENE_DIALOGUE_IDLE_MS = 3500;
+export const SCENE_DIALOGUE_IDLE_MS = 2400;
 
 
 
@@ -42,13 +42,13 @@ export function sceneDialogueForGrowthComplete(mode: import('./constants').HoldM
 
   if (mode === 'brew') {
 
-    return formatSceneDialogue(`커피가 익어가요! ${stageLabel} · 성장 ${formatGrowthPercent(growth)}`);
+    return formatSceneDialogue(`커피가 익어가요! ${stageLabel} · 성장 ${formatTreeGrowthPercent(growth)}`);
 
   }
 
 
 
-  return formatSceneDialogue(`${stageLabel} 단계로 자라고 있어요! 성장 ${formatGrowthPercent(growth)}`);
+  return formatSceneDialogue(`${stageLabel} 단계로 자라고 있어요! 성장 ${formatTreeGrowthPercent(growth)}`);
 
 }
 
@@ -72,11 +72,31 @@ export function sceneDialogueForSellBatch(reward: number) {
 
 export function sceneDialogueForAdReward() {
 
-  return formatSceneDialogue('광고 시청 완료! 이제 다시 꾹 눌러 물주기·내리기를 할 수 있어요.');
+  return formatSceneDialogue('확인 완료! 이제 다시 꾹 눌러 물주기·내리기를 할 수 있어요.');
 
 }
 
 
+
+export function sceneDialogueForShareReward(amount: number) {
+
+  return formatSceneDialogue(`친구에게 공유했어요! 내린 커피 ${amount.toLocaleString('ko-KR')}잔을 받았어요.`);
+
+}
+
+
+
+export function sceneDialogueForPassiveReady() {
+  return formatSceneDialogue('방치 커피 한잔을 받으세요.');
+}
+
+export function sceneDialogueForPassiveClaim() {
+  return formatSceneDialogue('방치 커피 1잔을 내린 커피에 추가했어요!');
+}
+
+export function sceneDialogueForPassiveReactivate() {
+  return formatSceneDialogue('방치 커피가 다시 충전돼요! 햇빛을 받으며 모아보세요.');
+}
 
 const CAT_NUDGE_DIALOGUES = [
 

@@ -1,33 +1,28 @@
-import './WatchAdButton.css';
+import { getRefillActionLabel } from '../game/utils';
 
 type WatchAdButtonProps = {
+  growth: number;
   disabled?: boolean;
   loading?: boolean;
   embedded?: boolean;
   onWatchAd: () => void;
 };
 
-export function WatchAdButton({ disabled, loading, embedded = false, onWatchAd }: WatchAdButtonProps) {
+export function WatchAdButton({ growth, disabled, loading, onWatchAd }: WatchAdButtonProps) {
+  const label = loading ? '준비 중…' : getRefillActionLabel(growth);
+
   return (
-    <section className={`watch-ad ${embedded ? 'watch-ad--embedded' : ''}`}>
-      <p className={`watch-ad__hint${embedded ? ' watch-ad__hint--embedded' : ''}`}>
-        오늘 무료 물주기·내리기 1회 사용
-      </p>
-      <button
-        type="button"
-        className="watch-ad__btn"
-        disabled={disabled || loading}
-        onClick={(event) => {
-          event.stopPropagation();
-          onWatchAd();
-        }}
-        aria-label="광고 보고 물주기·내리기 한 잔 더"
-      >
-        <span className="watch-ad__icon" aria-hidden="true">
-          ▶
-        </span>
-        <span className="watch-ad__label">{loading ? '광고 보는 중...' : '광고 보고 한 잔 더'}</span>
-      </button>
-    </section>
+    <button
+      type="button"
+      className={`plant-scene__drink-btn plant-scene__drink-btn--prominent${loading ? ' plant-scene__drink-btn--loading' : ''}`}
+      disabled={disabled || loading}
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onWatchAd();
+      }}
+    >
+      {label}
+    </button>
   );
 }

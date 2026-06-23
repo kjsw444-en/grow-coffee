@@ -1,4 +1,11 @@
-import { COFFEE_STAGE_MIN, DRINK_STAGE_MIN, GROWTH_DISPLAY_DECIMALS, STAGES } from './constants';
+import {
+  COFFEE_STAGE_MIN,
+  DRINK_STAGE_MIN,
+  GROWTH_DISPLAY_DECIMALS,
+  GROWTH_PER_WATER,
+  PASSIVE_GROWTH_DISPLAY_DECIMALS,
+  STAGES,
+} from './constants';
 import { roundGrowth } from './passiveGrowth';
 
 const STAGES_DESC = [...STAGES].reverse();
@@ -23,6 +30,11 @@ export function isCoffeeStage(growth: number) {
   return growth >= COFFEE_STAGE_MIN;
 }
 
+/** 광고 후 재사용 버튼 — 커피 단계(75%+)에서는 「커피 한잔」 */
+export function getRefillActionLabel(growth: number) {
+  return isCoffeeStage(growth) ? '커피 한잔' : '물 채우기';
+}
+
 export function isDrinkStage(growth: number) {
   return roundGrowth(growth) >= DRINK_STAGE_MIN;
 }
@@ -38,4 +50,35 @@ export function formatGrowthPercent(growth: number) {
   }
 
   return `${value.toFixed(GROWTH_DISPLAY_DECIMALS)}%`;
+}
+
+/** 커피나무 성장률 — 0·25·50·75·100% (물주기 1회 +25%) */
+export function formatTreeGrowthPercent(growth: number) {
+  const value = Math.min(100, Math.max(0, growth));
+  if (value >= 100) {
+    return '100%';
+  }
+
+  const stepped = Math.round(value / GROWTH_PER_WATER) * GROWTH_PER_WATER;
+  return `${stepped}%`;
+}
+
+/** 확정 성장치를 25% 단위로 맞춤 — UI·표시용 */
+export function snapTreeGrowthPercent(growth: number) {
+  const value = Math.min(100, Math.max(0, growth));
+  if (value >= 100) return 100;
+  return Math.round(value / GROWTH_PER_WATER) * GROWTH_PER_WATER;
+}
+
+/** 방치 커피 충전 게이지 — 소수점으로 서서히 오르는 것 표시 */
+export function formatPassiveGrowthPercent(
+  growth: number,
+  decimals = PASSIVE_GROWTH_DISPLAY_DECIMALS,
+) {
+  const value = roundGrowth(Math.min(100, Math.max(0, growth)));
+  if (value >= 100) {
+    return decimals > 0 ? `100.${'0'.repeat(decimals)}%` : '100%';
+  }
+
+  return `${value.toFixed(decimals)}%`;
 }

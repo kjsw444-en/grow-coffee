@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiRequestError,
-  devSetTotalCoffees,
+  claimPassiveCoffeeGame,
   drinkGame,
-  fetchGameBootstrap,
+  fetchGameState,
   isBackendConfigured,
   purchaseCoffeeVariant,
+  reactivatePassiveCoffeeGame,
   resetGame,
   selectCoffeeVariant,
   sellCoffeeBatch,
@@ -15,13 +16,18 @@ import {
   waterGame,
   type PlayerSession,
 } from '../services/api';
+import { shouldShowDrinkCycleInterstitial, showInterstitialAd } from '../services/interstitialAd';
 import { watchRewardedAd } from '../services/rewardedAd';
 import { initPlayerSession, isTossInApp, loginWithTossSession } from '../services/tossBridge';
 import {
   type HoldMode,
   COFFEE_STAGE_MIN,
+  DISPLAY_GROWTH_COMMIT_MS,
   GOAL_AMOUNT,
+  GROWTH_DISPLAY_DECIMALS,
   randomWaterDurationSec,
+  SELL_BATCH_REWARD,
+  SELL_BATCH_SIZE,
 } from './constants';
 import {
   normalizeOwnedCoffeeVariants,
@@ -30,7 +36,7 @@ import {
 import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
-  previewHoldGrowth,
+  previewHoldDisplayGrowth,
   resolveWaterSyncGrowth,
   sanitizeGrowthForWaters,
 } from './growthHold';
@@ -40,30 +46,43 @@ import {
   sceneDialogueForGrowthComplete,
   sceneDialogueForHoldCancel,
   sceneDialogueForHoldStart,
+  sceneDialogueForPassiveClaim,
+  sceneDialogueForPassiveReady,
+  sceneDialogueForPassiveReactivate,
   sceneDialogueForSellBatch,
+  sceneDialogueForShareReward,
   SCENE_DIALOGUE_IDLE_MS,
 } from './sceneDialogue';
-import { getStage } from './utils';
+import { getRefillActionLabel, getStage } from './utils';
 import {
   type BalanceRules,
+  buildPassiveCoffeeClaim,
+  buildPassiveReactivate,
+  buildResetState,
   canAccruePassiveGrowth,
-  computePassiveDisplayGrowth,
   DEFAULT_BALANCE_RULES,
+  getPassiveCupStats,
+  getPassiveUiStats,
   repairGrowthAccrualSyncedAt,
   roundGrowth,
+  mergePassiveQuotaFromServer,
+  normalizePassiveQuota,
   withNormalizedPassive,
 } from './passiveGrowth';
 import { initialState, type GameState } from './types';
 import {
-  canWaterToday,
+  canUseGrowHold,
   consumeWaterQuota,
   getGrowActionSlot,
   getWaterStatus,
   grantAdWaterCredit,
+  mergeWaterQuotaFromServer,
   needsAdForWater,
   withNormalizedQuota,
 } from './waterQuota';
 import { usePassiveGrowthTick } from './usePassiveGrowthTick';
+import { canClaimShareRewardToday } from './shareRewardQuota';
+import { runShareRewardFlow, shareRewardStatusMessage } from '../services/shareReward';
 
 function readCount(raw: GameState, camel: keyof GameState, snake: string) {
   const record = raw as GameState & Record<string, unknown>;
@@ -94,6 +113,15 @@ function normalizeLoadedState(raw: GameState) {
       raw.passiveDayKey ?? (raw as GameState & { passive_day_key?: string }).passive_day_key ?? '',
     ),
     dailyPassiveGrowth: readCount(raw, 'dailyPassiveGrowth', 'daily_passive_growth'),
+    passiveCoffeesClaimed: readCount(raw, 'passiveCoffeesClaimed', 'passive_coffees_claimed'),
+    shareRewardDayKey: String(
+      raw.shareRewardDayKey ?? (raw as GameState & { share_reward_day_key?: string }).share_reward_day_key ?? '',
+    ),
+    passiveReactivateDayKey: String(
+      raw.passiveReactivateDayKey ??
+        (raw as GameState & { passive_reactivate_day_key?: string }).passive_reactivate_day_key ??
+        '',
+    ),
     ownedCoffeeVariants,
     selectedCoffeeVariant: normalizeSelectedCoffeeVariant(
       raw.selectedCoffeeVariant ??
@@ -108,8 +136,8 @@ function isWaterCooldownError(err: unknown): err is ApiRequestError {
   return err instanceof ApiRequestError && err.status === 429;
 }
 
-const BOOTSTRAP_STALE_MS = 60_000;
-const HOLD_UI_COMMIT_MS = 100;
+const HOLD_UI_COMMIT_MS = 80;
+const DISPLAY_GROWTH_MIN_DELTA = 1 / 10 ** GROWTH_DISPLAY_DECIMALS;
 
 export function useCoffeeGame() {
   const [session, setSession] = useState<PlayerSession | null>(null);
@@ -127,11 +155,17 @@ export function useCoffeeGame() {
   const [holdTargetSec, setHoldTargetSec] = useState(0);
   const [holdElapsedSec, setHoldElapsedSec] = useState(0);
   const [watchingAd, setWatchingAd] = useState(false);
+  const [sharingReward, setSharingReward] = useState(false);
+  const [sellingBatch, setSellingBatch] = useState(false);
   const [actionSyncing, setActionSyncing] = useState(false);
   const [isDrinkCommitting, setIsDrinkCommitting] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+  const [claimingPassiveCoffee, setClaimingPassiveCoffee] = useState(false);
+  const claimingPassiveRef = useRef(false);
+  const [reactivatingPassiveCoffee, setReactivatingPassiveCoffee] = useState(false);
   const [sceneDialogue, setSceneDialogue] = useState<string | null>(null);
+  const [passiveClock, setPassiveClock] = useState(0);
 
   const holdStartRef = useRef<number | null>(null);
   const holdDurationRef = useRef(0);
@@ -145,19 +179,64 @@ export function useCoffeeGame() {
   const stateRef = useRef(state);
   const sessionRef = useRef<PlayerSession | null>(null);
   const syncingRef = useRef(false);
+  const stateEpochRef = useRef(0);
   const displayGrowthRef = useRef(0);
+  const prevPassiveCanClaimRef = useRef(false);
   const holdStartGrowthRef = useRef<number | null>(null);
+  const holdDisplayStartRef = useRef(0);
   const holdSyncCommittedRef = useRef(false);
   const holdPreflightRef = useRef(false);
   const sceneDialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayGrowthFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDisplayGrowthCommitAtRef = useRef(0);
+  const lastCommittedDisplayRef = useRef(0);
   const testQueueRef = useRef(Promise.resolve());
   const balanceRulesRef = useRef(balanceRules);
+  const drinkCycleCountRef = useRef(0);
 
   balanceRulesRef.current = balanceRules;
   stateRef.current = state;
   holdModeRef.current = holdMode;
   sessionRef.current = session;
   displayGrowthRef.current = displayGrowth;
+
+  const commitDisplayGrowth = useCallback((next: number, force = false) => {
+    const rounded = roundGrowth(Math.min(100, Math.max(0, next)));
+    displayGrowthRef.current = rounded;
+
+    const flush = () => {
+      if (displayGrowthFlushTimerRef.current !== null) {
+        clearTimeout(displayGrowthFlushTimerRef.current);
+        displayGrowthFlushTimerRef.current = null;
+      }
+      const value = displayGrowthRef.current;
+      lastDisplayGrowthCommitAtRef.current = performance.now();
+      lastCommittedDisplayRef.current = value;
+      setDisplayGrowth(value);
+    };
+
+    if (force || rounded >= 100 || rounded <= 0) {
+      flush();
+      return;
+    }
+
+    const delta = Math.abs(rounded - lastCommittedDisplayRef.current);
+    const now = performance.now();
+    if (delta < DISPLAY_GROWTH_MIN_DELTA) return;
+
+    if (now - lastDisplayGrowthCommitAtRef.current >= DISPLAY_GROWTH_COMMIT_MS) {
+      flush();
+      return;
+    }
+
+    if (displayGrowthFlushTimerRef.current === null) {
+      const wait = DISPLAY_GROWTH_COMMIT_MS - (now - lastDisplayGrowthCommitAtRef.current);
+      displayGrowthFlushTimerRef.current = setTimeout(() => {
+        displayGrowthFlushTimerRef.current = null;
+        flush();
+      }, wait);
+    }
+  }, []);
 
   const showSceneDialogue = useCallback((message: string, autoHide = true) => {
     if (sceneDialogueTimerRef.current !== null) {
@@ -183,15 +262,38 @@ export function useCoffeeGame() {
     setSceneDialogue(null);
   }, []);
 
-  const applyAuthoritativeState = useCallback((raw: GameState) => {
-    const next = normalizeLoadedState(raw);
-    const display = computePassiveDisplayGrowth(next, balanceRulesRef.current);
+  const applyAuthoritativeState = useCallback(
+    (raw: GameState, options?: { trustServer?: boolean; epoch?: number }) => {
+      if (options?.epoch !== undefined && options.epoch !== stateEpochRef.current) {
+        return stateRef.current;
+      }
+      const trustServer = options?.trustServer ?? false;
+      const mergedQuota = trustServer
+        ? normalizeWaterQuota(raw)
+        : mergeWaterQuotaFromServer(stateRef.current, raw);
+      const mergedPassive = trustServer
+        ? {
+            ...normalizePassiveQuota(raw),
+            passiveReactivateDayKey: String(raw.passiveReactivateDayKey ?? ''),
+          }
+        : mergePassiveQuotaFromServer(stateRef.current, raw);
+      const next = normalizeLoadedState({ ...raw, ...mergedQuota, ...mergedPassive });
+      stateRef.current = next;
+      setState(next);
+      commitDisplayGrowth(next.growth, true);
+      lastBootstrapAtRef.current = Date.now();
+      return next;
+    },
+    [commitDisplayGrowth],
+  );
+
+  const bumpPassiveClock = useCallback(() => {
+    setPassiveClock((value) => value + 1);
+  }, []);
+
+  const applyPassiveAccrual = useCallback((next: GameState) => {
     stateRef.current = next;
     setState(next);
-    setDisplayGrowth(display);
-    displayGrowthRef.current = display;
-    lastBootstrapAtRef.current = Date.now();
-    return next;
   }, []);
 
   const triggerTapBurst = useCallback(() => {
@@ -206,18 +308,24 @@ export function useCoffeeGame() {
   }, []);
 
   const applyStateWithPreview = useCallback(
-    (raw: GameState, holdStartGrowth?: number) => {
+    (raw: GameState, holdStartGrowth?: number, epoch?: number) => {
       const growth =
         holdStartGrowth !== undefined
           ? resolveWaterSyncGrowth(holdStartGrowth, raw.growth)
           : raw.growth;
-      return applyAuthoritativeState({ ...raw, growth });
+      return applyAuthoritativeState({ ...raw, growth }, { epoch });
     },
     [applyAuthoritativeState],
   );
 
+  const applyWaterServerState = useCallback(
+    (serverState: GameState, holdStartGrowth: number, epoch?: number) =>
+      applyStateWithPreview(serverState, holdStartGrowth, epoch),
+    [applyStateWithPreview],
+  );
+
   const applySession = useCallback(
-    (next: PlayerSession & { state?: GameState; balanceRules?: BalanceRules }) => {
+    (next: PlayerSession & { state?: GameState; balanceRules?: BalanceRules; connectionError?: string }) => {
       setSession({
         userId: next.userId,
         displayName: next.displayName,
@@ -230,7 +338,15 @@ export function useCoffeeGame() {
       if (next.state) {
         applyAuthoritativeState(next.state);
       }
-      setError(next.source === 'mock' ? '백엔드 서버를 실행해 주세요.' : null);
+      if (next.source === 'mock') {
+        setError(
+          next.connectionError
+            ? `서버 연결 실패: ${next.connectionError}`
+            : '백엔드 서버를 실행해 주세요.',
+        );
+      } else {
+        setError(null);
+      }
     },
     [applyAuthoritativeState],
   );
@@ -259,24 +375,6 @@ export function useCoffeeGame() {
       cancelled = true;
     };
   }, [applySession]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || loading || !session?.userId || !isBackendConfigured()) return;
-
-    let cancelled = false;
-
-    void devSetTotalCoffees(1000)
-      .then((result) => {
-        if (!cancelled) applyAuthoritativeState(result.state);
-      })
-      .catch(() => {
-        // dev helper — ignore when backend is unavailable
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [applyAuthoritativeState, loading, session?.userId]);
 
   const loginWithToss = useCallback(async () => {
     if (!isTossInApp()) {
@@ -339,16 +437,8 @@ export function useCoffeeGame() {
   const revertHoldGrowth = useCallback(() => {
     if (holdModeRef.current === 'drink' || holdStartGrowthRef.current === null) return;
 
-    const revertDisplay = holdStartGrowthRef.current;
-    displayGrowthRef.current = revertDisplay;
-    setDisplayGrowth(revertDisplay);
-  }, []);
-
-  const applyWaterServerState = useCallback(
-    (serverState: GameState, holdStartGrowth: number) =>
-      applyStateWithPreview(serverState, holdStartGrowth),
-    [applyStateWithPreview],
-  );
+    commitDisplayGrowth(holdDisplayStartRef.current, true);
+  }, [commitDisplayGrowth]);
 
   const syncAction = useCallback(
     async (mode: HoldMode) => {
@@ -359,6 +449,7 @@ export function useCoffeeGame() {
         return;
       }
 
+      const epoch = stateEpochRef.current;
       const before = stateRef.current;
       const beforeGrowth = roundGrowth(before.growth);
       const lockedHoldStart = holdStartGrowthRef.current ?? beforeGrowth;
@@ -366,7 +457,11 @@ export function useCoffeeGame() {
       setActionSyncing(true);
       setActionError(null);
 
-      if ((mode === 'water' || mode === 'brew') && !before.redeemed) {
+      if (
+        (mode === 'water' || mode === 'brew') &&
+        !before.redeemed &&
+        canUseGrowHold(before)
+      ) {
         const optimistic = consumeWaterQuota(before);
         const nextGrowth = commitWaterGrowth(lockedHoldStart);
 
@@ -377,8 +472,7 @@ export function useCoffeeGame() {
             totalWaters: before.totalWaters + 1,
           };
           stateRef.current = optimisticState;
-          displayGrowthRef.current = nextGrowth;
-          setDisplayGrowth(nextGrowth);
+          commitDisplayGrowth(nextGrowth, true);
           setState(optimisticState);
           triggerTapBurst();
         }
@@ -386,41 +480,40 @@ export function useCoffeeGame() {
 
       try {
         const result = await waterGame();
-        applyWaterServerState(result.state, lockedHoldStart);
+        applyWaterServerState(result.state, lockedHoldStart, epoch);
         setLastEarned(result.lastEarned);
         const synced = resolveWaterSyncGrowth(lockedHoldStart, result.state.growth);
         if (needsAdForWater(stateRef.current)) {
-          showSceneDialogue(
-            '오늘 물주기·내리기 1회를 사용했어요. 「광고 보고 한 잔 더」를 눌러 주세요.',
-          );
+          const refillLabel = getRefillActionLabel(stateRef.current.growth);
+          showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
         } else {
           const stage = getStage(synced);
           showSceneDialogue(sceneDialogueForGrowthComplete(mode, stage.label, synced));
         }
       } catch (err) {
         if (isWaterCooldownError(err) && err.state) {
-          applyWaterServerState(err.state, lockedHoldStart);
+          applyWaterServerState(err.state, lockedHoldStart, epoch);
         } else if (
           (mode === 'water' || mode === 'brew') &&
           err instanceof ApiRequestError &&
           err.state
         ) {
-          applyWaterServerState(err.state, lockedHoldStart);
+          applyWaterServerState(err.state, lockedHoldStart, epoch);
           if (needsAdForWater(err.state)) {
-            showSceneDialogue('오늘 무료 물주기·내리기를 사용했어요. 「광고 보고 한 번 더」를 눌러 주세요.');
+            const refillLabel = getRefillActionLabel(err.state.growth);
+            showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
           } else {
             const growth = roundGrowth(err.state.growth);
             const stage = getStage(growth);
             showSceneDialogue(sceneDialogueForGrowthComplete(mode, stage.label, growth));
           }
         } else {
-          applyAuthoritativeState(before);
+          applyAuthoritativeState(before, { epoch });
           const revertGrowth =
             (mode === 'water' || mode === 'brew') && holdStartGrowthRef.current !== null
               ? holdStartGrowthRef.current
               : before.growth;
-          displayGrowthRef.current = revertGrowth;
-          setDisplayGrowth(revertGrowth);
+          commitDisplayGrowth(revertGrowth, true);
         }
 
         if (!isWaterCooldownError(err)) {
@@ -437,6 +530,7 @@ export function useCoffeeGame() {
     [
       applyAuthoritativeState,
       applyWaterServerState,
+      commitDisplayGrowth,
       resetHoldUi,
       showSceneDialogue,
       triggerTapBurst,
@@ -456,23 +550,22 @@ export function useCoffeeGame() {
 
     holdProgressRef.current = progress;
 
+    if (holdModeRef.current === 'water' || holdModeRef.current === 'brew') {
+      const startGrowth = holdStartGrowthRef.current;
+      if (startGrowth !== null) {
+        commitDisplayGrowth(
+          previewHoldDisplayGrowth(startGrowth, holdDisplayStartRef.current, progress),
+          true,
+        );
+      }
+    }
+
     const now = performance.now();
     const shouldCommitUi = now - lastHoldUiCommitRef.current >= HOLD_UI_COMMIT_MS || progress >= 100;
     if (shouldCommitUi) {
       lastHoldUiCommitRef.current = now;
       setHoldProgress((prev) => (Math.abs(prev - progress) < 0.01 ? prev : progress));
       setHoldElapsedSec((prev) => (prev === elapsedRounded ? prev : elapsedRounded));
-    }
-
-    if (holdModeRef.current === 'water' || holdModeRef.current === 'brew') {
-      const startGrowth = holdStartGrowthRef.current;
-      if (startGrowth !== null) {
-        const nextGrowth = previewHoldGrowth(startGrowth, progress);
-        if (nextGrowth !== displayGrowthRef.current) {
-          displayGrowthRef.current = nextGrowth;
-          setDisplayGrowth(nextGrowth);
-        }
-      }
     }
 
     if (progress >= 100) {
@@ -487,7 +580,7 @@ export function useCoffeeGame() {
     }
 
     holdRafRef.current = requestAnimationFrame(() => holdTickRef.current());
-  }, [clearHoldTimer, syncAction]);
+  }, [clearHoldTimer, commitDisplayGrowth, syncAction]);
 
   holdTickRef.current = tickHold;
 
@@ -503,28 +596,23 @@ export function useCoffeeGame() {
     }
     if (stateRef.current.redeemed || holdStartRef.current !== null) return;
     if (isReadyToDrinkGrowth(stateRef.current.growth)) return;
-    if (!canWaterToday(stateRef.current) || needsAdForWater(stateRef.current)) return;
+    if (!canUseGrowHold(stateRef.current)) {
+      if (needsAdForWater(stateRef.current)) {
+        const refillLabel = getRefillActionLabel(stateRef.current.growth);
+        showSceneDialogue(`「${refillLabel}」를 눌러야 물주기·내리기를 다시 할 수 있어요.`);
+      }
+      return;
+    }
 
     holdPreflightRef.current = true;
     try {
-      let activeState = stateRef.current;
-
-      if (isBackendConfigured()) {
-        const bootstrapStale = Date.now() - lastBootstrapAtRef.current > BOOTSTRAP_STALE_MS;
-        if (bootstrapStale) {
-          try {
-            const bootstrap = await fetchGameBootstrap();
-            activeState = applyAuthoritativeState(bootstrap.state);
-          } catch {
-            // 로컬 상태로 진행
-          }
-        }
-      }
+      const activeState = stateRef.current;
 
       const authoritativeGrowth = roundGrowth(activeState.growth);
+      const displayStartGrowth = roundGrowth(displayGrowthRef.current);
       if (activeState.redeemed || holdStartRef.current !== null || syncingRef.current) return;
       if (isReadyToDrinkGrowth(activeState.growth)) return;
-      if (!canWaterToday(activeState) || needsAdForWater(activeState)) return;
+      if (!canUseGrowHold(activeState)) return;
 
       const mode: HoldMode =
         authoritativeGrowth >= COFFEE_STAGE_MIN ? 'brew' : 'water';
@@ -534,8 +622,8 @@ export function useCoffeeGame() {
       holdStartRef.current = performance.now();
       holdProgressRef.current = 0;
       holdStartGrowthRef.current = authoritativeGrowth;
-      displayGrowthRef.current = authoritativeGrowth;
-      setDisplayGrowth(authoritativeGrowth);
+      holdDisplayStartRef.current = displayStartGrowth;
+      commitDisplayGrowth(displayStartGrowth, true);
 
       setHoldMode(mode);
       showSceneDialogue(sceneDialogueForHoldStart(mode), false);
@@ -551,8 +639,8 @@ export function useCoffeeGame() {
       holdPreflightRef.current = false;
     }
   }, [
-    applyAuthoritativeState,
     clearHoldTimer,
+    commitDisplayGrowth,
     loading,
     showSceneDialogue,
     tickHold,
@@ -566,10 +654,10 @@ export function useCoffeeGame() {
     resetHoldUi();
   }, [resetHoldUi, revertHoldGrowth, showSceneDialogue]);
 
-  const commitDrink = useCallback(async (before: GameState) => {
+  const commitDrink = useCallback(async (before: GameState, epoch: number) => {
     try {
       const result = await drinkGame();
-      applyAuthoritativeState({ ...result.state, growth: 0 });
+      applyAuthoritativeState({ ...result.state, growth: 0 }, { epoch });
       if (result.playerRank != null) {
         updatePlayerRank(result.playerRank);
       }
@@ -577,11 +665,16 @@ export function useCoffeeGame() {
       setActionError(null);
       showSceneDialogue(sceneDialogueForDrink());
       triggerTapBurst();
+
+      drinkCycleCountRef.current += 1;
+      if (shouldShowDrinkCycleInterstitial(drinkCycleCountRef.current)) {
+        void showInterstitialAd();
+      }
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(err.state);
+        applyAuthoritativeState(err.state, { epoch });
       } else {
-        applyAuthoritativeState(before);
+        applyAuthoritativeState(before, { epoch });
       }
       const message = err instanceof Error ? err.message : '커피 마시기에 실패했습니다.';
       setActionError(message);
@@ -616,33 +709,61 @@ export function useCoffeeGame() {
     const optimistic = { ...before, growth: 0 };
     stateRef.current = optimistic;
     setState(optimistic);
-    setDisplayGrowth(0);
-    displayGrowthRef.current = 0;
+    commitDisplayGrowth(0, true);
 
-    void commitDrink(before);
-  }, [commitDrink, loading, resetHoldUi, showSceneDialogue]);
+    void commitDrink(before, stateEpochRef.current);
+  }, [commitDisplayGrowth, commitDrink, loading, resetHoldUi, showSceneDialogue]);
 
   const runTestBump = useCallback(async () => {
+    const prev = stateRef.current;
+    if (prev.redeemed) {
+      showSceneDialogue('이미 목표를 달성했어요.');
+      return;
+    }
+
+    if (isReadyToDrinkGrowth(prev.growth)) {
+      showSceneDialogue('성장 100%예요. 커피를 마신 뒤 다시 테스트해 주세요.');
+      return;
+    }
+
+    const applyLocalDevBump = () => {
+      const next = {
+        ...prev,
+        growth: commitWaterGrowth(prev.growth),
+        totalWaters: prev.totalWaters + 1,
+      };
+      applyAuthoritativeState(next);
+      commitDisplayGrowth(next.growth, true);
+      setActionError(null);
+      triggerTapBurst();
+    };
+
     const currentSession = sessionRef.current;
     if (!currentSession?.userId) {
+      if (import.meta.env.DEV) {
+        applyLocalDevBump();
+        return;
+      }
       showSceneDialogue('백엔드 서버를 실행해 주세요.');
       return;
     }
 
-    const prev = stateRef.current;
-    if (prev.redeemed || isReadyToDrinkGrowth(prev.growth)) return;
-
     const holdStart = roundGrowth(prev.growth);
+    const epoch = stateEpochRef.current;
     setActionError(null);
 
     try {
       const result = await testBumpGame();
-      applyWaterServerState(result.state, holdStart);
+      applyWaterServerState(result.state, holdStart, epoch);
       setActionError(null);
       triggerTapBurst();
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyWaterServerState(err.state, holdStart);
+        applyWaterServerState(err.state, holdStart, epoch);
+      }
+      if (err instanceof ApiRequestError && err.status === 400) {
+        showSceneDialogue(err.message || '테스트 물주기를 할 수 없어요.');
+        return;
       }
       if (!(err instanceof ApiRequestError && err.status === 429)) {
         const message = err instanceof Error ? err.message : '테스트 물주기에 실패했습니다.';
@@ -650,50 +771,72 @@ export function useCoffeeGame() {
         showSceneDialogue(message);
       }
     }
-  }, [applyWaterServerState, showSceneDialogue, triggerTapBurst]);
+  }, [
+    applyAuthoritativeState,
+    applyWaterServerState,
+    commitDisplayGrowth,
+    showSceneDialogue,
+    triggerTapBurst,
+  ]);
 
   const testBumpGrowth = useCallback(() => {
-    if (loading || holdStartRef.current !== null) return;
+    if (loading || isHolding || holdStartRef.current !== null || syncingRef.current) return;
 
     testQueueRef.current = testQueueRef.current
       .then(() => runTestBump())
       .catch(() => undefined);
-  }, [loading, runTestBump]);
+  }, [isHolding, loading, runTestBump]);
 
   const reset = useCallback(async () => {
     const currentSession = sessionRef.current;
     if (!currentSession) return;
 
+    stateEpochRef.current += 1;
+    const epoch = stateEpochRef.current;
+
     setError(null);
     resetHoldUi();
     hideSceneDialogue();
     setLastEarned(null);
+    prevPassiveCanClaimRef.current = false;
+    drinkCycleCountRef.current = 0;
+    syncingRef.current = true;
+    setActionSyncing(true);
+
+    const resetState = normalizeLoadedState(buildResetState());
+    applyAuthoritativeState(resetState, { trustServer: true, epoch });
+    bumpPassiveClock();
 
     try {
       const result = await resetGame();
-      applyAuthoritativeState(result.state);
+      applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
+      bumpPassiveClock();
     } catch (err) {
       const message = err instanceof Error ? err.message : '초기화에 실패했습니다.';
       setError(message);
+    } finally {
+      syncingRef.current = false;
+      setActionSyncing(false);
     }
-  }, [applyAuthoritativeState, hideSceneDialogue, resetHoldUi]);
+  }, [applyAuthoritativeState, bumpPassiveClock, hideSceneDialogue, resetHoldUi]);
 
   const purchaseVariant = useCallback(
     async (slug: string) => {
       if (syncingRef.current) return;
+      const epoch = stateEpochRef.current;
       syncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
 
       try {
         const result = await purchaseCoffeeVariant(slug);
-        applyAuthoritativeState(result.state);
+        applyAuthoritativeState(result.state, { epoch });
         if (result.playerRank != null) {
           updatePlayerRank(result.playerRank);
         }
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
-          applyAuthoritativeState(err.state);
+          applyAuthoritativeState(err.state, { epoch });
         }
         const message = err instanceof Error ? err.message : '캐릭터 구매에 실패했습니다.';
         setActionError(message);
@@ -708,16 +851,17 @@ export function useCoffeeGame() {
   const selectVariant = useCallback(
     async (slug: string) => {
       if (syncingRef.current) return;
+      const epoch = stateEpochRef.current;
       syncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
 
       try {
         const result = await selectCoffeeVariant(slug);
-        applyAuthoritativeState(result.state);
+        applyAuthoritativeState(result.state, { epoch });
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
-          applyAuthoritativeState(err.state);
+          applyAuthoritativeState(err.state, { epoch });
         }
         const message = err instanceof Error ? err.message : '캐릭터 선택에 실패했습니다.';
         setActionError(message);
@@ -731,10 +875,20 @@ export function useCoffeeGame() {
 
   const watchAd = useCallback(async () => {
     const currentSession = sessionRef.current;
-    if (!currentSession?.userId || watchingAd || syncingRef.current) return;
+    if (watchingAd) return;
 
     const prev = stateRef.current;
     if (prev.redeemed || !needsAdForWater(prev)) return;
+
+    if (!currentSession?.userId) {
+      showSceneDialogue('백엔드 서버를 실행해 주세요.');
+      return;
+    }
+
+    if (syncingRef.current) {
+      showSceneDialogue('잠시만 기다려 주세요…');
+      return;
+    }
     if (
       isReadyToDrinkGrowth(prev.growth) ||
       isReadyToDrinkGrowth(displayGrowthRef.current)
@@ -745,25 +899,29 @@ export function useCoffeeGame() {
 
     setWatchingAd(true);
     setActionError(null);
+    const epoch = stateEpochRef.current;
 
     try {
       const watched = await watchRewardedAd();
-      if (!watched) return;
+      if (!watched) {
+        showSceneDialogue('확인을 완료해야 물주기·내리기를 다시 할 수 있어요.');
+        return;
+      }
 
       const optimistic = grantAdWaterCredit(prev);
       stateRef.current = optimistic;
       setState(optimistic);
 
       const result = await watchAdGame();
-      applyAuthoritativeState(result.state);
+      applyAuthoritativeState(result.state, { epoch });
       showSceneDialogue(sceneDialogueForAdReward());
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(err.state);
+        applyAuthoritativeState(err.state, { epoch });
       } else {
-        applyAuthoritativeState(prev);
+        applyAuthoritativeState(prev, { epoch });
       }
-      const message = err instanceof Error ? err.message : '광고 보상 처리에 실패했습니다.';
+      const message = err instanceof Error ? err.message : '물 채우기 처리에 실패했습니다.';
       setActionError(message);
       showSceneDialogue(message);
     } finally {
@@ -771,47 +929,334 @@ export function useCoffeeGame() {
     }
   }, [applyAuthoritativeState, watchingAd, showSceneDialogue]);
 
-  const sellBatch = useCallback(async () => {
+  const claimShareReward = useCallback(
+    async (onMessage?: (message: string) => void) => {
+      const currentSession = sessionRef.current;
+      if (!currentSession?.userId || sharingReward || syncingRef.current) {
+        return shareRewardStatusMessage({
+          status: 'unsupported',
+          message: '백엔드 서버를 실행해 주세요.',
+        });
+      }
+
+      const before = stateRef.current;
+      if (before.redeemed || !canClaimShareRewardToday(before)) {
+        return '오늘 공유 리워드는 이미 받았어요. 내일 다시 시도해 주세요.';
+      }
+
+      setSharingReward(true);
+      setActionError(null);
+      const epoch = stateEpochRef.current;
+
+      try {
+        const outcome = await runShareRewardFlow({ onMessage });
+
+        if (outcome.state) {
+          applyAuthoritativeState(outcome.state, { epoch });
+        }
+
+        if (outcome.status === 'rewarded') {
+          if (outcome.playerRank != null) {
+            updatePlayerRank(outcome.playerRank);
+          }
+          showSceneDialogue(sceneDialogueForShareReward(outcome.amount));
+        } else if (outcome.status === 'error') {
+          setActionError(outcome.message);
+        }
+
+        return shareRewardStatusMessage(outcome);
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { epoch });
+        }
+        const message = err instanceof Error ? err.message : '공유 리워드 처리에 실패했습니다.';
+        setActionError(message);
+        return message;
+      } finally {
+        setSharingReward(false);
+      }
+    },
+    [applyAuthoritativeState, sharingReward, showSceneDialogue, updatePlayerRank],
+  );
+
+  const claimPassiveCoffee = useCallback(async () => {
+    if (claimingPassiveRef.current) return false;
+
+    if (syncingRef.current) {
+      showSceneDialogue('잠시만 기다려 주세요…');
+      return false;
+    }
+
+    const epoch = stateEpochRef.current;
     const currentSession = sessionRef.current;
-    if (!currentSession?.userId || syncingRef.current) return;
-
     const before = stateRef.current;
-    if (before.redeemed || before.totalCoffees < 10) return;
 
+    if (before.redeemed) {
+      showSceneDialogue('이미 목표를 달성했어요.');
+      return false;
+    }
+
+    const preview = buildPassiveCoffeeClaim(before);
+    if (!preview.ok) {
+      if (preview.reason === 'not-ready') {
+        showSceneDialogue('아직 방치 커피가 차지 않았어요.');
+      } else {
+        showSceneDialogue('방치 커피를 받을 수 없어요.');
+      }
+      return false;
+    }
+
+    if (!currentSession?.userId) {
+      applyAuthoritativeState(preview.state, { trustServer: true, epoch });
+      setLastEarned(preview.lastEarned);
+      bumpPassiveClock();
+      showSceneDialogue(sceneDialogueForPassiveClaim());
+      return true;
+    }
+
+    claimingPassiveRef.current = true;
     syncingRef.current = true;
+    setClaimingPassiveCoffee(true);
     setActionSyncing(true);
     setActionError(null);
 
     try {
-      const result = await sellCoffeeBatch();
-      applyAuthoritativeState(result.state);
+      applyAuthoritativeState(preview.state, { trustServer: true, epoch });
+      setLastEarned(preview.lastEarned);
+      bumpPassiveClock();
+
+      const result = await claimPassiveCoffeeGame();
+      applyAuthoritativeState(result.state, { trustServer: true, epoch });
       if (result.playerRank != null) {
         updatePlayerRank(result.playerRank);
       }
       setLastEarned(result.lastEarned);
-      showSceneDialogue(sceneDialogueForSellBatch(result.lastEarned ?? 47));
+      bumpPassiveClock();
+      showSceneDialogue(sceneDialogueForPassiveClaim());
+      return true;
+    } catch (err) {
+      setLastEarned(null);
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(err.state, { trustServer: true, epoch });
+        bumpPassiveClock();
+      } else {
+        applyAuthoritativeState(before, { trustServer: true, epoch });
+        bumpPassiveClock();
+      }
+      const message = err instanceof Error ? err.message : '방치 커피 받기에 실패했습니다.';
+      setActionError(message);
+      showSceneDialogue(message);
+      return false;
+    } finally {
+      claimingPassiveRef.current = false;
+      syncingRef.current = false;
+      setClaimingPassiveCoffee(false);
+      setActionSyncing(false);
+    }
+  }, [
+    applyAuthoritativeState,
+    bumpPassiveClock,
+    showSceneDialogue,
+    updatePlayerRank,
+  ]);
+
+  const reactivatePassiveCoffee = useCallback(async () => {
+    if (reactivatingPassiveCoffee || claimingPassiveCoffee || watchingAd) {
+      return false;
+    }
+
+    if (syncingRef.current) {
+      showSceneDialogue('잠시만 기다려 주세요…');
+      return false;
+    }
+
+    const epoch = stateEpochRef.current;
+    const currentSession = sessionRef.current;
+
+    if (currentSession?.userId) {
+      try {
+        const fresh = await fetchGameState();
+        applyAuthoritativeState(fresh, { trustServer: true, epoch });
+        bumpPassiveClock();
+      } catch {
+        // 로컬 상태로 진행
+      }
+    }
+
+    const before = stateRef.current;
+    const preview = buildPassiveReactivate(before);
+
+    if (!preview.ok) {
+      if (preview.reason === 'not-complete') {
+        showSceneDialogue('방치 커피 2잔을 모두 받은 뒤 재활성할 수 있어요.');
+      } else if (preview.reason === 'already-reactivated') {
+        showSceneDialogue('오늘 방치 커피 재활성은 이미 사용했어요.');
+      } else {
+        showSceneDialogue('방치 커피를 재활성할 수 없어요.');
+      }
+      return false;
+    }
+
+    setReactivatingPassiveCoffee(true);
+    setActionError(null);
+
+    try {
+      const watched = await watchRewardedAd();
+      if (!watched) {
+        showSceneDialogue('광고 시청을 완료해야 재활성할 수 있어요.');
+        return false;
+      }
+
+      if (!currentSession?.userId) {
+        applyAuthoritativeState(preview.state, { trustServer: true, epoch });
+        bumpPassiveClock();
+        showSceneDialogue(sceneDialogueForPassiveReactivate());
+        return true;
+      }
+
+      syncingRef.current = true;
+      setActionSyncing(true);
+
+      try {
+        const result = await reactivatePassiveCoffeeGame();
+        applyAuthoritativeState(result.state, { trustServer: true, epoch });
+        bumpPassiveClock();
+        showSceneDialogue(sceneDialogueForPassiveReactivate());
+        return true;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { trustServer: true, epoch });
+          bumpPassiveClock();
+        } else {
+          applyAuthoritativeState(before, { trustServer: true, epoch });
+          bumpPassiveClock();
+        }
+        const message = err instanceof Error ? err.message : '방치 커피 재활성에 실패했습니다.';
+        setActionError(message);
+        showSceneDialogue(message);
+        return false;
+      } finally {
+        syncingRef.current = false;
+        setActionSyncing(false);
+      }
+    } finally {
+      setReactivatingPassiveCoffee(false);
+    }
+  }, [
+    applyAuthoritativeState,
+    bumpPassiveClock,
+    claimingPassiveCoffee,
+    reactivatingPassiveCoffee,
+    showSceneDialogue,
+    watchingAd,
+  ]);
+
+  const sellBatch = useCallback(async () => {
+    const currentSession = sessionRef.current;
+    if (!currentSession?.userId) {
+      const message = '백엔드 서버를 실행하고 게스트 로그인 후 다시 시도해 주세요.';
+      setActionError(message);
+      showSceneDialogue(message);
+      return false;
+    }
+
+    if (syncingRef.current) {
+      const message = '다른 동작을 처리 중이에요. 잠시 후 다시 시도해 주세요.';
+      showSceneDialogue(message);
+      return false;
+    }
+
+    const before = stateRef.current;
+    if (before.redeemed) {
+      showSceneDialogue('이미 목표를 달성했어요.');
+      return false;
+    }
+
+    if (before.totalCoffees < SELL_BATCH_SIZE) {
+      const message = `판매하려면 내린 커피 ${SELL_BATCH_SIZE}잔이 필요해요.`;
+      setActionError(message);
+      showSceneDialogue(message);
+      return false;
+    }
+
+    syncingRef.current = true;
+    setSellingBatch(true);
+    setActionSyncing(true);
+    setActionError(null);
+    const epoch = stateEpochRef.current;
+
+    const nextMoney = before.money + SELL_BATCH_REWARD;
+    const optimistic = {
+      ...before,
+      totalCoffees: before.totalCoffees - SELL_BATCH_SIZE,
+      money: nextMoney,
+      redeemed: nextMoney >= GOAL_AMOUNT,
+    };
+    stateRef.current = optimistic;
+    setState(optimistic);
+    setLastEarned(SELL_BATCH_REWARD);
+
+    try {
+      const result = await sellCoffeeBatch();
+      applyAuthoritativeState(result.state, { epoch });
+      if (result.playerRank != null) {
+        updatePlayerRank(result.playerRank);
+      }
+      setLastEarned(result.lastEarned);
+      showSceneDialogue(sceneDialogueForSellBatch(result.lastEarned ?? SELL_BATCH_REWARD));
+      return true;
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(err.state);
+        applyAuthoritativeState(err.state, { epoch });
+      } else {
+        stateRef.current = before;
+        setState(before);
+        setLastEarned(null);
       }
       const message = err instanceof Error ? err.message : '커피 판매에 실패했습니다.';
       setActionError(message);
       showSceneDialogue(message);
+      return false;
     } finally {
       syncingRef.current = false;
+      setSellingBatch(false);
       setActionSyncing(false);
     }
   }, [applyAuthoritativeState, showSceneDialogue, updatePlayerRank]);
 
   usePassiveGrowthTick({
-    state,
     stateRef,
-    displayGrowthRef,
     balanceRules,
     isHolding,
-    passiveActive: canAccruePassiveGrowth(state.growth, state.redeemed),
-    setDisplayGrowth,
+    passiveActive: canAccruePassiveGrowth(
+      state.growth,
+      state.redeemed,
+      state.dailyPassiveGrowth,
+      balanceRules.dailyPassiveGrowthCap,
+    ),
+    onPassiveUpdate: applyPassiveAccrual,
+    onTick: bumpPassiveClock,
   });
+
+  useEffect(() => {
+    const stats = getPassiveUiStats(state, balanceRules);
+
+    if (stats.canClaim && !prevPassiveCanClaimRef.current && !state.redeemed) {
+      showSceneDialogue(sceneDialogueForPassiveReady());
+    }
+
+    prevPassiveCanClaimRef.current = stats.canClaim;
+  }, [
+    balanceRules,
+    passiveClock,
+    showSceneDialogue,
+    state.dailyPassiveGrowth,
+    state.passiveCoffeesClaimed,
+    state.passiveReactivateDayKey,
+    state.growthAccrualSyncedAt,
+    state.redeemed,
+    state.passiveDayKey,
+  ]);
 
   useEffect(
     () => () => {
@@ -821,6 +1266,9 @@ export function useCoffeeGame() {
       }
       if (tapBurstTimerRef.current !== null) {
         clearTimeout(tapBurstTimerRef.current);
+      }
+      if (displayGrowthFlushTimerRef.current !== null) {
+        clearTimeout(displayGrowthFlushTimerRef.current);
       }
     },
     [clearHoldTimer],
@@ -846,7 +1294,11 @@ export function useCoffeeGame() {
     state,
   });
   const showWatchAdButton = growActionSlot === 'ad';
-  const passiveActive = canAccruePassiveGrowth(state.growth, state.redeemed);
+  const passiveActive = canAccruePassiveGrowth(
+    state.growth,
+    state.redeemed,
+    state.dailyPassiveGrowth,
+  );
 
   return {
     session,
@@ -870,7 +1322,8 @@ export function useCoffeeGame() {
     reset,
     watchAd,
     sellBatch,
-    canSellBatch: state.totalCoffees >= 10 && !state.redeemed,
+    sellingBatch,
+    canSellBatch: state.totalCoffees >= SELL_BATCH_SIZE && !state.redeemed,
     progress,
     readyToDrink,
     drinkUiActive,
@@ -878,11 +1331,19 @@ export function useCoffeeGame() {
     needsAd,
     showWatchAdButton,
     growActionSlot,
-    canWater: waterStatus.canWater,
+    canUseGrowHold: waterStatus.canUseGrowHold,
     waterStatus,
     watchingAd,
+    sharingReward,
+    shareRewardAvailable: canClaimShareRewardToday(state),
+    claimShareReward,
+    claimPassiveCoffee,
+    claimingPassiveCoffee,
+    reactivatePassiveCoffee,
+    reactivatingPassiveCoffee,
     actionSyncing,
     passiveActive,
+    passiveClock,
     holdMode,
     lastEarned,
     tapBurst,

@@ -83,6 +83,7 @@ export function signOutPlayer() {
 
 type RequestOptions = RequestInit & {
   headers?: Record<string, string>
+  timeoutMs?: number
 }
 
 export class ApiRequestError extends Error {
@@ -98,28 +99,42 @@ export class ApiRequestError extends Error {
 }
 
 async function request(path: string, options: RequestOptions = {}) {
+  const { timeoutMs = 20000, headers, ...fetchOptions } = options
   const userId = getStoredUserId()
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(userId ? { 'x-grow-coffee-user': userId } : {}),
-      ...(import.meta.env.DEV ? { 'x-grow-coffee-dev': '1' } : {}),
-      ...options.headers,
-    },
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  const body = await response.json().catch(() => ({}))
+  try {
+    const response = await fetch(`${getApiBase()}${path}`, {
+      ...fetchOptions,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(userId ? { 'x-grow-coffee-user': userId } : {}),
+        ...(import.meta.env.DEV ? { 'x-grow-coffee-dev': '1' } : {}),
+        ...headers,
+      },
+    })
 
-  if (!response.ok) {
-    throw new ApiRequestError(body.message || `API ${response.status}`, body.state, response.status)
+    const body = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new ApiRequestError(body.message || `API ${response.status}`, body.state, response.status)
+    }
+
+    if (body.ok === false) {
+      throw new ApiRequestError(body.message || '요청에 실패했습니다.', body.state, response.status)
+    }
+
+    return body
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiRequestError('서버 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  if (body.ok === false) {
-    throw new ApiRequestError(body.message || '요청에 실패했습니다.', body.state, response.status)
-  }
-
-  return body
 }
 
 export type RankingEntry = {
@@ -227,7 +242,52 @@ export async function drinkGame() {
 }
 
 export async function sellCoffeeBatch() {
-  return request('/api/game/sell-batch', { method: 'POST', body: '{}' }) as Promise<{
+  try {
+    return (await request('/api/game/sell-batch', { method: 'POST', body: '{}' })) as Promise<{
+      ok: true
+      state: GameState
+      lastEarned: number | null
+      passiveGrowthPreview?: PassiveGrowthPreview
+      playerRank?: number | null
+    }>
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) {
+      throw new ApiRequestError(
+        '판매 API가 서버에 없어요. 백엔드를 최신 버전으로 배포했는지 확인해 주세요.',
+        err.state,
+        404,
+      )
+    }
+    throw err
+  }
+}
+
+export async function watchAdGame() {
+  return request('/api/game/watch-ad', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+  }>
+}
+
+export async function claimShareRewardGame(moduleId = '') {
+  return request('/api/game/share-reward', {
+    method: 'POST',
+    body: JSON.stringify({ moduleId }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    rewardAmount: number
+    passiveGrowthPreview?: PassiveGrowthPreview
+    playerRank?: number | null
+  }>
+}
+
+export async function claimPassiveCoffeeGame() {
+  return request('/api/game/claim-passive-coffee', {
+    method: 'POST',
+    body: '{}',
+    timeoutMs: 15000,
+  }) as Promise<{
     ok: true
     state: GameState
     lastEarned: number | null
@@ -236,10 +296,12 @@ export async function sellCoffeeBatch() {
   }>
 }
 
-export async function watchAdGame() {
-  return request('/api/game/watch-ad', { method: 'POST', body: '{}' }) as Promise<{
+export async function reactivatePassiveCoffeeGame() {
+  return request('/api/game/reactivate-passive-coffee', { method: 'POST', body: '{}' }) as Promise<{
     ok: true
     state: GameState
+    passiveGrowthPreview?: PassiveGrowthPreview
+    playerRank?: number | null
   }>
 }
 

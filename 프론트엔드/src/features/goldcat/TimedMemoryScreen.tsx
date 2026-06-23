@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMinigameSound } from '../../audio/useMinigameSound';
 import {
   CELL_COUNT,
   GRID_COLS,
@@ -79,6 +80,7 @@ export function TimedMemoryScreen({
     label: string;
   } | null>(null);
   const timersRef = useRef<number[]>([]);
+  const playMinigameSound = useMinigameSound();
 
   const activeDifficulty = getMemoryDifficulty(selectedDifficulty);
   const completedCount = MEMORY_DIFFICULTIES.filter((item) => daily[item.missionKey] >= 1).length;
@@ -105,6 +107,7 @@ export function TimedMemoryScreen({
 
     if (secondsLeft <= 0) {
       setPhase('fail');
+      void playMinigameSound('minigameLose');
       onMessage?.('시간 초과! 번쩍인 칸 순서를 다시 기억해 보세요.');
       finishRun({ success: false });
       return undefined;
@@ -115,7 +118,13 @@ export function TimedMemoryScreen({
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [phase, secondsLeft, onMessage, finishRun]);
+  }, [phase, secondsLeft, onMessage, finishRun, playMinigameSound]);
+
+  useEffect(() => {
+    if (phase === 'memorize' && flashIndex >= 0) {
+      void playMinigameSound('memoryFlash');
+    }
+  }, [flashIndex, phase, playMinigameSound]);
 
   function startChallenge(difficultyId: string, options: { fromIdle?: boolean } = {}) {
     const { fromIdle = false } = options;
@@ -172,12 +181,15 @@ export function TimedMemoryScreen({
     if (cellIndex !== expected) {
       setWrongCell(cellIndex);
       setPhase('fail');
+      void playMinigameSound('memoryWrong');
       onMessage?.(
         `순서가 틀렸어요! ${inputIndex + 1}번째는 ${getCellNumber(expected)}번 칸이었어요.`,
       );
       finishRun({ success: false });
       return;
     }
+
+    void playMinigameSound('memoryTap');
 
     const nextInput = inputIndex + 1;
     setInputIndex(nextInput);
@@ -188,6 +200,7 @@ export function TimedMemoryScreen({
     }
 
     setPhase('complete');
+    void playMinigameSound('win');
     onMessage?.(`${activeDifficulty.label} 클리어! 훌륭한 기억력이에요.`);
     finishRun({ success: true });
     setVictoryPending({
@@ -212,6 +225,24 @@ export function TimedMemoryScreen({
     setFlashIndex(-1);
     setFlashStep(0);
     setWrongCell(-1);
+  }
+
+  function handleBack() {
+    if (selectedDifficulty && (phase === 'memorize' || phase === 'recall')) {
+      clearTimers();
+      finishRun({ success: false });
+      void playMinigameSound('minigameLose');
+      onMessage?.('기권 패배…');
+      handleQuitToMenu();
+      return;
+    }
+
+    if (selectedDifficulty) {
+      handleQuitToMenu();
+      return;
+    }
+
+    onBack();
   }
 
   const phaseBanner = useMemo(() => {
@@ -259,7 +290,7 @@ export function TimedMemoryScreen({
     <main className="goldcat-app">
       <section className="goldcat-phone sub-screen timed-memory-screen">
         <header className="topbar app-style-header">
-          <button className="header-icon-button" type="button" onClick={onBack}>
+          <button className="header-icon-button" type="button" onClick={handleBack}>
             ‹
           </button>
           <div className="app-title">

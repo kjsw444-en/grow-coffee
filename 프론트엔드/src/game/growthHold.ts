@@ -39,6 +39,16 @@ export function previewHoldGrowth(startGrowth: number, holdProgress: number) {
 
 
 
+/** 물·브루 꾹 누르기 중 게이지 — 커피나무 growth만 (방치와 분리) */
+
+export function previewHoldDisplayGrowth(
+  authStartGrowth: number,
+  _displayStartGrowth: number,
+  holdProgress: number,
+) {
+  return previewHoldGrowth(authStartGrowth, holdProgress);
+}
+
 /** 물·브루 1회 완료 후 확정 성장치 */
 
 export function commitWaterGrowth(startGrowth: number) {
@@ -75,17 +85,17 @@ export const PRE_DRINK_DISPLAY_MAX = 99.9999999;
 
 
 
-/** 방치 성장 게이지 — 서버 확정치 + 미동기 미리보기 (최대 100%) */
+/** @deprecated 방치는 커피나무 growth와 분리 — authoritativeGrowth만 반환 */
 
 export function previewPassiveDisplayGrowth(
 
   authoritativeGrowth: number,
 
-  passivePreviewDelta: number,
+  _passivePreviewDelta: number,
 
 ) {
 
-  return roundGrowth(Math.min(100, authoritativeGrowth + passivePreviewDelta));
+  return roundGrowth(Math.min(100, Math.max(0, authoritativeGrowth)));
 
 }
 

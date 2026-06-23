@@ -1,19 +1,24 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGameAudio } from '../audio/useGameAudio';
 import { useButtonSound, useSound } from '../audio/SoundProvider';
 import { ONBOARDING_KEY, MOCK_USER } from '../game/mockData';
-import { formatPassiveCupHint, formatPassiveEtaHint } from '../game/usePassiveGrowthTick';
+import { formatPassiveCupHint, formatPassiveEtaHint, getPassiveUiStats } from '../game/usePassiveGrowthTick';
 import { DAILY_PASSIVE_GROWTH_CAP, GOAL_AMOUNT, PASSIVE_GROWTH_PER_SECOND, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
+import { DEFAULT_BALANCE_RULES, PASSIVE_GROWTH_RESET_NOTE } from '../game/passiveGrowth';
 import { randomCatNudgeDialogue } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
-import { formatWon, isDrinkStage } from '../game/utils';
+import { initInterstitialAds } from '../services/interstitialAd';
+import { initRewardedAds } from '../services/rewardedAd';
+import { formatWon, getRefillActionLabel, isDrinkStage } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import type { DailyGameId } from '../services/dailyGamePick';
 import type { BonusFeatureView } from '../features/goldcat/BonusFeatureHost';
 import type { ComicInitialTarget } from '../features/goldcat/StoryComicScreen';
 import { getCoffeeRanking, syncCoffeeRanking, type CoffeeRankingView } from '../services/coffeeRanking';
+import { AdBannerSlot } from './AdBannerSlot';
 import { BottomNav } from './BottomNav';
 import { CharacterShopSheet } from './CharacterShopSheet';
+import { MyCoffeeSheet } from './MyCoffeeSheet';
 import { GameFlowFooter } from './GameFlowFooter';
 import { GrowthPanel } from './GrowthPanel';
 import { OnboardingModal } from './OnboardingModal';
@@ -70,9 +75,11 @@ export function CoffeeGame() {
     reset,
     watchAd,
     sellBatch,
+    sellingBatch,
     canSellBatch,
     displayGrowth,
     passiveActive,
+    passiveClock,
     waterStatus,
     readyToDrink,
     drinkUiActive,
@@ -80,8 +87,15 @@ export function CoffeeGame() {
     needsAd,
     showWatchAdButton,
     growActionSlot,
-    canWater,
+    canUseGrowHold,
     watchingAd,
+    sharingReward,
+    shareRewardAvailable,
+    claimShareReward,
+    claimPassiveCoffee,
+    claimingPassiveCoffee,
+    reactivatePassiveCoffee,
+    reactivatingPassiveCoffee,
     actionSyncing,
     holdMode,
     tapBurst,
@@ -104,6 +118,7 @@ export function CoffeeGame() {
   const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding());
   const [showSettings, setShowSettings] = useState(false);
   const [showShop, setShowShop] = useState(false);
+  const [showMyCoffee, setShowMyCoffee] = useState(false);
   const [showRanking, setShowRanking] = useState(false);
   const [coffeeRanking, setCoffeeRanking] = useState<CoffeeRankingView | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
@@ -156,6 +171,11 @@ export function CoffeeGame() {
     if (showOnboarding) play('modalOpen');
   }, [showOnboarding, play]);
 
+  useEffect(() => {
+    initRewardedAds();
+    initInterstitialAds();
+  }, []);
+
   const closeOnboarding = async () => {
     await buttonSound();
     localStorage.setItem(ONBOARDING_KEY, '1');
@@ -187,6 +207,18 @@ export function CoffeeGame() {
     await buttonSound();
     play('modalClose');
     setShowShop(false);
+  };
+
+  const openMyCoffee = async () => {
+    await buttonSound();
+    play('modalOpen');
+    setShowMyCoffee(true);
+  };
+
+  const closeMyCoffee = async () => {
+    await buttonSound();
+    play('modalClose');
+    setShowMyCoffee(false);
   };
 
   const openRanking = async () => {
@@ -240,9 +272,9 @@ export function CoffeeGame() {
     void unlock().then(() => buttonSound());
   }, [buttonSound, completeDrink, unlock]);
 
-  const handleWatchAd = useCallback(async () => {
-    await unlock();
-    await watchAd();
+  const handleWatchAd = useCallback(() => {
+    void watchAd();
+    void unlock();
   }, [unlock, watchAd]);
 
   const handleWinReset = useCallback(async () => {
@@ -270,30 +302,75 @@ export function CoffeeGame() {
     setComicTarget(null);
   }, []);
 
-  const handleSellBatch = useCallback(async () => {
-    await buttonSound();
-    await sellBatch();
-  }, [buttonSound, sellBatch]);
+  const handleSellBatch = useCallback(() => {
+    void sellBatch();
+    void unlock().then(() => buttonSound());
+  }, [buttonSound, sellBatch, unlock]);
 
-  const waterHint = readyToDrink
-    ? waterStatus.needsAd
-      ? '다음 물주기·내리기는 광고 후 가능'
-      : null
-    : needsAd
-      ? '오늘 무료 물주기·내리기 완료 · 아래 광고 버튼 필요'
-      : waterStatus.freeAvailable
-        ? '오늘 물주기·내리기 1회 무료'
+  const waterHint = useMemo(() => {
+    const refillLabel = getRefillActionLabel(state.growth);
+    if (readyToDrink) {
+      return waterStatus.needsAd ? `다음 물주기·내리기는 「${refillLabel}」 후 가능` : null;
+    }
+    if (growActionSlot === 'ad') {
+      return `물주기·내리기 1회 사용 · 아래 「${refillLabel}」 필요`;
+    }
+    if (waterStatus.freeAvailable) {
+      return '첫 물주기·내리기 가능';
+    }
+    if (waterStatus.adWaterCredits > 0) {
+      return `${refillLabel} 사용 가능 · 물주기·내리기 가능`;
+    }
+    return null;
+  }, [
+    growActionSlot,
+    readyToDrink,
+    state.growth,
+    waterStatus.adWaterCredits,
+    waterStatus.freeAvailable,
+    waterStatus.needsAd,
+  ]);
+
+  const passiveCupStats = useMemo(
+    () => getPassiveUiStats(state, DEFAULT_BALANCE_RULES),
+    [
+      passiveClock,
+      state.dailyPassiveGrowth,
+      state.passiveCoffeesClaimed,
+      state.passiveReactivateDayKey,
+      state.growthAccrualSyncedAt,
+      state.redeemed,
+      state.passiveDayKey,
+    ],
+  );
+
+  const passiveHint = useMemo(() => {
+    const passiveCupHint = formatPassiveCupHint(
+      state.dailyPassiveGrowth,
+      state.passiveCoffeesClaimed,
+      DAILY_PASSIVE_GROWTH_CAP,
+      state.passiveReactivateDayKey,
+    );
+    const passiveEtaHint =
+      passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
+        ? formatPassiveEtaHint(passiveCupStats.cupFillPercent, PASSIVE_GROWTH_PER_SECOND)
         : null;
+    return [passiveCupHint, passiveEtaHint, PASSIVE_GROWTH_RESET_NOTE].filter(Boolean).join(' · ');
+  }, [
+    passiveActive,
+    passiveClock,
+    passiveCupStats.canClaim,
+    passiveCupStats.complete,
+    passiveCupStats.cupFillPercent,
+    state.dailyPassiveGrowth,
+    state.passiveCoffeesClaimed,
+    state.passiveReactivateDayKey,
+  ]);
 
-  const passiveCupHint = passiveActive
-    ? formatPassiveCupHint(state.dailyPassiveGrowth, DAILY_PASSIVE_GROWTH_CAP)
-    : null;
-  const passiveEtaHint =
-    passiveActive && !readyToDrink
-      ? formatPassiveEtaHint(displayGrowth, PASSIVE_GROWTH_PER_SECOND)
-      : null;
-  const passiveHint = [passiveCupHint, passiveEtaHint].filter(Boolean).join(' · ') || null;
-  const drinkStage = isDrinkStage(isHolding ? state.growth : displayGrowth);
+  const drinkStage = useMemo(
+    () => isDrinkStage(isHolding ? state.growth : displayGrowth),
+    [displayGrowth, isHolding, state.growth],
+  );
 
   return (
     <div className="game">
@@ -342,8 +419,10 @@ export function CoffeeGame() {
               needsAd={needsAd}
               showWatchAdButton={showWatchAdButton}
               growActionSlot={growActionSlot}
-              canWater={canWater}
+              canUseGrowHold={canUseGrowHold}
+              canWater={waterStatus.canWater}
               watchingAd={watchingAd}
+              watchAdDisabled={state.redeemed || watchingAd}
               holdMode={holdMode}
               isHolding={isHolding}
               holdProgress={holdProgress}
@@ -372,42 +451,93 @@ export function CoffeeGame() {
             )}
 
             <GrowthPanel
-              growth={displayGrowth}
+              growth={
+                isHolding && (holdMode === 'water' || holdMode === 'brew')
+                  ? displayGrowth
+                  : state.growth
+              }
+              percentGrowth={state.growth}
               totalCoffees={state.totalCoffees}
               emptiedCoffeeCups={state.spentCoffeeCups}
+              passiveCoffee={{
+                earned: passiveCupStats.cupsReceived,
+                max: passiveCupStats.maxCups,
+                remainder: passiveCupStats.remainder,
+                cupFillPercent: passiveCupStats.cupFillPercent,
+                complete: passiveCupStats.complete,
+                canClaim: passiveCupStats.canClaim,
+                canReactivate: passiveCupStats.canReactivate,
+                reactivateUsedToday: passiveCupStats.reactivateUsedToday,
+              }}
+              onClaimPassiveCoffee={() => void claimPassiveCoffee()}
+              onReactivatePassiveCoffee={() => void reactivatePassiveCoffee()}
+              claimingPassiveCoffee={claimingPassiveCoffee}
+              reactivatingPassiveCoffee={reactivatingPassiveCoffee}
               waterHint={waterHint}
               passiveHint={passiveHint}
               isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
-              isPassivelyGrowing={passiveActive && !isHolding && !readyToDrink}
+              isPassivelyAccruing={
+                passiveActive &&
+                !isHolding &&
+                !passiveCupStats.canClaim &&
+                !passiveCupStats.complete
+              }
               canSellBatch={canSellBatch}
               sellBatchLabel={`${SELL_BATCH_SIZE}잔 판매 (+${formatWon(SELL_BATCH_REWARD)})`}
-              onSellBatch={handleSellBatch}
-              sellDisabled={actionSyncing}
+              onSellBatch={() => void handleSellBatch()}
+              sellDisabled={sellingBatch || isHolding}
+              sellPending={sellingBatch}
             />
 
             {import.meta.env.DEV && (
               <button
                 type="button"
                 className="game__test-btn"
-                disabled={state.redeemed || state.growth >= 100 || isHolding}
+                disabled={state.redeemed || isHolding || loading || actionSyncing}
                 onClick={() => testBumpGrowth()}
               >
                 테스트 +25%
               </button>
             )}
 
-            <GameFlowFooter />
+            <GameFlowFooter
+              onShareReward={claimShareReward}
+              sharingReward={sharingReward}
+              shareRewardAvailable={shareRewardAvailable}
+              disabled={state.redeemed || loading}
+            />
           </main>
         </>
       )}
 
-      <BottomNav onRank={() => void openRanking()} onShop={openShop} onSettings={openSettings} />
+      {!state.redeemed && (
+        <div className="game__text-banner" aria-label="텍스트 배너">
+          <AdBannerSlot variant="list" bannerShape="expanded" />
+        </div>
+      )}
+
+      <BottomNav
+        onRank={() => void openRanking()}
+        onShop={openShop}
+        onMyCoffee={openMyCoffee}
+        onSettings={openSettings}
+      />
 
       {showRanking && (
         <RankingSheet
           ranking={coffeeRanking}
           loading={rankingLoading}
           onClose={() => void closeRanking()}
+        />
+      )}
+
+      {showMyCoffee && (
+        <MyCoffeeSheet
+          ownedCoffeeVariants={state.ownedCoffeeVariants}
+          selectedCoffeeVariant={state.selectedCoffeeVariant}
+          busy={actionSyncing}
+          onSelect={(slug) => void selectVariant(slug)}
+          onClose={() => void closeMyCoffee()}
         />
       )}
 

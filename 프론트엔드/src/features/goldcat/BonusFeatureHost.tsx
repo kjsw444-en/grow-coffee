@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useRef, useState } from 'react';
 import type { DailyGameId } from '../../services/dailyGamePick';
-import { watchRewardedAd } from '../../services/rewardedAd';
+import { showInterstitialAd } from '../../services/interstitialAd';
 import { useDailyGame } from '../../hooks/useDailyGame';
 import type { ComicInitialTarget } from './StoryComicScreen';
 import './goldcat-features.css';
@@ -60,12 +60,12 @@ export function BonusFeatureHost({
     if (adPending) return false;
 
     setAdPending(true);
-    setMessage('광고를 준비하고 있어요...');
+    setMessage('잠깐 멈춤을 준비하고 있어요...');
 
     try {
-      const watched = await watchRewardedAd();
+      const watched = await showInterstitialAd();
       if (!watched) {
-        setMessage('광고 시청이 취소되었거나 완료되지 않았어요.');
+        setMessage('멈춤이 완료되지 않았어요. 다시 시도해 주세요.');
         return false;
       }
       return true;
@@ -115,7 +115,7 @@ export function BonusFeatureHost({
           onMessage={setMessage}
           onReward={rewardMission}
           onStatsUpdate={updateOmokStats}
-          onWatchAd={() => void watchAd()}
+          onWatchAd={() => watchAd()}
         />
       );
     } else if (activeGame === 'sequence') {

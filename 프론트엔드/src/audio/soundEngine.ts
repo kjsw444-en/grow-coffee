@@ -166,6 +166,39 @@ class SoundEngine {
       case 'error':
         this.tone(220, 0.14, { volume: 0.08, type: 'triangle' });
         break;
+      case 'stonePlace':
+        this.tone(196, 0.07, { volume: 0.16, type: 'triangle', release: 0.06 });
+        this.tone(98, 0.09, { volume: 0.1, release: 0.08 });
+        break;
+      case 'stonePlaceAi':
+        this.tone(280, 0.05, { volume: 0.11, type: 'sine', release: 0.05 });
+        this.tone(420, 0.04, { volume: 0.07, type: 'triangle', release: 0.04 });
+        break;
+      case 'memoryFlash':
+        this.tone(660, 0.08, { volume: 0.1, type: 'sine' });
+        this.tone(880, 0.06, { volume: 0.06, type: 'triangle', release: 0.05 });
+        break;
+      case 'memoryTap':
+        this.tone(740, 0.05, { volume: 0.12, type: 'triangle' });
+        break;
+      case 'memoryWrong':
+        this.tone(240, 0.12, { volume: 0.09, type: 'triangle', release: 0.1 });
+        this.tone(180, 0.1, { volume: 0.07, type: 'triangle', release: 0.12 });
+        break;
+      case 'cardFlip':
+        this.tone(520, 0.04, { volume: 0.08, type: 'triangle', release: 0.03 });
+        this.tone(780, 0.03, { volume: 0.05, type: 'sine', release: 0.03 });
+        break;
+      case 'cardMatch':
+        this.chord([523, 659], 0.18, 0.1);
+        break;
+      case 'cardMismatch':
+        this.tone(300, 0.08, { volume: 0.07, type: 'triangle', release: 0.08 });
+        break;
+      case 'minigameLose':
+        this.tone(220, 0.16, { volume: 0.09, type: 'triangle', release: 0.14 });
+        this.tone(165, 0.2, { volume: 0.07, type: 'triangle', release: 0.16 });
+        break;
       default:
         break;
     }

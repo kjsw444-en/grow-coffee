@@ -1,38 +1,42 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
 import {
-  LIVE_REWARDED_AD_GROUP_ID,
-  TEST_REWARDED_AD_GROUP_ID,
+  LIVE_INTERSTITIAL_AD_GROUP_ID,
+  TEST_INTERSTITIAL_AD_GROUP_ID,
 } from './adsConfig';
-import {
-  USE_MOCK_AD_WATCHED_DIALOG,
-  shouldUseMockRewardedAd,
-  showMockAdWatchedDialog,
-} from './mockAdWatchedDialog';
-
-/** 실광고 사용 시 mockAdWatchedDialog.ts 분기·파일 정리 (파일 상단 주석 참고) */
-export { USE_MOCK_AD_WATCHED_DIALOG };
+import { USE_MOCK_AD_WATCHED_DIALOG } from './mockAdWatchedDialog';
+import { showMockInterstitialDialog } from './mockInterstitialDialog';
 
 const LOAD_TIMEOUT_MS = 20000;
 const SHOW_TIMEOUT_MS = 120000;
+const DRINKS_PER_INTERSTITIAL = 4;
 
 let adStatus: 'idle' | 'loading' | 'loaded' | 'showing' = 'idle';
 let requestInFlight = false;
 let loadCleanup: (() => void) | null = null;
 let loadPromise: Promise<boolean> | null = null;
 
-function getRewardedAdGroupId() {
-  const configured = import.meta.env.VITE_TOSS_REWARDED_AD_GROUP_ID?.trim();
+function getInterstitialAdGroupId() {
+  const configured = import.meta.env.VITE_TOSS_INTERSTITIAL_AD_GROUP_ID?.trim();
   const forceTest = import.meta.env.VITE_TOSS_USE_TEST_ADS === 'true';
 
   if (forceTest) {
-    return configured || TEST_REWARDED_AD_GROUP_ID;
+    return configured || TEST_INTERSTITIAL_AD_GROUP_ID;
   }
 
-  return configured || LIVE_REWARDED_AD_GROUP_ID;
+  return configured || LIVE_INTERSTITIAL_AD_GROUP_ID;
 }
 
-export function isRewardedAdSupported() {
-  if (shouldUseMockRewardedAd()) {
+export function shouldUseMockInterstitialAd() {
+  if (USE_MOCK_AD_WATCHED_DIALOG) {
+    return true;
+  }
+
+  const adGroupId = import.meta.env.VITE_TOSS_INTERSTITIAL_AD_GROUP_ID?.trim();
+  return !adGroupId;
+}
+
+export function isInterstitialAdSupported() {
+  if (shouldUseMockInterstitialAd()) {
     return false;
   }
 
@@ -51,8 +55,8 @@ function resetLoadCleanup() {
   loadCleanup = null;
 }
 
-function preloadRewardedAd() {
-  if (!isRewardedAdSupported()) {
+function preloadInterstitialAd() {
+  if (!isInterstitialAdSupported()) {
     return Promise.resolve(false);
   }
 
@@ -66,7 +70,7 @@ function preloadRewardedAd() {
 
   loadPromise = new Promise((resolve) => {
     adStatus = 'loading';
-    const adGroupId = getRewardedAdGroupId();
+    const adGroupId = getInterstitialAdGroupId();
     let settled = false;
 
     const finish = (ok: boolean) => {
@@ -98,24 +102,23 @@ function preloadRewardedAd() {
   return loadPromise;
 }
 
-function showLoadedRewardedAd() {
-  const adGroupId = getRewardedAdGroupId();
+function showLoadedInterstitialAd() {
+  const adGroupId = getInterstitialAdGroupId();
 
-  return new Promise<{ rewarded: boolean; failed?: boolean; timedOut?: boolean }>((resolve, reject) => {
-    let rewarded = false;
+  return new Promise<{ shown: boolean; failed?: boolean; timedOut?: boolean }>((resolve, reject) => {
     let settled = false;
 
-    const finish = (result: { rewarded: boolean; failed?: boolean; timedOut?: boolean }) => {
+    const finish = (result: { shown: boolean; failed?: boolean; timedOut?: boolean }) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
       adStatus = 'idle';
-      void preloadRewardedAd();
+      void preloadInterstitialAd();
       resolve(result);
     };
 
     const timeoutId = window.setTimeout(() => {
-      finish({ rewarded: false, failed: true, timedOut: true });
+      finish({ shown: false, failed: true, timedOut: true });
     }, SHOW_TIMEOUT_MS);
 
     adStatus = 'showing';
@@ -125,14 +128,11 @@ function showLoadedRewardedAd() {
         options: { adGroupId },
         onEvent: (event) => {
           switch (event.type) {
-            case 'userEarnedReward':
-              rewarded = true;
-              break;
             case 'dismissed':
-              finish({ rewarded });
+              finish({ shown: true });
               break;
             case 'failedToShow':
-              finish({ rewarded: false, failed: true });
+              finish({ shown: false, failed: true });
               break;
             default:
               break;
@@ -145,7 +145,7 @@ function showLoadedRewardedAd() {
           adStatus = 'idle';
           resetLoadCleanup();
           loadPromise = null;
-          void preloadRewardedAd();
+          void preloadInterstitialAd();
           reject(error);
         },
       });
@@ -158,18 +158,18 @@ function showLoadedRewardedAd() {
   });
 }
 
-export function initRewardedAds() {
-  if (shouldUseMockRewardedAd() || !isRewardedAdSupported()) return;
-  void preloadRewardedAd();
+export function initInterstitialAds() {
+  if (shouldUseMockInterstitialAd() || !isInterstitialAdSupported()) return;
+  void preloadInterstitialAd();
 }
 
-export async function watchRewardedAd(): Promise<boolean> {
-  if (shouldUseMockRewardedAd()) {
-    return showMockAdWatchedDialog();
+export async function showInterstitialAd(): Promise<boolean> {
+  if (shouldUseMockInterstitialAd()) {
+    return showMockInterstitialDialog();
   }
 
-  if (!isRewardedAdSupported()) {
-    return showMockAdWatchedDialog();
+  if (!isInterstitialAdSupported()) {
+    return showMockInterstitialDialog();
   }
 
   if (requestInFlight) {
@@ -180,21 +180,29 @@ export async function watchRewardedAd(): Promise<boolean> {
 
   try {
     if (adStatus !== 'loaded') {
-      const loaded = await preloadRewardedAd();
+      const loaded = await preloadInterstitialAd();
       if (!loaded) {
-        return showMockAdWatchedDialog();
+        return showMockInterstitialDialog();
       }
     }
 
-    const result = await showLoadedRewardedAd();
-    if (result.failed || !result.rewarded) {
-      return showMockAdWatchedDialog();
+    const result = await showLoadedInterstitialAd();
+    if (result.failed || !result.shown) {
+      return showMockInterstitialDialog();
     }
 
     return true;
   } catch {
-    return showMockAdWatchedDialog();
+    return showMockInterstitialDialog();
   } finally {
     requestInFlight = false;
   }
+}
+
+export function getDrinksPerInterstitial() {
+  return DRINKS_PER_INTERSTITIAL;
+}
+
+export function shouldShowDrinkCycleInterstitial(drinkCount: number) {
+  return drinkCount > 0 && drinkCount % DRINKS_PER_INTERSTITIAL === 0;
 }

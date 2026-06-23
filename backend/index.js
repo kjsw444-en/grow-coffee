@@ -26,8 +26,8 @@ import {
   requireStorage,
   requireUser,
 } from './middleware.js'
-import { applyDrink, applyDevTestWater, applyPurchaseCoffeeVariant, applyReset, applySelectCoffeeVariant, applySellBatch, applyWatchAd, applyWater } from './gameLogic.js'
-import { ACTION_COOLDOWN_MS } from './constants.js'
+import { applyClaimPassiveCoffee, applyDrink, applyDevTestWater, applyPurchaseCoffeeVariant, applyReactivatePassiveCoffee, applyReset, applySelectCoffeeVariant, applySellBatch, applyShareReward, applyWatchAd, applyWater } from './gameLogic.js'
+import { ACTION_COOLDOWN_MS, SHARE_REWARD_MODULE_ID } from './constants.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
   exchangeTossAuthorizationCode,
@@ -140,7 +140,7 @@ app.post('/api/game/water', requireUser, async (req, res) => {
       const messages = {
         'already-redeemed': '이미 목표를 달성했어요.',
         'ready-to-drink': '이제 커피를 마실 수 있어요.',
-        'need-ad': '오늘 무료 물주기·내리기를 사용했어요. 「광고 보고 한 번 더」를 눌러 주세요.',
+        'need-ad': '물주기·내리기 1회를 사용했어요. 「물 채우기」를 눌러 주세요.',
       }
       res.status(400).json({
         ok: false,
@@ -229,11 +229,11 @@ app.post('/api/game/watch-ad', requireUser, async (req, res) => {
     if (!result.ok) {
       const messages = {
         'already-redeemed': '이미 목표를 달성했어요.',
-        'not-needed': '아직 무료 물주기·내리기가 남았거나, 이미 추가 기회를 받았어요.',
+        'not-needed': '아직 물주기·내리기를 사용하지 않았거나, 이미 물 채우기를 받았어요.',
       }
       res.status(400).json({
         ok: false,
-        message: messages[result.reason] || '광고 보상을 받을 수 없어요.',
+        message: messages[result.reason] || '물 채우기를 받을 수 없어요.',
         state: result.state,
       })
       return
@@ -241,6 +241,114 @@ app.post('/api/game/watch-ad', requireUser, async (req, res) => {
 
     const state = await saveGameState(req.userId, result.state)
     res.json({ ok: true, state })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/share-reward', requireUser, async (req, res) => {
+  try {
+    const moduleId = String(req.body?.moduleId || '').trim()
+    const devBypass = isDevRequest(req)
+
+    if (moduleId && moduleId !== SHARE_REWARD_MODULE_ID && !devBypass) {
+      res.status(400).json({
+        ok: false,
+        message: '유효하지 않은 공유 리워드입니다.',
+      })
+      return
+    }
+
+    const current = await getGameState(req.userId)
+    const result = applyShareReward(current)
+
+    if (!result.ok) {
+      const messages = {
+        'already-redeemed': '이미 목표를 달성했어요.',
+        'already-claimed': '오늘 공유 리워드는 이미 받았어요. 내일 다시 시도해 주세요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '공유 리워드를 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const displayName = await getProfileDisplayName(req.userId)
+    await syncRankingFromGameState(req.userId, state, displayName)
+
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardAmount: result.rewardAmount,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/claim-passive-coffee', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyClaimPassiveCoffee(current)
+
+    if (!result.ok) {
+      const messages = {
+        'already-redeemed': '이미 목표를 달성했어요.',
+        'not-ready': '아직 방치 커피가 차지 않았어요.',
+        'daily-limit': '오늘 방치 커피는 모두 받았어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '방치 커피를 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      lastEarned: result.lastEarned,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/reactivate-passive-coffee', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyReactivatePassiveCoffee(current)
+
+    if (!result.ok) {
+      const messages = {
+        'already-redeemed': '이미 목표를 달성했어요.',
+        'not-complete': '방치 커피 2잔을 모두 받은 뒤 재활성할 수 있어요.',
+        'already-reactivated': '오늘 방치 커피 재활성은 이미 사용했어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '방치 커피를 재활성할 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
   } catch (error) {
     handleApiError(res, error)
   }
@@ -300,41 +408,11 @@ app.post('/api/game/sell-batch', requireUser, async (req, res) => {
 
     const state = await saveGameState(req.userId, result.state)
     const displayName = await getProfileDisplayName(req.userId)
-    await syncRankingFromGameState(req.userId, state, displayName)
-
-    const payload = await attachPlayerRank(req.userId, {
-      ok: true,
-      state,
-      lastEarned: result.lastEarned,
-      passiveGrowthPreview: previewPassiveGrowth(state),
-    })
-    res.json(payload)
-  } catch (error) {
-    handleApiError(res, error)
-  }
-})
-
-app.post('/api/game/sell-batch', requireUser, async (req, res) => {
-  try {
-    const current = await getGameState(req.userId)
-    const result = applySellBatch(current)
-
-    if (!result.ok) {
-      const messages = {
-        'already-redeemed': '이미 목표를 달성했어요.',
-        'not-enough-cups': '판매하려면 내린 커피 10잔이 필요해요.',
-      }
-      res.status(400).json({
-        ok: false,
-        message: messages[result.reason] || '커피를 판매할 수 없어요.',
-        state: result.state,
-      })
-      return
+    try {
+      await syncRankingFromGameState(req.userId, state, displayName)
+    } catch (rankingError) {
+      console.error('ranking sync after sell-batch failed', rankingError)
     }
-
-    const state = await saveGameState(req.userId, result.state)
-    const displayName = await getProfileDisplayName(req.userId)
-    await syncRankingFromGameState(req.userId, state, displayName)
 
     const payload = await attachPlayerRank(req.userId, {
       ok: true,

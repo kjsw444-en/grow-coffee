@@ -2,18 +2,23 @@ export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
 }
 
+function readQuotaCount(raw, camel, snake) {
+  const value = raw?.[camel] ?? raw?.[snake]
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+}
+
+/** 물주기·내리기 — 일일 제한 없음. 1회 → 광고 → 1회 반복. */
 export function normalizeWaterQuota(raw) {
   const today = getTodayKey()
-  const dayKey = String(raw?.waterDayKey || '')
-
-  if (dayKey !== today) {
-    return { waterDayKey: today, watersToday: 0, adWaterCredits: 0 }
-  }
+  const dayKey = String(raw?.waterDayKey ?? raw?.water_day_key ?? '')
+  const watersToday = readQuotaCount(raw, 'watersToday', 'waters_today')
+  const adWaterCredits = readQuotaCount(raw, 'adWaterCredits', 'ad_water_credits')
 
   return {
-    waterDayKey: today,
-    watersToday: Number(raw?.watersToday ?? 0),
-    adWaterCredits: Number(raw?.adWaterCredits ?? 0),
+    waterDayKey: dayKey || today,
+    watersToday,
+    adWaterCredits,
   }
 }
 

@@ -12,10 +12,16 @@ export type GameState = {
   growthAccrualSyncedAt: string;
   passiveDayKey: string;
   dailyPassiveGrowth: number;
+  /** 오늘 방치 커피 받기로 수령한 잔 수 (0~2) */
+  passiveCoffeesClaimed: number;
   selectedCoffeeVariant: CoffeeVariantSlug;
   ownedCoffeeVariants: CoffeeVariantSlug[];
   /** 상점에서 비운 커피잔 누적 — 랭킹 기준 */
   spentCoffeeCups: number;
+  /** 마지막 공유 리워드 수령일 (KST en-CA) */
+  shareRewardDayKey: string;
+  /** 방치 커피 재활성(광고) 사용일 — 하루 1회 */
+  passiveReactivateDayKey: string;
 };
 
 export const initialState: GameState = {
@@ -30,7 +36,10 @@ export const initialState: GameState = {
   growthAccrualSyncedAt: new Date().toISOString(),
   passiveDayKey: '',
   dailyPassiveGrowth: 0,
+  passiveCoffeesClaimed: 0,
   selectedCoffeeVariant: 'parttime-latte',
   ownedCoffeeVariants: ['parttime-latte'],
   spentCoffeeCups: 0,
+  shareRewardDayKey: '',
+  passiveReactivateDayKey: '',
 };

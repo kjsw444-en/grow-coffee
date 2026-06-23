@@ -41,8 +41,10 @@ type PlantSceneProps = {
   needsAd: boolean;
   showWatchAdButton: boolean;
   growActionSlot: GrowActionSlot;
+  canUseGrowHold: boolean;
   canWater: boolean;
   watchingAd: boolean;
+  watchAdDisabled?: boolean;
   holdMode: HoldMode;
   isHolding: boolean;
   holdProgress: number;
@@ -75,8 +77,10 @@ function PlantSceneComponent({
   needsAd,
   showWatchAdButton,
   growActionSlot,
+  canUseGrowHold,
   canWater,
   watchingAd,
+  watchAdDisabled,
   holdMode,
   isHolding,
   holdProgress,
@@ -103,7 +107,8 @@ function PlantSceneComponent({
   unlockedRef.current = unlocked;
   const stage = getStage(plantGrowth);
   const drinkStage = isDrinkStage(plantGrowth) || isDrinkCommitting;
-  const growHoldDisabled = disabled || growActionSlot === 'ad' || !canWater;
+  const showAdSlot = growActionSlot === 'ad';
+  const growHoldDisabled = disabled || showAdSlot || !canUseGrowHold;
   /** 영상은 state 100% + 마시기 준비 + 홀드 종료 후에만 — API 처리 중에도 유지 */
   const showDrinkVideo = drinkUiActive && !isHolding;
   const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
@@ -139,7 +144,7 @@ function PlantSceneComponent({
 
   const drinkVideoSrc = playbackVariant?.video ?? null;
   const showWateringCan =
-    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && growActionSlot !== 'ad';
+    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showAdSlot;
 
   const markVideoBroken = useCallback((variant: CoffeeVariant | null) => {
     if (!variant) return;
@@ -322,10 +327,16 @@ function PlantSceneComponent({
           )}
           <WateringCanPour active={showWateringCan} progress={holdProgress} />
           <div
-            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${growActionSlot === 'ad' ? 'plant-scene__action-slot--ad' : ''}`}
+            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${showAdSlot ? 'plant-scene__action-slot--ad' : ''}`}
           >
-            {growActionSlot === 'ad' ? (
-              <WatchAdButton disabled={disabled} loading={watchingAd} embedded onWatchAd={onWatchAd} />
+            {showAdSlot ? (
+              <WatchAdButton
+                growth={plantGrowth}
+                disabled={watchAdDisabled ?? disabled}
+                loading={watchingAd}
+                embedded
+                onWatchAd={onWatchAd}
+              />
             ) : drinkStage ? (
               <button
                 type="button"

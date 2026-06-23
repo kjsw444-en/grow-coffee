@@ -4,18 +4,17 @@ export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
 
+/** 물주기·내리기 — 일일 제한 없음. 1회 → 광고 → 1회 반복. */
 export function normalizeWaterQuota(state: Pick<GameState, 'waterDayKey' | 'watersToday' | 'adWaterCredits'>) {
   const today = getTodayKey();
   const dayKey = state.waterDayKey || '';
-
-  if (dayKey !== today) {
-    return { waterDayKey: today, watersToday: 0, adWaterCredits: 0 };
-  }
+  const watersToday = Math.max(0, state.watersToday ?? 0);
+  const adWaterCredits = Math.max(0, state.adWaterCredits ?? 0);
 
   return {
-    waterDayKey: today,
-    watersToday: state.watersToday ?? 0,
-    adWaterCredits: state.adWaterCredits ?? 0,
+    waterDayKey: dayKey || today,
+    watersToday,
+    adWaterCredits,
   };
 }
 
@@ -23,14 +22,21 @@ export function withNormalizedQuota(state: GameState): GameState {
   return { ...state, ...normalizeWaterQuota(state) };
 }
 
+/** 오늘 첫 물주기·내리기(광고 없음) 또는 광고 보상 1회분이 남아 있음 */
 export function canWaterToday(state: GameState) {
   const quota = normalizeWaterQuota(state);
   return quota.watersToday === 0 || quota.adWaterCredits > 0;
 }
 
+/** 물주기·내리기 1회 사용 후, 광고 전 */
 export function needsAdForWater(state: GameState) {
   const quota = normalizeWaterQuota(state);
   return quota.watersToday > 0 && quota.adWaterCredits === 0;
+}
+
+/** 물주기·내리기 꾹 누르기 가능 — 광고 슬롯이 아닐 때만 */
+export function canUseGrowHold(state: GameState) {
+  return canWaterToday(state) && !needsAdForWater(state);
 }
 
 export function consumeWaterQuota(state: GameState): GameState {
@@ -57,21 +63,44 @@ export function grantAdWaterCredit(state: GameState): GameState {
   return { ...state, ...quota, adWaterCredits: quota.adWaterCredits + 1 };
 }
 
+/** 서버/bootstrap 응답 병합 — 사용한 물주기 횟수가 되돌아가지 않게 */
+export function mergeWaterQuotaFromServer(
+  local: Pick<GameState, 'waterDayKey' | 'watersToday' | 'adWaterCredits'>,
+  incoming: Pick<GameState, 'waterDayKey' | 'watersToday' | 'adWaterCredits'>,
+) {
+  const localQ = normalizeWaterQuota(local);
+  const incomingQ = normalizeWaterQuota(incoming);
+
+  const watersToday = Math.max(localQ.watersToday, incomingQ.watersToday);
+  let adWaterCredits = incomingQ.adWaterCredits;
+  if (localQ.adWaterCredits > incomingQ.adWaterCredits) {
+    adWaterCredits = localQ.adWaterCredits;
+  }
+
+  return {
+    waterDayKey: incomingQ.waterDayKey || localQ.waterDayKey,
+    watersToday,
+    adWaterCredits,
+  };
+}
+
 export function getWaterStatus(state: GameState) {
   const quota = normalizeWaterQuota(state);
   const freeAvailable = quota.watersToday === 0;
+  const needsAd = quota.watersToday > 0 && quota.adWaterCredits === 0;
 
   return {
     ...quota,
     freeAvailable,
     canWater: freeAvailable || quota.adWaterCredits > 0,
-    needsAd: quota.watersToday > 0 && quota.adWaterCredits === 0,
+    needsAd,
+    canUseGrowHold: canUseGrowHold(state),
   };
 }
 
 export type GrowActionSlot = 'water' | 'ad' | 'drink';
 
-/** 하단 액션 슬롯 — 마시기 > 광고 > 물주기 */
+/** 하단 액션 — 마시기 > 광고 > 물주기·내리기 */
 export function getGrowActionSlot({
   readyToDrink,
   isDrinkCommitting,

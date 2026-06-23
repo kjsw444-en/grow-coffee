@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { AdBannerSlot } from './AdBannerSlot';
 import { useButtonSound } from '../audio/SoundProvider';
-import { shareWithCoffeeFriends } from '../services/tossShare';
+import { SHARE_REWARD_COFFEE_AMOUNT } from '../game/constants';
 import './GameFlowFooter.css';
 
 const STEPS = [
@@ -11,39 +12,56 @@ const STEPS = [
   { num: 5, text: '다시\n반복' },
 ];
 
-export function GameFlowFooter() {
-  const [sharePending, setSharePending] = useState(false);
+type GameFlowFooterProps = {
+  onShareReward: (onMessage?: (message: string) => void) => Promise<string>;
+  sharingReward?: boolean;
+  shareRewardAvailable?: boolean;
+  disabled?: boolean;
+};
+
+export function GameFlowFooter({
+  onShareReward,
+  sharingReward = false,
+  shareRewardAvailable = true,
+  disabled = false,
+}: GameFlowFooterProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const buttonSound = useButtonSound();
 
   const handleShare = async () => {
-    if (sharePending) return;
+    if (sharingReward || disabled) return;
 
     await buttonSound();
-    setSharePending(true);
     setShareMessage('공유 화면을 여는 중...');
 
     try {
-      await shareWithCoffeeFriends({ onMessage: setShareMessage });
-    } finally {
-      setSharePending(false);
+      const message = await onShareReward(setShareMessage);
+      setShareMessage(message);
+    } catch {
+      setShareMessage('공유 리워드를 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
     }
   };
+
+  const shareHint = shareRewardAvailable
+    ? `공유하면 내린 커피 ${SHARE_REWARD_COFFEE_AMOUNT}잔 · 하루 1회`
+    : '오늘 공유 리워드 완료 · 내일 다시 가능';
 
   return (
     <section className="game-flow" aria-label="게임 진행 순서">
       <button
         type="button"
         className="game-flow__share"
-        disabled={sharePending}
+        disabled={sharingReward || disabled || !shareRewardAvailable}
         onClick={() => void handleShare()}
       >
         <span className="game-flow__share-icon" aria-hidden="true">
           ☕
         </span>
         <span className="game-flow__share-copy">
-          <strong>{sharePending ? '공유 준비 중...' : '커피 덕후에게 공유하기'}</strong>
-          <small>토스 친구에게 커피 키우기 초대</small>
+          <strong>
+            {sharingReward ? '공유 준비 중...' : '커피 덕후에게 공유하기'}
+          </strong>
+          <small>{shareHint}</small>
         </span>
       </button>
 
@@ -52,6 +70,8 @@ export function GameFlowFooter() {
           {shareMessage}
         </p>
       )}
+
+      <AdBannerSlot variant="feed" className="game-flow__image-banner" />
 
       <p className="game-flow__title">게임 진행 순서</p>
       <div className="game-flow__steps">

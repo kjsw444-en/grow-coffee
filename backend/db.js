@@ -1,8 +1,71 @@
 import { randomUUID } from 'node:crypto'
 import { initialGameState } from './constants.js'
 import { normalizeGameState, sanitizeLoadedGameState } from './gameLogic.js'
+import { settlePassiveGrowth } from './passiveGrowth.js'
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from './supabase.js'
 import { patchLocalDb, readLocalDb } from './store.js'
+
+const GAME_STATE_COLUMNS_CORE =
+  'growth, money, total_coffees, total_waters, redeemed, water_day_key, waters_today, ad_water_credits, growth_accrual_synced_at, passive_day_key, daily_passive_growth, selected_coffee_variant, owned_coffee_variants, spent_coffee_cups'
+
+const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM = `${GAME_STATE_COLUMNS_CORE}, passive_coffees_claimed`
+const GAME_STATE_COLUMNS_WITH_SHARE = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM}, share_reward_day_key`
+const GAME_STATE_COLUMNS_FULL = `${GAME_STATE_COLUMNS_WITH_SHARE}, passive_reactivate_day_key`
+
+function isMissingPassiveCoffeesClaimedColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('passive_coffees_claimed')
+}
+
+function isMissingShareRewardColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('share_reward_day_key')
+}
+
+function isMissingPassiveReactivateColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('passive_reactivate_day_key')
+}
+
+function warnMissingPassiveColumnOnce() {
+  console.warn(
+    'game_states.passive_coffees_claimed 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+function warnMissingShareColumnOnce() {
+  console.warn(
+    'game_states.share_reward_day_key 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+function warnMissingReactivateColumnOnce() {
+  console.warn(
+    'game_states.passive_reactivate_day_key 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+let warnedPassiveColumn = false
+let warnedShareColumn = false
+let warnedReactivateColumn = false
+
+function stripPassiveCoffeesClaimed(row) {
+  if (!('passive_coffees_claimed' in row)) return row
+  const { passive_coffees_claimed: _ignored, ...rest } = row
+  return rest
+}
+
+function stripShareRewardDayKey(row) {
+  if (!('share_reward_day_key' in row)) return row
+  const { share_reward_day_key: _ignored, ...rest } = row
+  return rest
+}
+
+function stripPassiveReactivateDayKey(row) {
+  if (!('passive_reactivate_day_key' in row)) return row
+  const { passive_reactivate_day_key: _ignored, ...rest } = row
+  return rest
+}
 
 function mapProfileRow(row) {
   return {
@@ -25,9 +88,12 @@ function mapGameRow(row) {
     growthAccrualSyncedAt: row.growth_accrual_synced_at,
     passiveDayKey: row.passive_day_key,
     dailyPassiveGrowth: row.daily_passive_growth,
+    passiveCoffeesClaimed: Number(row.passive_coffees_claimed ?? 0),
+    passiveReactivateDayKey: String(row.passive_reactivate_day_key ?? ''),
     selectedCoffeeVariant: row.selected_coffee_variant,
     ownedCoffeeVariants: row.owned_coffee_variants,
     spentCoffeeCups: row.spent_coffee_cups,
+    shareRewardDayKey: row.share_reward_day_key,
   })
 }
 
@@ -123,7 +189,8 @@ async function mergeGuestGameStateIntoToss(guestUserId, tossUserId) {
     const tossMapped = tossState ? mapGameRow(tossState) : initialGameState
     const merged = pickBetterGameState(guestMapped, tossMapped)
 
-    await supabase.from('game_states').upsert(
+    const { error: upsertError } = await upsertGameRow(
+      supabase,
       {
         user_id: tossUserId,
         ...toGameRow(merged),
@@ -131,6 +198,10 @@ async function mergeGuestGameStateIntoToss(guestUserId, tossUserId) {
       },
       { onConflict: 'user_id' },
     )
+
+    if (upsertError) {
+      throw upsertError
+    }
   }
 
   await supabase.auth.admin.deleteUser(guestUserId)
@@ -231,7 +302,7 @@ export async function resolveGuestSession(deviceId, displayName) {
     throw profileError
   }
 
-  const { error: gameError } = await supabase.from('game_states').insert({
+  const { error: gameError } = await insertGameRow(supabase, {
     user_id: userId,
     ...toGameRow(initialGameState),
   })
@@ -429,7 +500,7 @@ export async function resolveTossSession({
     throw profileError
   }
 
-  const { error: gameError } = await supabase.from('game_states').insert({
+  const { error: gameError } = await insertGameRow(supabase, {
     user_id: userId,
     ...toGameRow(initialGameState),
   })
@@ -490,7 +561,7 @@ export async function handleTossUnlink(userKey) {
 function toGameRow(state) {
   const current = normalizeGameState(state)
 
-  return {
+  const row = {
     growth: current.growth,
     money: current.money,
     total_coffees: current.totalCoffees,
@@ -502,33 +573,166 @@ function toGameRow(state) {
     growth_accrual_synced_at: current.growthAccrualSyncedAt,
     passive_day_key: current.passiveDayKey,
     daily_passive_growth: current.dailyPassiveGrowth,
+    passive_coffees_claimed: current.passiveCoffeesClaimed,
+    passive_reactivate_day_key: current.passiveReactivateDayKey,
     selected_coffee_variant: current.selectedCoffeeVariant,
     owned_coffee_variants: current.ownedCoffeeVariants,
     spent_coffee_cups: current.spentCoffeeCups,
+    share_reward_day_key: current.shareRewardDayKey,
   }
+
+  return row
+}
+
+async function insertGameRow(supabase, row) {
+  let payload = row
+  let result = await supabase.from('game_states').insert(payload)
+
+  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
+    if (!warnedReactivateColumn) {
+      warnedReactivateColumn = true
+      warnMissingReactivateColumnOnce()
+    }
+    payload = stripPassiveReactivateDayKey(row)
+    result = await supabase.from('game_states').insert(payload)
+  }
+
+  if (result.error && isMissingShareRewardColumnError(result.error)) {
+    if (!warnedShareColumn) {
+      warnedShareColumn = true
+      warnMissingShareColumnOnce()
+    }
+    payload = stripShareRewardDayKey(payload)
+    result = await supabase.from('game_states').insert(payload)
+  }
+
+  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
+    if (!warnedPassiveColumn) {
+      warnedPassiveColumn = true
+      warnMissingPassiveColumnOnce()
+    }
+    payload = stripPassiveCoffeesClaimed(stripShareRewardDayKey(stripPassiveReactivateDayKey(row)))
+    result = await supabase.from('game_states').insert(payload)
+  }
+
+  return result
+}
+
+async function upsertGameRow(supabase, row, options) {
+  let payload = row
+  let result = await supabase.from('game_states').upsert(payload, options)
+
+  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
+    if (!warnedReactivateColumn) {
+      warnedReactivateColumn = true
+      warnMissingReactivateColumnOnce()
+    }
+    payload = stripPassiveReactivateDayKey(row)
+    result = await supabase.from('game_states').upsert(payload, options)
+  }
+
+  if (result.error && isMissingShareRewardColumnError(result.error)) {
+    if (!warnedShareColumn) {
+      warnedShareColumn = true
+      warnMissingShareColumnOnce()
+    }
+    payload = stripShareRewardDayKey(payload)
+    result = await supabase.from('game_states').upsert(payload, options)
+  }
+
+  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
+    if (!warnedPassiveColumn) {
+      warnedPassiveColumn = true
+      warnMissingPassiveColumnOnce()
+    }
+    payload = stripPassiveCoffeesClaimed(stripShareRewardDayKey(stripPassiveReactivateDayKey(row)))
+    result = await supabase.from('game_states').upsert(payload, options)
+  }
+
+  return result
+}
+
+async function selectGameRow(supabase, userId) {
+  let result = await supabase
+    .from('game_states')
+    .select(GAME_STATE_COLUMNS_FULL)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
+    if (!warnedReactivateColumn) {
+      warnedReactivateColumn = true
+      warnMissingReactivateColumnOnce()
+    }
+    result = await supabase
+      .from('game_states')
+      .select(GAME_STATE_COLUMNS_WITH_SHARE)
+      .eq('user_id', userId)
+      .maybeSingle()
+  }
+
+  if (result.error && isMissingShareRewardColumnError(result.error)) {
+    if (!warnedShareColumn) {
+      warnedShareColumn = true
+      warnMissingShareColumnOnce()
+    }
+    result = await supabase
+      .from('game_states')
+      .select(GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM)
+      .eq('user_id', userId)
+      .maybeSingle()
+  }
+
+  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
+    if (!warnedPassiveColumn) {
+      warnedPassiveColumn = true
+      warnMissingPassiveColumnOnce()
+    }
+    result = await supabase
+      .from('game_states')
+      .select(GAME_STATE_COLUMNS_CORE)
+      .eq('user_id', userId)
+      .maybeSingle()
+  }
+
+  return result
+}
+
+function passiveGrowthChanged(before, after) {
+  return (
+    before.growth !== after.growth ||
+    before.dailyPassiveGrowth !== after.dailyPassiveGrowth ||
+    before.growthAccrualSyncedAt !== after.growthAccrualSyncedAt ||
+    before.passiveDayKey !== after.passiveDayKey
+  )
+}
+
+async function settleAndPersistPassiveGrowth(userId, raw) {
+  const loaded = sanitizeLoadedGameState(raw ?? initialGameState)
+  const settled = settlePassiveGrowth(loaded)
+
+  if (!passiveGrowthChanged(loaded, settled)) {
+    return settled
+  }
+
+  return saveGameState(userId, settled)
 }
 
 export async function getGameState(userId) {
   if (!isSupabaseAdminConfigured()) {
     const db = readLocalDb()
-    return sanitizeLoadedGameState(db.gameStates[userId] ?? initialGameState)
+    return settleAndPersistPassiveGrowth(userId, db.gameStates[userId])
   }
 
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase
-    .from('game_states')
-    .select(
-      'growth, money, total_coffees, total_waters, redeemed, water_day_key, waters_today, ad_water_credits, growth_accrual_synced_at, passive_day_key, daily_passive_growth, selected_coffee_variant, owned_coffee_variants, spent_coffee_cups',
-    )
-    .eq('user_id', userId)
-    .maybeSingle()
+  const { data, error } = await selectGameRow(supabase, userId)
 
   if (error) {
     throw error
   }
 
   if (!data) {
-    const { error: insertError } = await supabase.from('game_states').insert({
+    const { error: insertError } = await insertGameRow(supabase, {
       user_id: userId,
       ...toGameRow(initialGameState),
     })
@@ -537,10 +741,10 @@ export async function getGameState(userId) {
       throw insertError
     }
 
-    return { ...initialGameState }
+    return settlePassiveGrowth({ ...initialGameState })
   }
 
-  return mapGameRow(data)
+  return settleAndPersistPassiveGrowth(userId, mapGameRow(data))
 }
 
 export async function saveGameState(userId, state) {
@@ -554,7 +758,8 @@ export async function saveGameState(userId, state) {
   }
 
   const supabase = getSupabaseAdmin()
-  const { error } = await supabase.from('game_states').upsert(
+  const { error } = await upsertGameRow(
+    supabase,
     {
       user_id: userId,
       ...toGameRow(next),

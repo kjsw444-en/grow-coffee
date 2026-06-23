@@ -184,7 +184,7 @@ export function WaterHoldCircle({
           ) : (
             <>
               <p className="water-hold__status">{idleLabel}</p>
-              {!embedded && !isBrew && <p className="water-hold__target">4~7초</p>}
+              {!embedded && !isBrew && <p className="water-hold__target">3~5초</p>}
             </>
           )}
         </div>

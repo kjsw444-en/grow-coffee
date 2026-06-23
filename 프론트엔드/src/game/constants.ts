@@ -4,18 +4,32 @@ export const SELL_BATCH_SIZE = 10;
 export const SELL_BATCH_REWARD = 47;
 export const GROWTH_PER_WATER = 25;
 
-/** 햇빛 방치 — 20분 = 100%, 하루 최대 2잔(200%) */
-export const PASSIVE_MINUTES_PER_CUP = 20;
-export const PASSIVE_GROWTH_PER_SECOND = 100 / (PASSIVE_MINUTES_PER_CUP * 60);
+/** 토스 공유 리워드 — contactsViral moduleId */
+export const SHARE_REWARD_MODULE_ID =
+  import.meta.env.VITE_TOSS_SHARE_REWARD_MODULE_ID?.trim() ||
+  'd2b00c15-3de1-437f-82b6-af3d1d87eb46';
+/** 공유 완료 시 지급 내린 커피 */
+export const SHARE_REWARD_COFFEE_AMOUNT = 50;
+
+/** 햇빛 방치 — 1분당 5%, 20분 = 100%, 하루 최대 2잔(200%) */
+export const PASSIVE_GROWTH_PER_MINUTE = 5;
+export const PASSIVE_MINUTES_PER_CUP = 100 / PASSIVE_GROWTH_PER_MINUTE;
+export const PASSIVE_GROWTH_PER_SECOND = PASSIVE_GROWTH_PER_MINUTE / 60;
 export const DAILY_PASSIVE_GROWTH_CAP = 200;
-/** 방치 성장 UI 갱신 주기(ms) — 소수점 변화가 보이도록 */
-export const PASSIVE_DISPLAY_TICK_MS = 100;
-/** 성장률 표시 소수 자릿수 */
+/** 방치 성장 UI 갱신 주기(ms) */
+export const PASSIVE_DISPLAY_TICK_MS = 250;
+/** 성장률 React 반영 최소 간격(ms) — 과도한 리렌더 방지 */
+export const DISPLAY_GROWTH_COMMIT_MS = 200;
+/** 커피나무 성장률 표시 — 물주기 25% 단위라 정수만 */
+export const TREE_GROWTH_DISPLAY_DECIMALS = 0;
+/** 방치 커피 게이지 표시 소수 자릿수 */
+export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 5;
+/** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 
-/** 물 주기 꾹 누르기 시간 (초) — 매번 4~7초 랜덤 */
-export const HOLD_MIN_SEC = 4;
-export const HOLD_MAX_SEC = 7;
+/** 물 주기 꾹 누르기 시간 (초) — 매번 3~5초 랜덤 */
+export const HOLD_MIN_SEC = 3;
+export const HOLD_MAX_SEC = 5;
 
 export const PLANT_BG_SRC = '/plant-bg.png';
 /** 커피 완성 단계(75~99%) 배경 — 473×1024 */

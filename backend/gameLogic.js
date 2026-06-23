@@ -3,6 +3,8 @@ import {
   GROWTH_PER_WATER,
   SELL_BATCH_REWARD,
   SELL_BATCH_SIZE,
+  SHARE_REWARD_COFFEE_AMOUNT,
+  DAILY_PASSIVE_GROWTH_CAP,
   initialGameState,
 } from './constants.js'
 import {
@@ -19,6 +21,7 @@ import {
   repairGrowthAccrualSyncedAt,
   roundGrowth,
   settlePassiveGrowth,
+  getPassiveDayKey,
 } from './passiveGrowth.js'
 import {
   canWaterToday,
@@ -27,6 +30,8 @@ import {
   needsAdForWater,
   normalizeWaterQuota,
 } from './waterQuota.js'
+import { hasClaimedShareRewardToday, markShareRewardClaimed } from './shareReward.js'
+import { hasUsedPassiveReactivateToday, markPassiveReactivateUsed } from './passiveReactivate.js'
 
 function clampGrowth(growth) {
   return roundGrowth(Math.min(100, Math.max(0, growth)))
@@ -54,6 +59,10 @@ export function normalizeGameState(raw) {
     selectedCoffeeVariant,
     ownedCoffeeVariants,
     spentCoffeeCups: Math.max(0, Math.floor(Number(raw?.spentCoffeeCups ?? raw?.spent_coffee_cups ?? 0))),
+    shareRewardDayKey: String(raw?.shareRewardDayKey ?? raw?.share_reward_day_key ?? ''),
+    passiveReactivateDayKey: String(
+      raw?.passiveReactivateDayKey ?? raw?.passive_reactivate_day_key ?? '',
+    ),
     ...passive,
     ...quota,
   }
@@ -139,6 +148,96 @@ export function applyWatchAd(state) {
   }
 }
 
+export function applyShareReward(state) {
+  const current = withSettledPassive(state)
+
+  if (current.redeemed) {
+    return { ok: false, reason: 'already-redeemed', state: current, rewardAmount: 0 }
+  }
+
+  if (hasClaimedShareRewardToday(current)) {
+    return { ok: false, reason: 'already-claimed', state: current, rewardAmount: 0 }
+  }
+
+  const next = {
+    ...current,
+    ...markShareRewardClaimed(current),
+    totalCoffees: current.totalCoffees + SHARE_REWARD_COFFEE_AMOUNT,
+  }
+
+  return {
+    ok: true,
+    state: next,
+    rewardAmount: SHARE_REWARD_COFFEE_AMOUNT,
+  }
+}
+
+export function applyClaimPassiveCoffee(state) {
+  const current = withSettledPassive(state)
+
+  if (current.redeemed) {
+    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
+  }
+
+  const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
+  const previewDaily = roundGrowth(current.dailyPassiveGrowth)
+  const unclaimed = roundGrowth(Math.max(0, previewDaily - claimed * 100))
+
+  if (unclaimed < 100) {
+    return { ok: false, reason: 'not-ready', state: current, lastEarned: null }
+  }
+
+  const maxCups = Math.floor(DAILY_PASSIVE_GROWTH_CAP / 100) || 2
+  if (claimed >= maxCups) {
+    return { ok: false, reason: 'daily-limit', state: current, lastEarned: null }
+  }
+
+  const now = new Date().toISOString()
+
+  const next = {
+    ...current,
+    passiveCoffeesClaimed: claimed + 1,
+    totalCoffees: current.totalCoffees + 1,
+    dailyPassiveGrowth: roundGrowth(Math.max(0, previewDaily - 100)),
+    growthAccrualSyncedAt: now,
+  }
+
+  return { ok: true, state: next, lastEarned: 1 }
+}
+
+export function applyReactivatePassiveCoffee(state) {
+  const current = withSettledPassive(state)
+
+  if (current.redeemed) {
+    return { ok: false, reason: 'already-redeemed', state: current }
+  }
+
+  const maxCups = Math.floor(DAILY_PASSIVE_GROWTH_CAP / 100) || 2
+  const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
+
+  if (claimed < maxCups) {
+    return { ok: false, reason: 'not-complete', state: current }
+  }
+
+  if (hasUsedPassiveReactivateToday(current)) {
+    return { ok: false, reason: 'already-reactivated', state: current }
+  }
+
+  const today = getPassiveDayKey()
+  const now = new Date().toISOString()
+
+  const next = {
+    ...current,
+    ...markPassiveReactivateUsed(current),
+    passiveDayKey: today,
+    dailyPassiveGrowth: 0,
+    passiveCoffeesClaimed: 0,
+    growthAccrualSyncedAt: now,
+  }
+
+  return { ok: true, state: next }
+}
+
 export function applyDrink(state) {
   const current = withSettledPassive(state)
 
@@ -154,6 +253,7 @@ export function applyDrink(state) {
     ...current,
     growth: 0,
     totalCoffees: current.totalCoffees + 1,
+    growthAccrualSyncedAt: new Date().toISOString(),
   }
 
   return { ok: true, state: next, lastEarned: null }
@@ -208,6 +308,8 @@ export function applyReset() {
     state: normalizeGameState({
       ...initialGameState,
       growthAccrualSyncedAt: new Date().toISOString(),
+      passiveDayKey: getPassiveDayKey(),
+      passiveReactivateDayKey: '',
     }),
   }
 }

@@ -11,7 +11,16 @@ export type SfxId =
   | 'harvest'
   | 'coin'
   | 'win'
-  | 'error';
+  | 'error'
+  | 'stonePlace'
+  | 'stonePlaceAi'
+  | 'memoryFlash'
+  | 'memoryTap'
+  | 'memoryWrong'
+  | 'cardFlip'
+  | 'cardMatch'
+  | 'cardMismatch'
+  | 'minigameLose';
 
 export type SoundSettings = {
   muted: boolean;

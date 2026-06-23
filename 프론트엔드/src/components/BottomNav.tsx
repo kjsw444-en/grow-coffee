@@ -5,17 +5,18 @@ const NAV_ITEMS = [
   { id: 'home', icon: '🏠', label: '홈', active: true },
   { id: 'rank', icon: '🏆', label: '랭킹', active: true },
   { id: 'shop', icon: '🛒', label: '상점', active: true },
-  { id: 'record', icon: '📊', label: '기록', active: false },
+  { id: 'myCoffee', icon: '☕', label: '내 커피', active: true },
   { id: 'settings', icon: '⚙', label: '설정', active: true },
 ] as const;
 
 type BottomNavProps = {
   onRank: () => void;
   onShop: () => void;
+  onMyCoffee: () => void;
   onSettings: () => void;
 };
 
-export function BottomNav({ onRank, onShop, onSettings }: BottomNavProps) {
+export function BottomNav({ onRank, onShop, onMyCoffee, onSettings }: BottomNavProps) {
   const buttonSound = useButtonSound('tap');
 
   return (
@@ -42,7 +43,12 @@ export function BottomNav({ onRank, onShop, onSettings }: BottomNavProps) {
                       await buttonSound();
                       onRank();
                     }
-                  : item.id === 'home'
+                  : item.id === 'myCoffee'
+                    ? async () => {
+                        await buttonSound();
+                        onMyCoffee();
+                      }
+                    : item.id === 'home'
                     ? async () => buttonSound()
                     : undefined
           }

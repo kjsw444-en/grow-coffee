@@ -1,32 +1,10 @@
-/**
- * MOCK_AD_WATCHED_DIALOG — 실광고 ID 연동 전 테스트용
- *
- * 실광고 전환 시:
- * 1. mockAdWatchedDialog.ts 삭제 또는 USE_MOCK_AD_WATCHED_DIALOG = false
- * 2. rewardedAd.ts mock 분기 제거
- * 3. .env에 VITE_TOSS_REWARDED_AD_GROUP_ID 설정
- */
-
-/** true면 항상 「광고 대체창」 확인 창 사용 (토스 앱 실광고 테스트 시 false) */
-export const USE_MOCK_AD_WATCHED_DIALOG = false;
-
-const OVERLAY_ATTR = 'data-mock-ad-watched-overlay';
-
-/** 실광고 ID가 없으면 mock 사용 */
-export function shouldUseMockRewardedAd() {
-  if (USE_MOCK_AD_WATCHED_DIALOG) {
-    return true;
-  }
-
-  const adGroupId = import.meta.env.VITE_TOSS_REWARDED_AD_GROUP_ID?.trim();
-  return !adGroupId;
-}
+const OVERLAY_ATTR = 'data-mock-interstitial-overlay';
 
 function removeExistingOverlay() {
   document.querySelector(`[${OVERLAY_ATTR}]`)?.remove();
 }
 
-export async function showMockAdWatchedDialog(): Promise<boolean> {
+export async function showMockInterstitialDialog(): Promise<boolean> {
   if (typeof document === 'undefined') {
     return true;
   }
@@ -38,7 +16,7 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
     overlay.setAttribute(OVERLAY_ATTR, 'true');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
-    overlay.setAttribute('aria-labelledby', 'mock-ad-watched-title');
+    overlay.setAttribute('aria-labelledby', 'mock-interstitial-title');
     Object.assign(overlay.style, {
       position: 'fixed',
       inset: '0',
@@ -46,7 +24,7 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
       display: 'grid',
       placeItems: 'center',
       padding: '16px',
-      background: 'rgba(110, 104, 136, 0.42)',
+      background: 'rgba(40, 36, 52, 0.55)',
     });
 
     const card = document.createElement('div');
@@ -61,8 +39,8 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
     });
 
     const title = document.createElement('p');
-    title.id = 'mock-ad-watched-title';
-    title.textContent = '광고 대체창';
+    title.id = 'mock-interstitial-title';
+    title.textContent = '전면 광고 대체창';
     Object.assign(title.style, {
       margin: '0 0 10px',
       fontSize: '18px',
@@ -72,7 +50,7 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
     });
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = '확인을 누르면 물주기·내리기를 한 번 더 할 수 있어요.';
+    subtitle.textContent = '확인을 누르면 계속 진행할 수 있어요.';
     Object.assign(subtitle.style, {
       margin: '0 0 18px',
       fontSize: '13px',
@@ -83,7 +61,7 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = '확인';
+    button.textContent = '닫기';
     Object.assign(button.style, {
       minWidth: '120px',
       minHeight: '44px',

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useMinigameSound } from '../../audio/useMinigameSound';
 import {
   PAIR_DIFFICULTIES,
   createPairBoard,
@@ -48,6 +49,7 @@ export function CardMatchScreen({
     label: string;
   } | null>(null);
   const [moves, setMoves] = useState(0);
+  const playMinigameSound = useMinigameSound();
 
   const activeDifficulty = getPairDifficulty(selectedDifficulty);
   const completedCount = PAIR_DIFFICULTIES.filter((item) => daily[item.missionKey] >= 1).length;
@@ -60,6 +62,7 @@ export function CardMatchScreen({
 
     if (secondsLeft <= 0) {
       setPhase('fail');
+      void playMinigameSound('minigameLose');
       onMessage?.('시간 초과! 카드 위치를 기억하는 연습을 다시 해보세요.');
       onStatsUpdate?.({
         clearedStage: 0,
@@ -74,7 +77,7 @@ export function CardMatchScreen({
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [phase, secondsLeft, onMessage, onStatsUpdate]);
+  }, [phase, secondsLeft, onMessage, onStatsUpdate, playMinigameSound]);
 
   function startChallenge(difficultyId: string, options: { fromIdle?: boolean } = {}) {
     const { fromIdle = false } = options;
@@ -125,6 +128,7 @@ export function CardMatchScreen({
 
     const nextFlipped = [...flippedIds, cardId];
     setFlippedIds(nextFlipped);
+    void playMinigameSound('cardFlip');
 
     if (nextFlipped.length < 2) return;
 
@@ -146,20 +150,52 @@ export function CardMatchScreen({
 
       if (nextCards.every((card) => card.matched)) {
         setPhase('complete');
+        void playMinigameSound('win');
         onMessage?.(`${activeDifficulty.label} 클리어! 기억력이 훌륭해요.`);
         finishChallenge({ success: true });
       } else {
+        void playMinigameSound('cardMatch');
         onMessage?.('짝을 맞췄어요!');
       }
 
       return;
     }
 
+    void playMinigameSound('cardMismatch');
     onMessage?.('다른 카드예요. 위치를 기억해보세요.');
     window.setTimeout(() => {
       setFlippedIds([]);
       setIsLocked(false);
     }, 650);
+  }
+
+  function quitToMenu() {
+    setSelectedDifficulty(null);
+    setPhase('idle');
+    setCards([]);
+    setFlippedIds([]);
+    setIsLocked(false);
+  }
+
+  function handleBack() {
+    if (selectedDifficulty && phase === 'playing') {
+      onStatsUpdate?.({
+        clearedStage: 0,
+        completedAll: false,
+        startedNewRun: false,
+      });
+      void playMinigameSound('minigameLose');
+      onMessage?.('기권 패배…');
+      quitToMenu();
+      return;
+    }
+
+    if (selectedDifficulty) {
+      quitToMenu();
+      return;
+    }
+
+    onBack();
   }
 
   const statusText = useMemo(() => {
@@ -176,7 +212,7 @@ export function CardMatchScreen({
     <main className="goldcat-app">
       <section className="goldcat-phone sub-screen card-match-screen">
         <header className="topbar app-style-header">
-          <button className="header-icon-button" type="button" onClick={onBack}>
+          <button className="header-icon-button" type="button" onClick={handleBack}>
             ‹
           </button>
           <div className="app-title">
@@ -297,11 +333,7 @@ export function CardMatchScreen({
                   <button
                     className="card-match-secondary"
                     type="button"
-                    onClick={() => {
-                      setSelectedDifficulty(null);
-                      setPhase('idle');
-                      setCards([]);
-                    }}
+                    onClick={quitToMenu}
                   >
                     난이도 변경
                   </button>

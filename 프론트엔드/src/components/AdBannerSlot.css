@@ -1,0 +1,14 @@
+.ad-banner-slot {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ad-banner-slot--feed {
+  min-height: 72px;
+  margin: 8px 0 4px;
+}
+
+.ad-banner-slot--list {
+  min-height: 96px;
+  margin: 0;
+}

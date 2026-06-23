@@ -23,9 +23,11 @@ create table if not exists public.game_states (
   growth_accrual_synced_at timestamptz not null default now(),
   passive_day_key text not null default '',
   daily_passive_growth numeric not null default 0 check (daily_passive_growth >= 0),
+  passive_coffees_claimed integer not null default 0 check (passive_coffees_claimed >= 0 and passive_coffees_claimed <= 2),
   selected_coffee_variant text not null default 'parttime-latte',
   owned_coffee_variants text[] not null default array['parttime-latte']::text[],
   spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0),
+  share_reward_day_key text not null default '',
   updated_at timestamptz not null default now()
 );
 
@@ -60,3 +62,11 @@ alter table public.rankings enable row level security;
 -- alter table public.game_states add column if not exists spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0);
 -- create index if not exists game_states_emptied_cups_idx on public.game_states (spent_coffee_cups desc);
 -- alter table public.game_states alter column growth type numeric using growth::numeric;
+-- alter table public.game_states add column if not exists share_reward_day_key text not null default '';
+-- alter table public.game_states add column if not exists passive_coffees_claimed integer not null default 0 check (passive_coffees_claimed >= 0 and passive_coffees_claimed <= 2);
+
+alter table public.game_states add column if not exists share_reward_day_key text not null default '';
+
+alter table public.game_states add column if not exists passive_coffees_claimed integer not null default 0 check (passive_coffees_claimed >= 0 and passive_coffees_claimed <= 2);
+
+alter table public.game_states add column if not exists passive_reactivate_day_key text not null default '';

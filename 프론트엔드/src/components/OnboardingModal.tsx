@@ -12,12 +12,15 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
         <h2 id="onboarding-title">커피 키우기 시작!</h2>
         <ol className="onboarding__list">
           <li>
-            <strong>물주기</strong> (4~7초 꾹 누르기) — 씨앗→새싹→원두→커피
+            <strong>물주기</strong> (3~5초 꾹 누르기) — 씨앗→새싹→원두→커피
           </li>
-          <li>하루에 <strong>물주기·내리기(성장)</strong>는 <strong>1회 무료</strong>, 더 하려면 <strong>광고 시청</strong> 후 가능</li>
           <li>
-            가만히 둬도 <strong>햇빛</strong>으로 성장률이 올라가요 — <strong>20분 방치 = 100%</strong> (하루
-            최대 2잔)
+            <strong>첫 물주기·내리기</strong> 1회 · 이후 <strong>물 채우기</strong>(커피 단계에선 <strong>커피 한잔</strong>) → 1회 (반복)
+          </li>
+          <li>
+            가만히 둬도 <strong>햇빛</strong>으로 방치 커피 충전 — <strong>1분당 +5%</strong>, 20분(100%)마다{' '}
+            <strong>방치 커피 받기</strong> (하루 2잔). 2/2 후 <strong>재활성</strong>(광고)으로 같은 날 한 번 더
+            충전할 수 있어요.
           </li>
           <li>
             커피 단계(75~99%)에 <strong>커피 식물</strong> · 100%에서 <strong>커피 마시기</strong> → 내린 커피

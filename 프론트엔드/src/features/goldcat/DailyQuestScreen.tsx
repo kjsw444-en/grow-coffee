@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMinigameSound } from '../../audio/useMinigameSound';
 import {
   BLACK,
   BOARD_SIZE,
@@ -143,7 +144,7 @@ type DailyQuestScreenProps = {
   onReward: (missionKey: MissionKey, reward: number, successMessage?: string) => void;
   onMessage?: (message: string) => void;
   onStatsUpdate?: (payload: StatsUpdatePayload) => void;
-  onWatchAd?: () => void;
+  onWatchAd?: () => Promise<boolean> | boolean;
 };
 
 export function DailyQuestScreen({
@@ -160,7 +161,7 @@ export function DailyQuestScreen({
   const [lastMove, setLastMove] = useState<Move | null>(null);
   const [gameStatus, setGameStatus] = useState<'playing' | 'win' | 'lose'>('playing');
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [loseReason, setLoseReason] = useState<'timeout' | 'ai' | null>(null);
+  const [loseReason, setLoseReason] = useState<'timeout' | 'ai' | 'forfeit' | null>(null);
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(0);
   const [victoryPending, setVictoryPending] = useState<{
     missionKey: MissionKey;
@@ -170,6 +171,7 @@ export function DailyQuestScreen({
   } | null>(null);
   const [rewardClaimedThisSession, setRewardClaimedThisSession] = useState(false);
   const aiTurnLockRef = useRef(false);
+  const playMinigameSound = useMinigameSound();
 
   const completedCount = [daily.mission1, daily.mission2, daily.mission3, daily.mission4].filter(Boolean).length;
   const activeDifficulty = DIFFICULTIES.find((item) => item.id === selectedDifficulty);
@@ -179,6 +181,7 @@ export function DailyQuestScreen({
     if (isAiThinking) return 'AI가 다음 수를 계산 중이에요…';
     if (gameStatus === 'win') return '승리! 커피 농부가 기분 좋게 박수를 쳐요.';
     if (gameStatus === 'lose' && loseReason === 'timeout') return '시간 초과 패배… 한 수 안에 두지 못했어요.';
+    if (gameStatus === 'lose' && loseReason === 'forfeit') return '기권 패배… 다시 도전해 보세요.';
     if (gameStatus === 'lose') return '패배… 다시 도전해서 AI를 이겨보세요.';
     return `흑돌(●) 먼저 · 한 수 ${activeDifficulty?.moveTimeLimit ?? 0}초 안에 두세요.`;
   }, [selectedDifficulty, isAiThinking, gameStatus, loseReason, activeDifficulty?.moveTimeLimit]);
@@ -206,7 +209,10 @@ export function DailyQuestScreen({
         if (checkWin(nextBoard, row, col, WHITE)) {
           setGameStatus('lose');
           setLoseReason('ai');
+          void playMinigameSound('minigameLose');
           onMessage?.('AI가 5목을 완성했어요. 다시 도전해 보세요!');
+        } else {
+          void playMinigameSound('stonePlaceAi');
         }
 
         return nextBoard;
@@ -217,7 +223,7 @@ export function DailyQuestScreen({
     }, thinkDelay);
 
     return () => window.clearTimeout(timer);
-  }, [board, selectedDifficulty, gameStatus, onMessage]);
+  }, [board, selectedDifficulty, gameStatus, onMessage, playMinigameSound]);
 
   useEffect(() => {
     if (!selectedDifficulty || gameStatus !== 'playing' || isAiThinking) return undefined;
@@ -234,12 +240,26 @@ export function DailyQuestScreen({
         window.clearInterval(interval);
         setLoseReason('timeout');
         setGameStatus('lose');
+        void playMinigameSound('minigameLose');
         onMessage?.('시간 초과! AI에게 패배했어요.');
       }
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [board, isAiThinking, gameStatus, selectedDifficulty, activeDifficulty, onMessage]);
+  }, [board, isAiThinking, gameStatus, selectedDifficulty, activeDifficulty, onMessage, playMinigameSound]);
+
+  function resetToDifficultySelect() {
+    setSelectedDifficulty(null);
+    setBoard(createEmptyBoard());
+    setLastMove(null);
+    setGameStatus('playing');
+    setIsAiThinking(false);
+    setLoseReason(null);
+    setTurnSecondsLeft(0);
+    setVictoryPending(null);
+    setRewardClaimedThisSession(false);
+    aiTurnLockRef.current = false;
+  }
 
   function startGame(difficultyId: OmokDifficulty) {
     const difficulty = DIFFICULTIES.find((item) => item.id === difficultyId);
@@ -269,17 +289,15 @@ export function DailyQuestScreen({
   }
 
   function handleBack() {
+    if (selectedDifficulty && gameStatus === 'playing') {
+      void playMinigameSound('minigameLose');
+      onMessage?.('기권 패배… 다시 도전해 보세요.');
+      resetToDifficultySelect();
+      return;
+    }
+
     if (selectedDifficulty) {
-      setSelectedDifficulty(null);
-      setBoard(createEmptyBoard());
-      setLastMove(null);
-      setGameStatus('playing');
-      setIsAiThinking(false);
-      setLoseReason(null);
-      setTurnSecondsLeft(0);
-      setVictoryPending(null);
-      setRewardClaimedThisSession(false);
-      aiTurnLockRef.current = false;
+      resetToDifficultySelect();
       return;
     }
 
@@ -290,6 +308,8 @@ export function DailyQuestScreen({
     if (!selectedDifficulty || gameStatus !== 'playing' || isAiThinking) return;
     if (!isValidMove(board, row, col)) return;
 
+    void playMinigameSound('stonePlace');
+
     const nextBoard = board.map((boardRow) => [...boardRow]);
     placeStone(nextBoard, row, col, BLACK);
     setLastMove({ row, col });
@@ -297,6 +317,7 @@ export function DailyQuestScreen({
     if (checkWin(nextBoard, row, col, BLACK)) {
       setBoard(nextBoard);
       setGameStatus('win');
+      void playMinigameSound('win');
 
       const difficulty = DIFFICULTIES.find((item) => item.id === selectedDifficulty)!;
       setVictoryPending({
@@ -332,10 +353,12 @@ export function DailyQuestScreen({
     setRewardClaimedThisSession(true);
   }
 
-  function handleAdReplay() {
+  async function handleAdReplay() {
     if (!selectedDifficulty) return;
 
-    onWatchAd?.();
+    const watched = await onWatchAd?.();
+    if (watched === false) return;
+
     onMessage?.('같은 난이도로 다시 도전해요.');
     setVictoryPending(null);
     setRewardClaimedThisSession(false);
@@ -465,7 +488,7 @@ export function DailyQuestScreen({
                   다시 두기
                 </button>
               )}
-              <button className="omok-secondary-button" type="button" onClick={() => setSelectedDifficulty(null)}>
+              <button className="omok-secondary-button" type="button" onClick={resetToDifficultySelect}>
                 난이도 변경
               </button>
             </div>

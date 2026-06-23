@@ -157,6 +157,42 @@
   animation: drink-heartbeat 1.35s ease-in-out infinite;
 }
 
+.plant-scene__drink-btn--prominent {
+  padding: 11px 16px;
+  border: 2px solid #e8c8b8;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(52, 38, 30, 0.78) 0%,
+    rgba(28, 20, 16, 0.65) 100%
+  );
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 240, 0.35),
+    0 0 0 1px rgba(232, 200, 184, 0.4),
+    0 0 18px rgba(232, 200, 184, 0.35),
+    0 6px 22px rgba(0, 0, 0, 0.42);
+  font-size: 14px;
+  text-shadow:
+    0 0 10px rgba(255, 240, 230, 0.45),
+    0 1px 8px rgba(0, 0, 0, 0.65);
+  animation:
+    drink-heartbeat 1.35s ease-in-out infinite,
+    drink-border-glow 2.4s ease-in-out infinite;
+}
+
+.plant-scene__drink-btn--prominent::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 220, 200, 0.28) 0%, transparent 72%);
+  pointer-events: none;
+  z-index: -1;
+  animation: drink-aura 2.4s ease-in-out infinite;
+}
+
 .plant-scene__drink-btn:active:not(:disabled) {
   animation: none;
   transform: scale(0.96);
@@ -179,7 +215,8 @@
 
 .plant-scene__action-slot--ad {
   bottom: 3%;
-  width: 148px;
+  width: calc(100% - 24px);
+  max-width: 200px;
   z-index: 4;
 }
 
@@ -241,5 +278,37 @@
   }
   48% {
     transform: scale(1);
+  }
+}
+
+@keyframes drink-border-glow {
+  0%,
+  100% {
+    border-color: #e8c8b8;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 248, 240, 0.35),
+      0 0 0 1px rgba(232, 200, 184, 0.4),
+      0 0 16px rgba(232, 200, 184, 0.35),
+      0 6px 22px rgba(0, 0, 0, 0.42);
+  }
+  50% {
+    border-color: #fff2ea;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 252, 248, 0.55),
+      0 0 0 2px rgba(255, 230, 210, 0.55),
+      0 0 28px rgba(255, 210, 180, 0.65),
+      0 8px 26px rgba(0, 0, 0, 0.48);
+  }
+}
+
+@keyframes drink-aura {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
   }
 }
