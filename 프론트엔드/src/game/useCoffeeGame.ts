@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiRequestError,
   claimPassiveCoffeeGame,
+  devBumpPassiveGame,
   drinkGame,
   fetchGameState,
   isBackendConfigured,
@@ -22,6 +23,7 @@ import { initPlayerSession, isTossInApp, loginWithTossSession } from '../service
 import {
   type HoldMode,
   COFFEE_STAGE_MIN,
+  DAILY_PASSIVE_GROWTH_CAP,
   DISPLAY_GROWTH_COMMIT_MS,
   GOAL_AMOUNT,
   GROWTH_DISPLAY_DECIMALS,
@@ -162,7 +164,12 @@ export function useCoffeeGame() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [claimingPassiveCoffee, setClaimingPassiveCoffee] = useState(false);
+  const [passiveClaimFeedback, setPassiveClaimFeedback] = useState<{
+    tone: 'error' | 'success';
+    text: string;
+  } | null>(null);
   const claimingPassiveRef = useRef(false);
+  const passiveClaimSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [reactivatingPassiveCoffee, setReactivatingPassiveCoffee] = useState(false);
   const [sceneDialogue, setSceneDialogue] = useState<string | null>(null);
   const [passiveClock, setPassiveClock] = useState(0);
@@ -306,6 +313,33 @@ export function useCoffeeGame() {
       tapBurstTimerRef.current = null;
     }, 200);
   }, []);
+
+  const releasePassiveClaimUi = useCallback(() => {
+    if (passiveClaimSafetyTimerRef.current !== null) {
+      clearTimeout(passiveClaimSafetyTimerRef.current);
+      passiveClaimSafetyTimerRef.current = null;
+    }
+    claimingPassiveRef.current = false;
+    syncingRef.current = false;
+    setClaimingPassiveCoffee(false);
+    setActionSyncing(false);
+  }, []);
+
+  const beginPassiveClaimUi = useCallback(() => {
+    releasePassiveClaimUi();
+    claimingPassiveRef.current = true;
+    syncingRef.current = true;
+    setClaimingPassiveCoffee(true);
+    setActionSyncing(true);
+    passiveClaimSafetyTimerRef.current = setTimeout(() => {
+      passiveClaimSafetyTimerRef.current = null;
+      releasePassiveClaimUi();
+      setPassiveClaimFeedback({
+        tone: 'error',
+        text: '백엔드(8787)에 연결되지 않아요. 백엔드 npm run dev 실행 후 Ctrl+Shift+R 새로고침해 주세요.',
+      });
+    }, 11000);
+  }, [releasePassiveClaimUi]);
 
   const applyStateWithPreview = useCallback(
     (raw: GameState, holdStartGrowth?: number, epoch?: number) => {
@@ -787,6 +821,61 @@ export function useCoffeeGame() {
       .catch(() => undefined);
   }, [isHolding, loading, runTestBump]);
 
+  const testBumpPassiveGrowth = useCallback(async () => {
+    if (!import.meta.env.DEV) return;
+    if (loading || isHolding || syncingRef.current || claimingPassiveRef.current) return;
+
+    const prev = stateRef.current;
+    if (prev.redeemed) {
+      showSceneDialogue('이미 목표를 달성했어요.');
+      return;
+    }
+
+    const stats = getPassiveUiStats(prev, balanceRulesRef.current);
+    if (stats.complete && !stats.canReactivate) {
+      showSceneDialogue('오늘 방치 커피는 모두 받았어요.');
+      return;
+    }
+
+    const currentSession = sessionRef.current;
+    const epoch = stateEpochRef.current;
+
+    if (currentSession?.userId) {
+      try {
+        const result = await devBumpPassiveGame();
+        applyAuthoritativeState(result.state, { trustServer: true, epoch });
+        bumpPassiveClock();
+        setPassiveClaimFeedback(null);
+        showSceneDialogue('테스트: 방치 커피 게이지 +100% (서버 반영)');
+        return;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { trustServer: true, epoch });
+          bumpPassiveClock();
+        }
+        const message = err instanceof Error ? err.message : '방치 커피 테스트 충전에 실패했습니다.';
+        setPassiveClaimFeedback({
+          tone: 'error',
+          text: message,
+        });
+        showSceneDialogue(message);
+        return;
+      }
+    }
+
+    const next = {
+      ...prev,
+      dailyPassiveGrowth: Math.min(
+        DAILY_PASSIVE_GROWTH_CAP,
+        prev.dailyPassiveGrowth + 100,
+      ),
+      growthAccrualSyncedAt: new Date().toISOString(),
+    };
+    applyAuthoritativeState(next);
+    bumpPassiveClock();
+    showSceneDialogue('테스트: 방치 커피 게이지 +100%');
+  }, [applyAuthoritativeState, bumpPassiveClock, loading, isHolding, showSceneDialogue]);
+
   const reset = useCallback(async () => {
     const currentSession = sessionRef.current;
     if (!currentSession) return;
@@ -980,9 +1069,20 @@ export function useCoffeeGame() {
   );
 
   const claimPassiveCoffee = useCallback(async () => {
-    if (claimingPassiveRef.current) return false;
+    if (claimingPassiveRef.current) {
+      if (claimingPassiveCoffee) {
+        setPassiveClaimFeedback({ tone: 'error', text: '잠시만 기다려 주세요…' });
+        showSceneDialogue('잠시만 기다려 주세요…');
+        return false;
+      }
+      claimingPassiveRef.current = false;
+    }
 
     if (syncingRef.current) {
+      setPassiveClaimFeedback({
+        tone: 'error',
+        text: '다른 동작을 처리 중이에요. 잠시 후 다시 시도해 주세요.',
+      });
       showSceneDialogue('잠시만 기다려 주세요…');
       return false;
     }
@@ -992,17 +1092,26 @@ export function useCoffeeGame() {
     const before = stateRef.current;
 
     if (before.redeemed) {
+      setPassiveClaimFeedback({ tone: 'error', text: '이미 목표를 달성했어요.' });
       showSceneDialogue('이미 목표를 달성했어요.');
+      return false;
+    }
+
+    const uiStats = getPassiveUiStats(before, balanceRulesRef.current);
+    if (!uiStats.canClaim) {
+      setPassiveClaimFeedback({ tone: 'error', text: '아직 방치 커피가 차지 않았어요.' });
+      showSceneDialogue('아직 방치 커피가 차지 않았어요.');
       return false;
     }
 
     const preview = buildPassiveCoffeeClaim(before);
     if (!preview.ok) {
-      if (preview.reason === 'not-ready') {
-        showSceneDialogue('아직 방치 커피가 차지 않았어요.');
-      } else {
-        showSceneDialogue('방치 커피를 받을 수 없어요.');
-      }
+      const text =
+        preview.reason === 'not-ready'
+          ? '아직 방치 커피가 차지 않았어요.'
+          : '방치 커피를 받을 수 없어요.';
+      setPassiveClaimFeedback({ tone: 'error', text });
+      showSceneDialogue(text);
       return false;
     }
 
@@ -1010,21 +1119,25 @@ export function useCoffeeGame() {
       applyAuthoritativeState(preview.state, { trustServer: true, epoch });
       setLastEarned(preview.lastEarned);
       bumpPassiveClock();
+      triggerTapBurst();
+      setPassiveClaimFeedback({
+        tone: 'success',
+        text: '✓ 방치 커피 1잔 · 내린 커피 +1',
+      });
       showSceneDialogue(sceneDialogueForPassiveClaim());
       return true;
     }
 
-    claimingPassiveRef.current = true;
-    syncingRef.current = true;
-    setClaimingPassiveCoffee(true);
-    setActionSyncing(true);
+    beginPassiveClaimUi();
     setActionError(null);
+    setPassiveClaimFeedback(null);
+
+    const syncedBefore = stateRef.current;
+    applyAuthoritativeState(preview.state, { trustServer: true, epoch });
+    setLastEarned(preview.lastEarned);
+    bumpPassiveClock();
 
     try {
-      applyAuthoritativeState(preview.state, { trustServer: true, epoch });
-      setLastEarned(preview.lastEarned);
-      bumpPassiveClock();
-
       const result = await claimPassiveCoffeeGame();
       applyAuthoritativeState(result.state, { trustServer: true, epoch });
       if (result.playerRank != null) {
@@ -1032,31 +1145,37 @@ export function useCoffeeGame() {
       }
       setLastEarned(result.lastEarned);
       bumpPassiveClock();
+      triggerTapBurst();
+      setPassiveClaimFeedback({
+        tone: 'success',
+        text: '✓ 방치 커피 1잔 · 내린 커피 +1',
+      });
       showSceneDialogue(sceneDialogueForPassiveClaim());
       return true;
     } catch (err) {
       setLastEarned(null);
       if (err instanceof ApiRequestError && err.state) {
         applyAuthoritativeState(err.state, { trustServer: true, epoch });
-        bumpPassiveClock();
       } else {
-        applyAuthoritativeState(before, { trustServer: true, epoch });
-        bumpPassiveClock();
+        applyAuthoritativeState(syncedBefore, { trustServer: true, epoch });
       }
+      bumpPassiveClock();
       const message = err instanceof Error ? err.message : '방치 커피 받기에 실패했습니다.';
+      setPassiveClaimFeedback({ tone: 'error', text: message });
       setActionError(message);
       showSceneDialogue(message);
       return false;
     } finally {
-      claimingPassiveRef.current = false;
-      syncingRef.current = false;
-      setClaimingPassiveCoffee(false);
-      setActionSyncing(false);
+      releasePassiveClaimUi();
     }
   }, [
     applyAuthoritativeState,
+    beginPassiveClaimUi,
     bumpPassiveClock,
+    claimingPassiveCoffee,
+    releasePassiveClaimUi,
     showSceneDialogue,
+    triggerTapBurst,
     updatePlayerRank,
   ]);
 
@@ -1233,10 +1352,17 @@ export function useCoffeeGame() {
       state.redeemed,
       state.dailyPassiveGrowth,
       balanceRules.dailyPassiveGrowthCap,
-    ),
+    ) && !claimingPassiveCoffee && !reactivatingPassiveCoffee,
     onPassiveUpdate: applyPassiveAccrual,
     onTick: bumpPassiveClock,
   });
+
+  useEffect(() => {
+    releasePassiveClaimUi();
+    return () => {
+      releasePassiveClaimUi();
+    };
+  }, [releasePassiveClaimUi]);
 
   useEffect(() => {
     const stats = getPassiveUiStats(state, balanceRules);
@@ -1294,11 +1420,10 @@ export function useCoffeeGame() {
     state,
   });
   const showWatchAdButton = growActionSlot === 'ad';
-  const passiveActive = canAccruePassiveGrowth(
-    state.growth,
-    state.redeemed,
-    state.dailyPassiveGrowth,
-  );
+  const passiveActive =
+    canAccruePassiveGrowth(state.growth, state.redeemed, state.dailyPassiveGrowth) &&
+    !claimingPassiveCoffee &&
+    !reactivatingPassiveCoffee;
 
   return {
     session,
@@ -1317,6 +1442,7 @@ export function useCoffeeGame() {
     stopHold,
     completeDrink,
     testBumpGrowth,
+    testBumpPassiveGrowth,
     purchaseVariant,
     selectVariant,
     reset,
@@ -1339,6 +1465,7 @@ export function useCoffeeGame() {
     claimShareReward,
     claimPassiveCoffee,
     claimingPassiveCoffee,
+    passiveClaimFeedback,
     reactivatePassiveCoffee,
     reactivatingPassiveCoffee,
     actionSyncing,

@@ -129,6 +129,35 @@ export function applyDevTestWater(state) {
   return { ok: true, state: next, lastEarned: null }
 }
 
+/** DEV 전용 — 방치 커피 게이지 +100% (서버 저장) */
+export function applyDevBumpPassive(state) {
+  const current = withSettledPassive(state)
+
+  if (current.redeemed) {
+    return { ok: false, reason: 'already-redeemed', state: current }
+  }
+
+  const maxCups = Math.floor(DAILY_PASSIVE_GROWTH_CAP / 100) || 2
+  const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
+
+  if (claimed >= maxCups) {
+    return { ok: false, reason: 'daily-limit', state: current }
+  }
+
+  const now = new Date().toISOString()
+
+  return {
+    ok: true,
+    state: {
+      ...current,
+      dailyPassiveGrowth: roundGrowth(
+        Math.min(DAILY_PASSIVE_GROWTH_CAP, current.dailyPassiveGrowth + 100),
+      ),
+      growthAccrualSyncedAt: now,
+    },
+  }
+}
+
 export function applyWatchAd(state) {
   const current = withSettledPassive(state)
 

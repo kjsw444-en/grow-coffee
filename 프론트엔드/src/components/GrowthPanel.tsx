@@ -24,6 +24,8 @@ type GrowthPanelProps = {
   onReactivatePassiveCoffee?: () => void;
   claimingPassiveCoffee?: boolean;
   reactivatingPassiveCoffee?: boolean;
+  claimSyncBlocked?: boolean;
+  passiveClaimFeedback?: { tone: 'error' | 'success'; text: string } | null;
   waterHint?: string | null;
   passiveHint?: string | null;
   isWatering?: boolean;
@@ -45,6 +47,8 @@ function GrowthPanelComponent({
   onReactivatePassiveCoffee,
   claimingPassiveCoffee = false,
   reactivatingPassiveCoffee = false,
+  claimSyncBlocked = false,
+  passiveClaimFeedback = null,
   waterHint,
   passiveHint,
   isWatering,
@@ -67,8 +71,9 @@ function GrowthPanelComponent({
     : '0%';
   const passivePulse =
     passiveCoffee &&
-    ((passiveCoffee.canClaim && !claimingPassiveCoffee) ||
+    ((passiveCoffee.canClaim && !claimingPassiveCoffee && !claimSyncBlocked) ||
       (passiveCoffee.canReactivate && !reactivatingPassiveCoffee));
+  const passiveClaimDisabled = claimingPassiveCoffee || claimSyncBlocked;
 
   return (
     <section className="growth-panel">
@@ -108,12 +113,16 @@ function GrowthPanelComponent({
             <strong className="growth-panel__passive-count">
               {passiveCoffee.earned}/{passiveCoffee.max}잔
             </strong>
-            {passiveCoffee.canClaim && onClaimPassiveCoffee && (
+            {(passiveCoffee.canClaim || claimingPassiveCoffee) && onClaimPassiveCoffee && (
               <button
                 type="button"
-                className={`growth-panel__passive-claim${claimingPassiveCoffee ? ' growth-panel__passive-claim--claiming' : ''}${passivePulse ? ' growth-panel__passive-claim--pulse' : ''}`}
-                disabled={claimingPassiveCoffee}
-                onClick={onClaimPassiveCoffee}
+                className={`growth-panel__passive-claim${claimingPassiveCoffee ? ' growth-panel__passive-claim--claiming' : ''}${passivePulse ? ' growth-panel__passive-claim--pulse' : ''}${claimSyncBlocked && !claimingPassiveCoffee ? ' growth-panel__passive-claim--blocked' : ''}`}
+                disabled={passiveClaimDisabled}
+                aria-busy={claimingPassiveCoffee}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClaimPassiveCoffee();
+                }}
               >
                 {claimingPassiveCoffee ? '받는 중…' : '방치 커피 받기'}
               </button>
@@ -140,6 +149,14 @@ function GrowthPanelComponent({
               <span> · 오늘 수령 완료</span>
             )}
           </div>
+          {passiveClaimFeedback && (
+            <p
+              className={`growth-panel__passive-feedback growth-panel__passive-feedback--${passiveClaimFeedback.tone}`}
+              role="status"
+            >
+              {passiveClaimFeedback.text}
+            </p>
+          )}
           <div className="growth-panel__passive-track-row">
             <div className="growth-panel__passive-track" aria-hidden="true">
               <div

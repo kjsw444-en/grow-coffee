@@ -102,9 +102,13 @@
 }
 
 .growth-panel__passive-claim {
+  position: relative;
+  z-index: 2;
   flex-shrink: 0;
   margin-left: auto;
-  padding: 5px 10px;
+  min-height: 32px;
+  min-width: 92px;
+  padding: 8px 12px;
   border: 1px solid #8fcf5e;
   border-radius: 999px;
   background: linear-gradient(180deg, #b8e888 0%, #8fcf5e 100%);
@@ -113,6 +117,8 @@
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   box-shadow: 0 2px 8px rgba(90, 140, 60, 0.18);
 }
 
@@ -125,7 +131,14 @@
   cursor: wait;
 }
 
+.growth-panel__passive-claim--blocked:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .growth-panel__passive-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -230,6 +243,21 @@
   font-size: 10px;
   font-weight: 600;
   color: #7a9468;
+}
+
+.growth-panel__passive-feedback {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.growth-panel__passive-feedback--error {
+  color: #b42318;
+}
+
+.growth-panel__passive-feedback--success {
+  color: #2f6b2a;
 }
 
 .growth-panel__passive-track {

@@ -70,6 +70,7 @@ export function CoffeeGame() {
     stopHold,
     completeDrink,
     testBumpGrowth,
+    testBumpPassiveGrowth,
     purchaseVariant,
     selectVariant,
     reset,
@@ -94,6 +95,7 @@ export function CoffeeGame() {
     claimShareReward,
     claimPassiveCoffee,
     claimingPassiveCoffee,
+    passiveClaimFeedback,
     reactivatePassiveCoffee,
     reactivatingPassiveCoffee,
     actionSyncing,
@@ -473,6 +475,8 @@ export function CoffeeGame() {
               onReactivatePassiveCoffee={() => void reactivatePassiveCoffee()}
               claimingPassiveCoffee={claimingPassiveCoffee}
               reactivatingPassiveCoffee={reactivatingPassiveCoffee}
+              claimSyncBlocked={actionSyncing && !claimingPassiveCoffee}
+              passiveClaimFeedback={passiveClaimFeedback}
               waterHint={waterHint}
               passiveHint={passiveHint}
               isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
@@ -490,14 +494,24 @@ export function CoffeeGame() {
             />
 
             {import.meta.env.DEV && (
-              <button
-                type="button"
-                className="game__test-btn"
-                disabled={state.redeemed || isHolding || loading || actionSyncing}
-                onClick={() => testBumpGrowth()}
-              >
-                테스트 +25%
-              </button>
+              <div className="game__test-row">
+                <button
+                  type="button"
+                  className="game__test-btn"
+                  disabled={state.redeemed || isHolding || loading || actionSyncing}
+                  onClick={() => testBumpGrowth()}
+                >
+                  테스트 +25%
+                </button>
+                <button
+                  type="button"
+                  className="game__test-btn"
+                  disabled={state.redeemed || isHolding || loading || actionSyncing}
+                  onClick={() => void testBumpPassiveGrowth()}
+                >
+                  방치 +100%
+                </button>
+              </div>
             )}
 
             <GameFlowFooter

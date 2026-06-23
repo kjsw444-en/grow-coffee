@@ -13,6 +13,11 @@ function getApiBase() {
     return configured.replace(/\/$/, '')
   }
 
+  // Granite(8081) 등 Vite proxy 밖에서 열릴 때 /api 요청이 백엔드에 닿지 않음 → 로컬은 직접 연결
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8787'
+  }
+
   return ''
 }
 
@@ -98,8 +103,8 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function request(path: string, options: RequestOptions = {}) {
-  const { timeoutMs = 20000, headers, ...fetchOptions } = options
+async function performRequest(path: string, options: RequestOptions, timeoutMs: number) {
+  const { headers, ...fetchOptions } = options
   const userId = getStoredUserId()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
@@ -134,6 +139,25 @@ async function request(path: string, options: RequestOptions = {}) {
     throw error
   } finally {
     clearTimeout(timeoutId)
+  }
+}
+
+async function request(path: string, options: RequestOptions = {}) {
+  const timeoutMs = options.timeoutMs ?? 20000
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new ApiRequestError('서버 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.'))
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([performRequest(path, options, timeoutMs), timeoutPromise])
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle)
+    }
   }
 }
 
@@ -220,6 +244,14 @@ export async function devTestBumpGame() {
   }>
 }
 
+export async function devBumpPassiveGame() {
+  return request('/api/game/dev/bump-passive', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
 export async function devSetTotalCoffees(totalCoffees: number) {
   return request('/api/game/dev/set-coffees', {
     method: 'POST',
@@ -286,7 +318,7 @@ export async function claimPassiveCoffeeGame() {
   return request('/api/game/claim-passive-coffee', {
     method: 'POST',
     body: '{}',
-    timeoutMs: 15000,
+    timeoutMs: 10000,
   }) as Promise<{
     ok: true
     state: GameState

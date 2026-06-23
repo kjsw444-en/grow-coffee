@@ -26,7 +26,7 @@ import {
   requireStorage,
   requireUser,
 } from './middleware.js'
-import { applyClaimPassiveCoffee, applyDrink, applyDevTestWater, applyPurchaseCoffeeVariant, applyReactivatePassiveCoffee, applyReset, applySelectCoffeeVariant, applySellBatch, applyShareReward, applyWatchAd, applyWater } from './gameLogic.js'
+import { applyClaimPassiveCoffee, applyDrink, applyDevBumpPassive, applyDevTestWater, applyPurchaseCoffeeVariant, applyReactivatePassiveCoffee, applyReset, applySelectCoffeeVariant, applySellBatch, applyShareReward, applyWatchAd, applyWater } from './gameLogic.js'
 import { ACTION_COOLDOWN_MS, SHARE_REWARD_MODULE_ID } from './constants.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
@@ -199,6 +199,41 @@ app.post('/api/game/dev/bump', requireUser, async (req, res) => {
   }
 })
 
+/** DEV 전용 — 방치 커피 게이지 +100% */
+app.post('/api/game/dev/bump-passive', requireUser, async (req, res) => {
+  if (!isDevRequest(req)) {
+    res.status(404).json({ ok: false, message: 'Not found' })
+    return
+  }
+
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyDevBumpPassive(current)
+
+    if (!result.ok) {
+      const messages = {
+        'already-redeemed': '이미 목표를 달성했어요.',
+        'daily-limit': '오늘 방치 커피는 모두 받았어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '방치 커피 테스트 충전을 할 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    res.json({
+      ok: true,
+      state,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
 /** DEV 전용 — 내린 커피 잔 수 설정 */
 app.post('/api/game/dev/set-coffees', requireUser, async (req, res) => {
   if (!isDevRequest(req)) {
@@ -311,13 +346,12 @@ app.post('/api/game/claim-passive-coffee', requireUser, async (req, res) => {
     }
 
     const state = await saveGameState(req.userId, result.state)
-    const payload = await attachPlayerRank(req.userId, {
+    res.json({
       ok: true,
       state,
       lastEarned: result.lastEarned,
       passiveGrowthPreview: previewPassiveGrowth(state),
     })
-    res.json(payload)
   } catch (error) {
     handleApiError(res, error)
   }
