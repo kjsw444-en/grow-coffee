@@ -77,11 +77,11 @@ export function SettingsSheet({
         <dl className="settings__info">
           <div>
             <dt>개발 단계</dt>
-            <dd>1단계 · 프론트 + 토스 로그인 UI</dd>
+            <dd>백엔드 + 토스 로그인 연동</dd>
           </div>
           <div>
             <dt>게임 데이터</dt>
-            <dd>localStorage (임시)</dd>
+            <dd>서버 저장소</dd>
           </div>
           <div>
             <dt>목표 / 컵당</dt>
@@ -97,7 +97,7 @@ export function SettingsSheet({
           </div>
         </dl>
         <p className="settings__warn">
-          백엔드 연동 후 게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
+          게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
         </p>
         <button type="button" className="settings__reset" onClick={onReset}>
           진행 데이터 초기화
