@@ -1,0 +1,70 @@
+---
+description: 커피·히든 영상 파일 교체/추가 시 OneDrive→public/videos 동기화 및 git 등록
+alwaysApply: true
+---
+
+# 커피 영상 에셋 동기화
+
+사용자가 `.mp4` 경로를 주거나 영상 교체/추가를 요청하면 **반드시** 아래 순서를 따른다.
+
+## 1. 파일 복사
+
+대상: `프론트엔드/public/videos/`
+
+### 전체 동기화 (OneDrive 기본 폴더)
+
+```powershell
+cd 프론트엔드
+npm run sync:videos
+```
+
+OneDrive 기준: `Desktop\미니앱_커피 키우기\이미지, 영상\` 하위
+- `커피 마시는 여자 영상\` → `coffee-drink-{female-slug}.mp4`
+- `커피 마시는 남자 영상\` → `coffee-drink-m-{slug}.mp4`
+- `히든 영상\` → `coffee-drink-hidden-*.mp4` (매핑은 `hiddenCoffeeVariants.ts` 참고)
+
+### 단일 파일 교체 (사용자가 경로를 줄 때)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 프론트엔드/scripts/sync-coffee-videos.ps1 `
+  -SourceFile "원본경로.mp4" `
+  -DestName "coffee-drink-....mp4"
+```
+
+`DestName`은 `coffeeVariants.ts` / `hiddenCoffeeVariants.ts`의 slug·videoFile과 일치해야 한다.
+
+## 2. 캐시 버전 올리기
+
+복사 후 반드시 버전 상수 +1:
+- 일반 캐릭터: `프론트엔드/src/game/coffeeVariants.ts` → `COFFEE_VIDEO_VERSION`
+- 히든: `프론트엔드/src/game/hiddenCoffeeVariants.ts` → `HIDDEN_VIDEO_VERSION`
+
+## 3. git 등록 (배포 필수)
+
+**영상은 git에 없으면 토스/배포에서 재생되지 않는다.** 복사 후:
+
+```powershell
+git add 프론트엔드/public/videos/
+```
+
+사용자가 커밋을 요청했을 때만 커밋한다.
+
+## 4. 확인
+
+- `public/videos/`에 18개 mp4 (여6+남6+히든6) 용량이 0MB가 아닌지
+- dev 서버에서 `HEAD /videos/...` → `200 video/mp4`
+
+## 파일명 매핑 (참고)
+
+| DestName | 캐릭터 |
+|----------|--------|
+| coffee-drink-parttime-latte.mp4 | 카페라떼 여 |
+| coffee-drink-student-coldbrew.mp4 | 콜드브루 여 |
+| coffee-drink-blonde-hazelnut.mp4 | 헤이즐넛 여 |
+| coffee-drink-dolce-latte.mp4 | 돌체 라떼 여 |
+| coffee-drink-sexy-americano.mp4 | 아메리카노 여 |
+| coffee-drink-chic-vanilla-latte.mp4 | 바닐라 라떼 여 |
+| coffee-drink-m-* | 동일 커피 남성 |
+| coffee-drink-hidden-* | `hiddenCoffeeVariants.ts` 6종 |
+
+새 조합 추가 시 `hiddenCoffeeVariants.ts` + `백엔드/hiddenCoffeeVariants.js`도 함께 수정한다.

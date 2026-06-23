@@ -9,7 +9,11 @@
     "dev:vite": "vite",
     "build:vite": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:hold": "node scripts/test-growth-hold.mjs",
+    "test:passive": "node scripts/test-passive-growth.mjs",
+    "sync:videos": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-coffee-videos.ps1",
+    "test": "npm run test:hold && npm run test:passive"
   },
   "dependencies": {
     "@apps-in-toss/web-framework": "^2.9.2",

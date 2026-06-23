@@ -1,8 +1,0 @@
-node_modules/
-data/
-.env
-railway-env.private.txt
-
-# mTLS 인증서는 절대 커밋하지 마세요
-cert/*
-!cert/.gitkeep
