@@ -408,7 +408,6 @@ export function useCoffeeGame() {
     },
     [
       applyAuthoritativeState,
-      applyStateWithPreview,
       applyWaterServerState,
       resetHoldUi,
       showSceneDialogue,
@@ -622,7 +621,7 @@ export function useCoffeeGame() {
         showSceneDialogue(message);
       }
     }
-  }, [applyWaterServerState, showSceneDialogue]);
+  }, [applyWaterServerState, showSceneDialogue, triggerTapBurst]);
 
   const testBumpGrowth = useCallback(() => {
     if (loading || holdStartRef.current !== null) return;

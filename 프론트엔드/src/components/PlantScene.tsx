@@ -122,12 +122,12 @@ function PlantSceneComponent({
   useEffect(() => {
     if (!storedVariant) return;
     preloadCoffeeVariantVideo(storedVariant);
-  }, [storedVariant?.id, storedVariant?.video]);
+  }, [storedVariant]);
 
   useEffect(() => {
     if (!playbackVariant || playbackVariant.id === storedVariant?.id) return;
     preloadCoffeeVariantVideo(playbackVariant);
-  }, [playbackVariant?.id, playbackVariant?.video, storedVariant?.id]);
+  }, [playbackVariant, storedVariant?.id]);
 
   const drinkVideoSrc = playbackVariant?.video ?? null;
   const showWateringCan =

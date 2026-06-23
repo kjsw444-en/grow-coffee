@@ -17,7 +17,6 @@ import {
   type DinnerRecommendation,
 } from '../services/dinnerRecommendation';
 import {
-  getRecommendDailyState,
   saveRecommendReroll,
   type RecommendKind,
 } from '../services/recommendDaily';

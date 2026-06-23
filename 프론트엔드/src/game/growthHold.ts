@@ -1,4 +1,4 @@
-import { DAILY_PASSIVE_GROWTH_CAP, GROWTH_PER_WATER } from './constants';
+import { GROWTH_PER_WATER } from './constants';
 import { roundGrowth } from './passiveGrowth';
 
 /** 물주기 횟수 대비 growth 상한 — DB/클라이언트 불일치(100% 착시) 방지 */

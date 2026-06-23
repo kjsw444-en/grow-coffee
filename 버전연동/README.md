@@ -14,7 +14,7 @@
 |------|------|
 | 로컬 Git | `GROW-OFFEE` 루트 |
 | 기본 브랜치 | `main` |
-| 원격 저장소 | GitHub 등록 필요 |
+| 원격 저장소 | `https://github.com/kjsw444-en/grow-coffee.git` |
 | 금고양이 참고 | `https://github.com/kjsw444-en/goldcat.git` |
 
 ## 체크리스트
@@ -22,9 +22,15 @@
 - [x] 로컬 Git 초기화
 - [x] `.gitignore` (node_modules, .env, dist 등)
 - [x] 첫 커밋
-- [ ] GitHub 저장소 생성
-- [ ] `origin` 원격 등록
-- [ ] 첫 push
+- [x] GitHub 저장소 생성
+- [x] `origin` 원격 등록
+- [x] 첫 push
+
+## 현재 동기화 상태
+
+- `main` ↔ `origin/main` 동기화 완료
+- Railway `grow-coffee` 서비스가 GitHub `kjsw444-en/grow-coffee` 저장소와 연결됨
+- 민감 정보는 `.gitignore` 대상이며 Railway Variables에 등록
 
 ## 1. GitHub 로그인 (최초 1회)
 

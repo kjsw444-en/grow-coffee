@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CELL_COUNT,
   GRID_COLS,
@@ -90,6 +90,16 @@ export function TimedMemoryScreen({
 
   useEffect(() => () => clearTimers(), []);
 
+  const finishRun = useCallback(({ success }: { success: boolean }) => {
+    onStatsUpdate?.({
+      clearedStage: success
+        ? MEMORY_DIFFICULTIES.findIndex((item) => item.id === selectedDifficulty) + 1
+        : 0,
+      completedAll: success,
+      startedNewRun: false,
+    });
+  }, [onStatsUpdate, selectedDifficulty]);
+
   useEffect(() => {
     if (phase !== 'recall') return undefined;
 
@@ -105,17 +115,7 @@ export function TimedMemoryScreen({
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [phase, secondsLeft, onMessage]);
-
-  function finishRun({ success }: { success: boolean }) {
-    onStatsUpdate?.({
-      clearedStage: success
-        ? MEMORY_DIFFICULTIES.findIndex((item) => item.id === selectedDifficulty) + 1
-        : 0,
-      completedAll: success,
-      startedNewRun: false,
-    });
-  }
+  }, [phase, secondsLeft, onMessage, finishRun]);
 
   function startChallenge(difficultyId: string, options: { fromIdle?: boolean } = {}) {
     const { fromIdle = false } = options;

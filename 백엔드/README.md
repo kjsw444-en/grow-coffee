@@ -48,8 +48,8 @@ goldcat(`금고양이-키우기/server`) 패턴을 참고하되, **별도 Supaba
 - [x] 토스 로그인 골격 (mTLS, decrypt, unlink)
 - [x] 게스트→토스 진행 데이터 병합
 - [x] 랭킹 API
-- [ ] Supabase 프로젝트 생성 + `schema.sql`
-- [ ] Railway 배포 — `railway-deploy.md` 참고
+- [x] Supabase 프로젝트 생성 + `schema.sql`
+- [x] Railway 배포 — `https://grow-coffee-production.up.railway.app`
 
 ## 로컬 실행
 
@@ -69,4 +69,10 @@ npm run dev
 
 ## Railway
 
-`railway-deploy.md` 참고.
+운영 서비스는 Railway `grow-coffee` 서비스로 분리되어 있습니다.
+
+- URL: `https://grow-coffee-production.up.railway.app`
+- Health: `GET /api/health`
+- 현재 운영 저장소: Supabase
+
+세부 설정은 `railway-deploy.md` 참고.

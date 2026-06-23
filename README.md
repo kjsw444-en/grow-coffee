@@ -13,12 +13,20 @@
 
 ## 작업 순서
 
-1. **프론트엔드** — 화면·흐름 ✅
+1. **프론트엔드** — 화면·흐름·릴리즈 빌드 ✅
 2. **백엔드** — 저장·검증 API ✅
 3. **API 연동** — 프론트 ↔ 백엔드 ✅
-4. **버전연동** — GitHub 등 원격 등록 ← **다음**
-5. **Toss 연동** — 샌드박스 테스트 → 빌드 → 출시
-6. **Railway** — 백엔드·DB 배포 (`백엔드/`)
+4. **버전연동** — GitHub 원격 등록·동기화 ✅
+5. **Railway** — 백엔드·DB 운영 배포 ✅
+6. **Toss 연동** — 샌드박스 실기기 로그인 테스트 필요
+
+## 현재 운영 상태
+
+- GitHub: `https://github.com/kjsw444-en/grow-coffee.git`
+- Railway API: `https://grow-coffee-production.up.railway.app`
+- Health check: `https://grow-coffee-production.up.railway.app/api/health`
+- 운영 저장소: Supabase (`storageReady: true`)
+- 프론트 검증: `npm run build:vite` 통과, `npm run lint` 오류·경고 0개
 
 ## 빠른 실행 (프론트)
 
