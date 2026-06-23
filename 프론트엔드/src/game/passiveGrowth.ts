@@ -7,6 +7,11 @@ import { initialState } from './types';
 export type BalanceRules = {
   passiveGrowthPerSecond: number;
   dailyPassiveGrowthCap: number;
+  mediaAssets?: {
+    coffeeVideoVersion: number;
+    hiddenVideoVersion: number;
+    videoCount?: number;
+  };
 };
 
 export const DEFAULT_BALANCE_RULES: BalanceRules = {

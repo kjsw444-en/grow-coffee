@@ -6,15 +6,14 @@ import {
   isCoffeeVariantSlug,
   type CoffeeVariantSlug,
 } from './coffeeVariants';
-
-const HIDDEN_VIDEO_VERSION = 4;
+import { buildCoffeeVideoSrc, HIDDEN_VIDEO_VERSION } from '../services/mediaAssets';
 
 /** 상점 잠금 상태 표시명 */
 export const HIDDEN_COFFEE_LOCKED_LABEL = '❤️💕 하트 히든 커피';
 
 /**
  * 히든 커플 영상 6종 — requiredMale + requiredFemale 보유 시 해금
- * 영상 파일: public/videos/coffee-drink-{videoFile}.mp4
+ * 영상 파일: 백엔드 /assets/videos/coffee-drink-{videoFile}.mp4
  */
 export const HIDDEN_COFFEE_VARIANTS = [
   {
@@ -36,10 +35,10 @@ export const HIDDEN_COFFEE_VARIANTS = [
     videoFile: 'hidden-dolce-m-americano-f',
   },
   {
-    id: 'hidden-americano-m-dolce-f',
-    requiredMale: 'm-sexy-americano',
+    id: 'hidden-dolce-m-dolce-f',
+    requiredMale: 'm-dolce-latte',
     requiredFemale: 'dolce-latte',
-    videoFile: 'hidden-americano-m-dolce-f',
+    videoFile: 'hidden-dolce-m-dolce-f',
   },
   {
     id: 'hidden-vanilla-m-dolce-f',
@@ -92,7 +91,7 @@ function getHiddenByIdMap(): Map<HiddenCoffeeVariantSlug, HiddenCoffeeVariant> {
       const male = getCoffeeVariantById(entry.requiredMale);
       const female = getCoffeeVariantById(entry.requiredFemale);
       const unlockedLabel = formatHiddenUnlockedLabel(entry.requiredMale, entry.requiredFemale);
-      const unlockHint = `${male.drinkLabel} 남성 + ${female.drinkLabel} 여성 보유 시 해금`;
+      const unlockHint = `${male.drinkLabel} 남자 + ${female.drinkLabel} 여자 보유 시 해금`;
 
       return [
         entry.id,
@@ -103,7 +102,7 @@ function getHiddenByIdMap(): Map<HiddenCoffeeVariantSlug, HiddenCoffeeVariant> {
           lockedLabel: HIDDEN_COFFEE_LOCKED_LABEL,
           unlockedLabel,
           unlockHint,
-          video: `/videos/coffee-drink-${entry.videoFile}.mp4?v=${HIDDEN_VIDEO_VERSION}`,
+          video: buildCoffeeVideoSrc(`coffee-drink-${entry.videoFile}.mp4`, HIDDEN_VIDEO_VERSION),
         },
       ];
     }),
@@ -130,7 +129,7 @@ export function formatHiddenUnlockedLabel(
 ): string {
   const male = getCoffeeVariantById(maleSlug);
   const female = getCoffeeVariantById(femaleSlug);
-  return `${male.drinkLabel} 남성 · ${female.drinkLabel} 여성 히든 커피`;
+  return `${male.drinkLabel} 남자, ${female.drinkLabel} 여자 히든 커피`;
 }
 
 export function getHiddenCoffeeVariantById(id: HiddenCoffeeVariantSlug): HiddenCoffeeVariant {

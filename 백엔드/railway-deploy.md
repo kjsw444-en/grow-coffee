@@ -59,6 +59,23 @@ GET https://<your-domain>/api/health
   "storage": "supabase",
   "supabase": true,
   "tossMtls": true,
-  "tossDecrypt": true
+  "tossDecrypt": true,
+  "mediaAssets": {
+    "coffeeVideoVersion": 9,
+    "hiddenVideoVersion": 4,
+    "videoCount": 18
+  },
+  "videoAssetsPresent": true
 }
 ```
+
+## 7. 영상 에셋 (서버 제공)
+
+커피 마시기·히든 영상 mp4는 **백엔드**에 둡니다.
+
+- 경로: `백엔드/public/videos/*.mp4`
+- URL: `GET /assets/videos/coffee-drink-....mp4`
+- 동기화: `cd 프론트엔드 && npm run sync:videos` (OneDrive → `백엔드/public/videos`)
+- git: `git add 백엔드/public/videos/` 후 배포
+
+프론트 빌드 시 `VITE_API_URL`이 영상 URL의 베이스가 됩니다. 로컬 dev는 Vite가 `/assets`를 `:8787`로 프록시합니다.

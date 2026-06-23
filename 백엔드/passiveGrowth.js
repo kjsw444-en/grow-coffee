@@ -1,4 +1,5 @@
 import { DAILY_PASSIVE_GROWTH_CAP, PASSIVE_GROWTH_PER_SECOND } from './constants.js'
+import { getMediaAssetRules } from './mediaAssets.js'
 
 export function getPassiveDayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
@@ -162,5 +163,8 @@ export const BALANCE_RULES = {
 }
 
 export function getBalanceRules() {
-  return BALANCE_RULES
+  return {
+    ...BALANCE_RULES,
+    mediaAssets: getMediaAssetRules(),
+  }
 }

@@ -1,6 +1,8 @@
 import './loadEnv.js'
 import cors from 'cors'
 import express from 'express'
+import path from 'node:path'
+import fs from 'node:fs'
 import {
   getGameState,
   getLastActionAt,
@@ -35,9 +37,25 @@ import {
 } from './tossAuth.js'
 import { isTossDecryptConfigured } from './tossDecrypt.js'
 import { isTossMtlsConfigured } from './tossTlsClient.js'
+import { countVideoAssets, getMediaAssetRules, getVideoAssetsDir } from './mediaAssets.js'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8787
+const VIDEO_ASSETS_DIR = getVideoAssetsDir()
+
+if (fs.existsSync(VIDEO_ASSETS_DIR)) {
+  app.use(
+    '/assets/videos',
+    express.static(VIDEO_ASSETS_DIR, {
+      maxAge: '7d',
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('.mp4')) {
+          res.setHeader('Content-Type', 'video/mp4')
+        }
+      },
+    }),
+  )
+}
 
 async function attachPlayerRank(userId, payload) {
   if (!userId) {
@@ -84,6 +102,9 @@ app.get('/api/health', (_req, res) => {
     storageReady: isStorageReady(),
     tossMtls: isTossMtlsConfigured(),
     tossDecrypt: isTossDecryptConfigured(),
+    mediaAssets: getMediaAssetRules(),
+    videoAssetsDir: path.basename(VIDEO_ASSETS_DIR),
+    videoAssetsPresent: countVideoAssets() > 0,
   })
 })
 

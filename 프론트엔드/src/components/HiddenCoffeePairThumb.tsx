@@ -15,13 +15,13 @@ export function HiddenCoffeePairThumb({ hidden, unlocked }: HiddenCoffeePairThum
     );
   }
 
-  const female = getCoffeeVariantById(hidden.requiredFemale);
   const male = getCoffeeVariantById(hidden.requiredMale);
+  const female = getCoffeeVariantById(hidden.requiredFemale);
 
   return (
     <div className="character-shop__thumb character-shop__thumb--pair">
-      <img src={female.image} alt="" />
       <img src={male.image} alt="" />
+      <img src={female.image} alt="" />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 /** 75% 커피 단계 이미지·100% 마시기 영상 — 커피 종류별 남·여 1쌍 */
 
+import { buildCoffeeVideoSrc, COFFEE_VIDEO_VERSION } from '../services/mediaAssets';
+
 export type CoffeeVariantGender = 'female' | 'male';
 
 export type CoffeeDrinkLineId =
@@ -92,7 +94,6 @@ export const DEFAULT_COFFEE_VARIANT_SLUG: CoffeeVariantSlug = 'parttime-latte';
 export const COFFEE_VARIANT_PURCHASE_COST = 100;
 
 const COFFEE_IMAGE_VERSION = 5;
-const COFFEE_VIDEO_VERSION = 9;
 
 const SLUG_TO_LINE = new Map<CoffeeVariantSlug, CoffeeDrinkLine>(
   COFFEE_DRINK_LINES.flatMap((line) => [
@@ -129,7 +130,7 @@ export function coffeeVariantImageSrc(slug: CoffeeVariantSlug) {
 }
 
 export function coffeeVariantVideoSrc(slug: CoffeeVariantSlug) {
-  return `/videos/coffee-drink-${slug}.mp4?v=${COFFEE_VIDEO_VERSION}`;
+  return buildCoffeeVideoSrc(`coffee-drink-${slug}.mp4`, COFFEE_VIDEO_VERSION);
 }
 
 function buildCoffeeVariant(id: CoffeeVariantSlug): CoffeeVariant {

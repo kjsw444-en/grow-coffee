@@ -22,8 +22,8 @@ export const HIDDEN_COFFEE_VARIANTS = [
     requiredFemale: 'sexy-americano',
   },
   {
-    id: 'hidden-americano-m-dolce-f',
-    requiredMale: 'm-sexy-americano',
+    id: 'hidden-dolce-m-dolce-f',
+    requiredMale: 'm-dolce-latte',
     requiredFemale: 'dolce-latte',
   },
   {
