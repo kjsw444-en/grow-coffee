@@ -98,12 +98,13 @@
 }
 
 .growth-panel__percent {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1;
   color: var(--pastel-text-lemon);
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .growth-panel__bar {
@@ -151,4 +152,23 @@
   font-size: 12px;
   font-weight: 700;
   color: #7a9a68;
+}
+
+.growth-panel__sell-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid #d4b896;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff8eb 0%, #f5e6cc 100%);
+  color: #7a4f2a;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.growth-panel__sell-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }

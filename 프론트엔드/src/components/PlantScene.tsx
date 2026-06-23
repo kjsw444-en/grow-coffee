@@ -21,6 +21,7 @@ import { WatchAdButton } from './WatchAdButton';
 import { WaterHoldCircle } from './WaterHoldCircle';
 import { WateringCanPour } from './WateringCanPour';
 import type { HoldMode } from '../game/constants';
+import type { GrowActionSlot } from '../game/waterQuota';
 import type { DailyGameId } from '../services/dailyGamePick';
 import './PlantScene.css';
 
@@ -39,6 +40,7 @@ type PlantSceneProps = {
   isDrinkCommitting?: boolean;
   needsAd: boolean;
   showWatchAdButton: boolean;
+  growActionSlot: GrowActionSlot;
   canWater: boolean;
   watchingAd: boolean;
   holdMode: HoldMode;
@@ -72,6 +74,7 @@ function PlantSceneComponent({
   isDrinkCommitting = false,
   needsAd,
   showWatchAdButton,
+  growActionSlot,
   canWater,
   watchingAd,
   holdMode,
@@ -100,7 +103,7 @@ function PlantSceneComponent({
   unlockedRef.current = unlocked;
   const stage = getStage(plantGrowth);
   const drinkStage = isDrinkStage(plantGrowth) || isDrinkCommitting;
-  const growHoldDisabled = disabled || showWatchAdButton || !canWater;
+  const growHoldDisabled = disabled || growActionSlot === 'ad' || !canWater;
   /** 영상은 state 100% + 마시기 준비 + 홀드 종료 후에만 — API 처리 중에도 유지 */
   const showDrinkVideo = drinkUiActive && !isHolding;
   const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
@@ -136,7 +139,7 @@ function PlantSceneComponent({
 
   const drinkVideoSrc = playbackVariant?.video ?? null;
   const showWateringCan =
-    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showWatchAdButton;
+    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && growActionSlot !== 'ad';
 
   const markVideoBroken = useCallback((variant: CoffeeVariant | null) => {
     if (!variant) return;
@@ -319,9 +322,9 @@ function PlantSceneComponent({
           )}
           <WateringCanPour active={showWateringCan} progress={holdProgress} />
           <div
-            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${showWatchAdButton ? 'plant-scene__action-slot--ad' : ''}`}
+            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${growActionSlot === 'ad' ? 'plant-scene__action-slot--ad' : ''}`}
           >
-            {showWatchAdButton ? (
+            {growActionSlot === 'ad' ? (
               <WatchAdButton disabled={disabled} loading={watchingAd} embedded onWatchAd={onWatchAd} />
             ) : drinkStage ? (
               <button

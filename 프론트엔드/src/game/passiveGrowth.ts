@@ -17,6 +17,38 @@ export function roundGrowth(value: number) {
   return Math.round(value * 1e7) / 1e7;
 }
 
+const MIN_SYNC_EPOCH_MS = Date.UTC(2020, 0, 1);
+
+export function repairGrowthAccrualSyncedAt(raw: {
+  growthAccrualSyncedAt?: string;
+  growth_accrual_synced_at?: string;
+}) {
+  const value = raw.growthAccrualSyncedAt ?? raw.growth_accrual_synced_at;
+
+  if (!value) {
+    return new Date().toISOString();
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() < MIN_SYNC_EPOCH_MS) {
+    return new Date().toISOString();
+  }
+
+  return parsed.toISOString();
+}
+
+export function computePassiveDisplayGrowth(
+  state: Pick<
+    import('./types').GameState,
+    'growth' | 'dailyPassiveGrowth' | 'growthAccrualSyncedAt' | 'redeemed' | 'passiveDayKey'
+  >,
+  rules: BalanceRules = DEFAULT_BALANCE_RULES,
+  now = Date.now(),
+) {
+  const delta = computePassivePreviewDelta(state, rules, now);
+  return roundGrowth(Math.min(100, Math.max(0, state.growth + delta)));
+}
+
 export function getPassiveDayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }

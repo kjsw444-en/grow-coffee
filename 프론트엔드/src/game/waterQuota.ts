@@ -68,3 +68,20 @@ export function getWaterStatus(state: GameState) {
     needsAd: quota.watersToday > 0 && quota.adWaterCredits === 0,
   };
 }
+
+export type GrowActionSlot = 'water' | 'ad' | 'drink';
+
+/** 하단 액션 슬롯 — 마시기 > 광고 > 물주기 */
+export function getGrowActionSlot({
+  readyToDrink,
+  isDrinkCommitting,
+  state,
+}: {
+  readyToDrink: boolean;
+  isDrinkCommitting: boolean;
+  state: GameState;
+}): GrowActionSlot {
+  if (readyToDrink || isDrinkCommitting) return 'drink';
+  if (needsAdForWater(state)) return 'ad';
+  return 'water';
+}

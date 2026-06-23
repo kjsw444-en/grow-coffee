@@ -8,6 +8,11 @@ type GrowthPanelProps = {
   waterHint?: string | null;
   passiveHint?: string | null;
   isWatering?: boolean;
+  isPassivelyGrowing?: boolean;
+  canSellBatch?: boolean;
+  sellBatchLabel?: string;
+  onSellBatch?: () => void;
+  sellDisabled?: boolean;
 };
 
 function GrowthPanelComponent({
@@ -17,9 +22,15 @@ function GrowthPanelComponent({
   waterHint,
   passiveHint,
   isWatering,
+  isPassivelyGrowing = false,
+  canSellBatch = false,
+  sellBatchLabel,
+  onSellBatch,
+  sellDisabled = false,
 }: GrowthPanelProps) {
   const stage = getStage(growth);
-  const barWidth = Math.min(100, growth);
+  const barWidth = Math.min(100, Math.max(0, growth));
+  const barLive = isWatering || isPassivelyGrowing;
 
   return (
     <section className="growth-panel">
@@ -48,7 +59,7 @@ function GrowthPanelComponent({
       </div>
       <div className="growth-panel__bar">
         <div
-          className={`growth-panel__bar-fill ${isWatering ? 'growth-panel__bar-fill--live' : ''}`}
+          className={`growth-panel__bar-fill ${barLive ? 'growth-panel__bar-fill--live' : ''}`}
           style={{ width: `${barWidth}%` }}
         />
       </div>
@@ -57,6 +68,16 @@ function GrowthPanelComponent({
       </span>
       {passiveHint && <span className="growth-panel__passive-hint">{passiveHint}</span>}
       {waterHint && <span className="growth-panel__water-hint">{waterHint}</span>}
+      {canSellBatch && onSellBatch && (
+        <button
+          type="button"
+          className="growth-panel__sell-btn"
+          onClick={onSellBatch}
+          disabled={sellDisabled}
+        >
+          {sellBatchLabel ?? '10잔 판매'}
+        </button>
+      )}
     </section>
   );
 }

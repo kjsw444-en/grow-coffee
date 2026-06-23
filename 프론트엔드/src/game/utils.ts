@@ -1,4 +1,4 @@
-import { COFFEE_STAGE_MIN, DRINK_STAGE_MIN, STAGES } from '../game/constants';
+import { COFFEE_STAGE_MIN, DRINK_STAGE_MIN, GROWTH_DISPLAY_DECIMALS, STAGES } from './constants';
 import { roundGrowth } from './passiveGrowth';
 
 const STAGES_DESC = [...STAGES].reverse();
@@ -32,5 +32,10 @@ export function formatWon(amount: number) {
 }
 
 export function formatGrowthPercent(growth: number) {
-  return `${Math.round(growth)}%`;
+  const value = roundGrowth(Math.min(100, Math.max(0, growth)));
+  if (value >= 100) {
+    return '100%';
+  }
+
+  return `${value.toFixed(GROWTH_DISPLAY_DECIMALS)}%`;
 }

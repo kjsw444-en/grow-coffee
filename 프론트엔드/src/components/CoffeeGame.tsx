@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useGameAudio } from '../audio/useGameAudio';
 import { useButtonSound, useSound } from '../audio/SoundProvider';
 import { ONBOARDING_KEY, MOCK_USER } from '../game/mockData';
-import { GOAL_AMOUNT } from '../game/constants';
+import { formatPassiveCupHint, formatPassiveEtaHint } from '../game/usePassiveGrowthTick';
+import { DAILY_PASSIVE_GROWTH_CAP, GOAL_AMOUNT, PASSIVE_GROWTH_PER_SECOND, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
 import { randomCatNudgeDialogue } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
 import { formatWon, isDrinkStage } from '../game/utils';
@@ -68,17 +69,20 @@ export function CoffeeGame() {
     selectVariant,
     reset,
     watchAd,
+    sellBatch,
+    canSellBatch,
+    displayGrowth,
+    passiveActive,
+    waterStatus,
     readyToDrink,
     drinkUiActive,
     isDrinkCommitting,
     needsAd,
     showWatchAdButton,
+    growActionSlot,
     canWater,
     watchingAd,
     actionSyncing,
-    displayGrowth,
-    passiveActive,
-    waterStatus,
     holdMode,
     tapBurst,
     isHolding,
@@ -266,16 +270,30 @@ export function CoffeeGame() {
     setComicTarget(null);
   }, []);
 
+  const handleSellBatch = useCallback(async () => {
+    await buttonSound();
+    await sellBatch();
+  }, [buttonSound, sellBatch]);
+
   const waterHint = readyToDrink
-    ? null
+    ? waterStatus.needsAd
+      ? '다음 물주기·내리기는 광고 후 가능'
+      : null
     : needsAd
-      ? '오늘 무료 성장 완료 · 광고로 한 번 더'
+      ? '오늘 무료 물주기·내리기 완료 · 아래 광고 버튼 필요'
       : waterStatus.freeAvailable
-        ? '오늘 물주기·내리기 1회 남음'
+        ? '오늘 물주기·내리기 1회 무료'
         : null;
 
-  const passiveHint = passiveActive ? '햇빛이 천천히 성장을 도와줘요' : null;
-  const drinkStage = isDrinkStage(state.growth);
+  const passiveCupHint = passiveActive
+    ? formatPassiveCupHint(state.dailyPassiveGrowth, DAILY_PASSIVE_GROWTH_CAP)
+    : null;
+  const passiveEtaHint =
+    passiveActive && !readyToDrink
+      ? formatPassiveEtaHint(displayGrowth, PASSIVE_GROWTH_PER_SECOND)
+      : null;
+  const passiveHint = [passiveCupHint, passiveEtaHint].filter(Boolean).join(' · ') || null;
+  const drinkStage = isDrinkStage(isHolding ? state.growth : displayGrowth);
 
   return (
     <div className="game">
@@ -311,8 +329,8 @@ export function CoffeeGame() {
           <main className="game__main">
             {actionError && <p className="game__action-error">{actionError}</p>}
             <PlantScene
-              growth={isHolding ? displayGrowth : state.growth}
-              plantGrowth={state.growth}
+              growth={displayGrowth}
+              plantGrowth={isHolding ? state.growth : displayGrowth}
               selectedCoffeeVariant={state.selectedCoffeeVariant}
               isWatering={isHolding}
               isReady={readyToDrink}
@@ -323,6 +341,7 @@ export function CoffeeGame() {
               isDrinkCommitting={isDrinkCommitting}
               needsAd={needsAd}
               showWatchAdButton={showWatchAdButton}
+              growActionSlot={growActionSlot}
               canWater={canWater}
               watchingAd={watchingAd}
               holdMode={holdMode}
@@ -353,12 +372,17 @@ export function CoffeeGame() {
             )}
 
             <GrowthPanel
-              growth={isHolding ? displayGrowth : state.growth}
+              growth={displayGrowth}
               totalCoffees={state.totalCoffees}
               emptiedCoffeeCups={state.spentCoffeeCups}
               waterHint={waterHint}
               passiveHint={passiveHint}
               isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
+              isPassivelyGrowing={passiveActive && !isHolding && !readyToDrink}
+              canSellBatch={canSellBatch}
+              sellBatchLabel={`${SELL_BATCH_SIZE}잔 판매 (+${formatWon(SELL_BATCH_REWARD)})`}
+              onSellBatch={handleSellBatch}
+              sellDisabled={actionSyncing}
             />
 
             {import.meta.env.DEV && (

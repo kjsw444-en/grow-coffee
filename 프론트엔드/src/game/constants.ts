@@ -1,11 +1,17 @@
 export const GOAL_AMOUNT = 4700;
 export const SELL_PRICE = 47;
+export const SELL_BATCH_SIZE = 10;
+export const SELL_BATCH_REWARD = 47;
 export const GROWTH_PER_WATER = 25;
 
-/** 햇빛 방치 성장 — 하루 약 8%, 일일 캡 12% */
-export const DAILY_PASSIVE_GROWTH_TARGET = 8;
-export const DAILY_PASSIVE_GROWTH_CAP = 12;
-export const PASSIVE_GROWTH_PER_SECOND = DAILY_PASSIVE_GROWTH_TARGET / 86400;
+/** 햇빛 방치 — 20분 = 100%, 하루 최대 2잔(200%) */
+export const PASSIVE_MINUTES_PER_CUP = 20;
+export const PASSIVE_GROWTH_PER_SECOND = 100 / (PASSIVE_MINUTES_PER_CUP * 60);
+export const DAILY_PASSIVE_GROWTH_CAP = 200;
+/** 방치 성장 UI 갱신 주기(ms) — 소수점 변화가 보이도록 */
+export const PASSIVE_DISPLAY_TICK_MS = 100;
+/** 성장률 표시 소수 자릿수 */
+export const GROWTH_DISPLAY_DECIMALS = 5;
 
 /** 물 주기 꾹 누르기 시간 (초) — 매번 4~7초 랜덤 */
 export const HOLD_MIN_SEC = 4;

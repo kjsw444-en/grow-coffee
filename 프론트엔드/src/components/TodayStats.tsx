@@ -1,4 +1,4 @@
-import { SELL_PRICE } from '../game/constants';
+import { SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
 import { formatWon } from '../game/utils';
 import './TodayStats.css';
 
@@ -27,8 +27,8 @@ export function TodayStats({ totalWaters, totalCoffees, money, lastEarned }: Tod
           <dd>{formatWon(money)}</dd>
         </div>
         <div>
-          <dt>컵당 수익</dt>
-          <dd>{formatWon(SELL_PRICE)}</dd>
+          <dt>{SELL_BATCH_SIZE}잔 판매</dt>
+          <dd>{formatWon(SELL_BATCH_REWARD)}</dd>
         </div>
       </dl>
       {lastEarned !== null && (

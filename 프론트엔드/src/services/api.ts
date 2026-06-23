@@ -226,6 +226,16 @@ export async function drinkGame() {
   }>
 }
 
+export async function sellCoffeeBatch() {
+  return request('/api/game/sell-batch', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    lastEarned: number | null
+    passiveGrowthPreview?: PassiveGrowthPreview
+    playerRank?: number | null
+  }>
+}
+
 export async function watchAdGame() {
   return request('/api/game/watch-ad', { method: 'POST', body: '{}' }) as Promise<{
     ok: true

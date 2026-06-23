@@ -1,4 +1,4 @@
-import { GOAL_AMOUNT, SELL_PRICE } from '../game/constants';
+import { GOAL_AMOUNT, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
 import { formatWon } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import './SettingsSheet.css';
@@ -84,9 +84,9 @@ export function SettingsSheet({
             <dd>서버 저장소</dd>
           </div>
           <div>
-            <dt>목표 / 컵당</dt>
+            <dt>목표 / {SELL_BATCH_SIZE}잔</dt>
             <dd>
-              {formatWon(GOAL_AMOUNT)} / {formatWon(SELL_PRICE)}
+              {formatWon(GOAL_AMOUNT)} / {formatWon(SELL_BATCH_REWARD)}
             </dd>
           </div>
           <div>
