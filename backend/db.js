@@ -247,11 +247,12 @@ export async function resolveTossSession({
   tossUserKey,
   displayName,
   deviceId,
-  refreshToken: _refreshToken,
+  refreshToken,
 }) {
   const key = String(tossUserKey || '').trim()
   const nextDisplayName = String(displayName || '커피 농부').trim().slice(0, 24)
   const safeDeviceId = String(deviceId || '').trim()
+  const nextRefreshToken = String(refreshToken || '').trim() || null
 
   if (!key) {
     throw new Error('tossUserKey가 필요합니다.')
@@ -267,6 +268,7 @@ export async function resolveTossSession({
           displayName: nextDisplayName,
           source: 'toss',
           tossUserKey: key,
+          ...(nextRefreshToken ? { tossRefreshToken: nextRefreshToken } : {}),
         }
       })
 
@@ -294,6 +296,7 @@ export async function resolveTossSession({
             tossUserKey: key,
             source: 'toss',
             displayName: nextDisplayName,
+            ...(nextRefreshToken ? { tossRefreshToken: nextRefreshToken } : {}),
           }
           delete db.profiles[guest.userId].deviceId
         })
@@ -313,6 +316,7 @@ export async function resolveTossSession({
         tossUserKey: key,
         displayName: nextDisplayName,
         source: 'toss',
+        ...(nextRefreshToken ? { tossRefreshToken: nextRefreshToken } : {}),
       }
       if (!db.gameStates[userId]) {
         db.gameStates[userId] = { ...initialGameState }
@@ -339,6 +343,7 @@ export async function resolveTossSession({
       .update({
         display_name: nextDisplayName,
         source: 'toss',
+        ...(nextRefreshToken ? { toss_refresh_token: nextRefreshToken } : {}),
       })
       .eq('id', tossProfile.id)
 
@@ -384,6 +389,7 @@ export async function resolveTossSession({
           source: 'toss',
           device_id: null,
           display_name: nextDisplayName,
+          ...(nextRefreshToken ? { toss_refresh_token: nextRefreshToken } : {}),
         })
         .eq('id', guestProfile.id)
 
@@ -416,6 +422,7 @@ export async function resolveTossSession({
     toss_user_key: key,
     display_name: nextDisplayName,
     source: 'toss',
+    ...(nextRefreshToken ? { toss_refresh_token: nextRefreshToken } : {}),
   })
 
   if (profileError) {

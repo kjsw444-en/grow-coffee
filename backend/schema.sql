@@ -6,6 +6,7 @@ create table if not exists public.profiles (
   display_name text not null default '커피 농부',
   source text not null default 'guest',
   toss_user_key text unique,
+  toss_refresh_token text,
   created_at timestamptz not null default now()
 );
 
@@ -47,6 +48,7 @@ alter table public.rankings enable row level security;
 -- alter table public.game_states rename column total_taps to total_waters;
 
 -- 기존 DB 마이그레이션 (이미 테이블이 있는 경우):
+-- alter table public.profiles add column if not exists toss_refresh_token text;
 -- alter table public.game_states add column if not exists water_day_key text not null default '';
 -- alter table public.game_states add column if not exists waters_today integer not null default 0;
 -- alter table public.game_states add column if not exists ad_water_credits integer not null default 0;
