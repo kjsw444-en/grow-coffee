@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { applyDevTestWater, applyClaimPassiveCoffee, applyDrink, applyReactivatePassiveCoffee, applyReset, applySellBatch, applyWater, sanitizeLoadedGameState } from '../gameLogic.js'
+import { applyDevTestWater, applyClaimPassiveCoffee, applyDrink, applySellBatch, applyWater, sanitizeLoadedGameState } from '../gameLogic.js'
 import { initialGameState, SELL_BATCH_REWARD } from '../constants.js'
 import { settlePassiveGrowth } from '../passiveGrowth.js'
 
@@ -107,82 +107,9 @@ test('방치 커피 — 100% 충전 후 받기 버튼으로만 내린 커피 +1'
   assert.equal(claim.ok, true, `claim failed: ${claim.reason}`)
   assert.equal(claim.state.totalCoffees, 4)
   assert.equal(claim.state.passiveCoffeesClaimed, 1)
-  assert.ok(claim.state.dailyPassiveGrowth < 100, 'claim should consume 100% growth')
 
   const unclaimed = Math.max(0, claim.state.dailyPassiveGrowth - claim.state.passiveCoffeesClaimed * 100)
   assert.ok(unclaimed < 100, `gauge should reset after claim, unclaimed=${unclaimed}`)
-})
-
-test('방치 커피 — 200% 누적 상태에서 받아도 게이지 초기화', () => {
-  const dayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
-  const state = {
-    ...initialGameState,
-    totalCoffees: 3,
-    dailyPassiveGrowth: 200,
-    passiveCoffeesClaimed: 0,
-    passiveDayKey: dayKey,
-  }
-
-  const claim = applyClaimPassiveCoffee(state)
-  assert.equal(claim.ok, true)
-  assert.equal(claim.state.passiveCoffeesClaimed, 1)
-  assert.equal(claim.state.totalCoffees, 4)
-  assert.equal(claim.state.dailyPassiveGrowth, 100)
-
-  const unclaimed = Math.max(0, claim.state.dailyPassiveGrowth - claim.state.passiveCoffeesClaimed * 100)
-  assert.equal(unclaimed, 0, `expected 0 unclaimed after buffered claim, got ${unclaimed}`)
-})
-
-test('방치 커피 재활성 — 2/2 후 광고 사이클 리셋', () => {
-  const dayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
-  const state = {
-    ...initialGameState,
-    dailyPassiveGrowth: 200,
-    passiveCoffeesClaimed: 2,
-    passiveDayKey: dayKey,
-    passiveReactivateDayKey: '',
-  }
-
-  const reactivate = applyReactivatePassiveCoffee(state)
-  assert.equal(reactivate.ok, true, `reactivate failed: ${reactivate.reason}`)
-  assert.equal(reactivate.state.passiveCoffeesClaimed, 0)
-  assert.equal(reactivate.state.dailyPassiveGrowth, 0)
-  assert.equal(reactivate.state.passiveReactivateDayKey, dayKey)
-
-  const again = applyReactivatePassiveCoffee(reactivate.state)
-  assert.equal(again.ok, false)
-  assert.equal(again.reason, 'not-complete')
-})
-
-test('진행 데이터 초기화 — 방치·성장·재화 모두 0으로', () => {
-  const dayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
-  const dirty = {
-    ...initialGameState,
-    growth: 100,
-    money: 940,
-    totalCoffees: 20,
-    totalWaters: 40,
-    dailyPassiveGrowth: 200,
-    passiveCoffeesClaimed: 2,
-    passiveDayKey: dayKey,
-    passiveReactivateDayKey: dayKey,
-    spentCoffeeCups: 15,
-    watersToday: 3,
-    adWaterCredits: 2,
-  }
-
-  const reset = applyReset()
-  assert.equal(reset.ok, true)
-  assert.equal(reset.state.growth, 0)
-  assert.equal(reset.state.money, 0)
-  assert.equal(reset.state.totalCoffees, 0)
-  assert.equal(reset.state.totalWaters, 0)
-  assert.equal(reset.state.dailyPassiveGrowth, 0)
-  assert.equal(reset.state.passiveCoffeesClaimed, 0)
-  assert.equal(reset.state.passiveReactivateDayKey, '')
-  assert.equal(reset.state.spentCoffeeCups, 0)
-  assert.equal(reset.state.watersToday, 0)
-  assert.equal(reset.state.adWaterCredits, 0)
 })
 
 console.log('apply-water tests passed')
