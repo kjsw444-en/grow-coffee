@@ -1,18 +1,33 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useGameAudio } from '../audio/useGameAudio';
 import { useButtonSound, useSound } from '../audio/SoundProvider';
-import { ONBOARDING_KEY } from '../game/mockData';
+import { ONBOARDING_KEY, MOCK_USER } from '../game/mockData';
 import { GOAL_AMOUNT } from '../game/constants';
+import { randomCatNudgeDialogue } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
-import { formatWon } from '../game/utils';
+import { formatWon, isDrinkStage } from '../game/utils';
+import type { AuthUser } from '../hooks/useAuth';
+import type { DailyGameId } from '../services/dailyGamePick';
+import type { BonusFeatureView } from '../features/goldcat/BonusFeatureHost';
+import type { ComicInitialTarget } from '../features/goldcat/StoryComicScreen';
+import { getCoffeeRanking, syncCoffeeRanking, type CoffeeRankingView } from '../services/coffeeRanking';
 import { BottomNav } from './BottomNav';
+import { CharacterShopSheet } from './CharacterShopSheet';
 import { GameFlowFooter } from './GameFlowFooter';
 import { GrowthPanel } from './GrowthPanel';
 import { OnboardingModal } from './OnboardingModal';
 import { PlantScene } from './PlantScene';
+import { RankingSheet } from './RankingSheet';
+import { RecommendButtons } from './RecommendButtons';
 import { SettingsSheet } from './SettingsSheet';
 import { UserBar } from './UserBar';
 import './CoffeeGame.css';
+
+const BonusFeatureHost = lazy(() =>
+  import('../features/goldcat/BonusFeatureHost').then((module) => ({
+    default: module.BonusFeatureHost,
+  })),
+);
 
 function hasSeenOnboarding() {
   try {
@@ -22,13 +37,46 @@ function hasSeenOnboarding() {
   }
 }
 
+function toAuthUser(session: {
+  userId: string;
+  displayName: string;
+  source: string;
+  playerRank?: number | null;
+} | null): AuthUser {
+  const source = (session?.source ?? 'mock') as AuthUser['source'];
+
+  return {
+    userId: session?.userId ?? '',
+    name: session?.displayName ?? MOCK_USER.name,
+    rank: session?.playerRank ?? (source === 'mock' ? MOCK_USER.rank : null),
+    source,
+  };
+}
+
 export function CoffeeGame() {
   const {
+    session,
     state,
+    loading,
+    error,
+    actionError,
     startHold,
     stopHold,
+    completeDrink,
+    testBumpGrowth,
+    purchaseVariant,
+    selectVariant,
     reset,
+    watchAd,
     readyToDrink,
+    drinkUiActive,
+    isDrinkCommitting,
+    needsAd,
+    watchingAd,
+    actionSyncing,
+    displayGrowth,
+    passiveActive,
+    waterStatus,
     holdMode,
     tapBurst,
     isHolding,
@@ -37,15 +85,62 @@ export function CoffeeGame() {
     holdElapsedSec,
     holdRemainingSec,
     lastEarned,
+    loggingIn,
+    authMessage,
+    loginWithToss,
+    logout,
+    isTossInApp,
+    sceneDialogue,
+    showSceneDialogue,
+    updatePlayerRank,
   } = useCoffeeGame();
 
   const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding());
   const [showSettings, setShowSettings] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [showRanking, setShowRanking] = useState(false);
+  const [coffeeRanking, setCoffeeRanking] = useState<CoffeeRankingView | null>(null);
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [bonusView, setBonusView] = useState<BonusFeatureView>(null);
+  const [comicTarget, setComicTarget] = useState<ComicInitialTarget | null>(null);
+  const [comicInlineEntry, setComicInlineEntry] = useState(false);
   const { play, unlock, startAmbient } = useSound();
   const buttonSound = useButtonSound();
+  const user = toAuthUser(session);
+  const catDialogueCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const catDialogueRawRef = useRef<string | null>(null);
+
+  const stopCatDialogueCycle = useCallback(() => {
+    if (catDialogueCycleRef.current !== null) {
+      clearInterval(catDialogueCycleRef.current);
+      catDialogueCycleRef.current = null;
+    }
+  }, []);
+
+  const handleCatPressStart = useCallback(() => {
+    stopCatDialogueCycle();
+    const { raw, text } = randomCatNudgeDialogue();
+    catDialogueRawRef.current = raw;
+    showSceneDialogue(text, false);
+    catDialogueCycleRef.current = setInterval(() => {
+      const next = randomCatNudgeDialogue(catDialogueRawRef.current ?? undefined);
+      catDialogueRawRef.current = next.raw;
+      showSceneDialogue(next.text, false);
+    }, 1400);
+  }, [showSceneDialogue, stopCatDialogueCycle]);
+
+  const handleCatPressEnd = useCallback(() => {
+    stopCatDialogueCycle();
+    const next = randomCatNudgeDialogue(catDialogueRawRef.current ?? undefined);
+    catDialogueRawRef.current = next.raw;
+    showSceneDialogue(next.text, true);
+  }, [showSceneDialogue, stopCatDialogueCycle]);
+
+  useEffect(() => () => stopCatDialogueCycle(), [stopCatDialogueCycle]);
 
   useGameAudio({
     state,
+    growth: state.growth,
     isHolding,
     lastEarned,
     showOnboarding,
@@ -76,32 +171,123 @@ export function CoffeeGame() {
     setShowSettings(false);
   };
 
-  const handleStartHold = async () => {
+  const openShop = async () => {
+    await buttonSound();
+    play('modalOpen');
+    setShowShop(true);
+  };
+
+  const closeShop = async () => {
+    await buttonSound();
+    play('modalClose');
+    setShowShop(false);
+  };
+
+  const openRanking = async () => {
+    await buttonSound();
+    play('modalOpen');
+    setShowRanking(true);
+    setRankingLoading(true);
+    setCoffeeRanking(
+      getCoffeeRanking(state.spentCoffeeCups, session?.displayName ?? MOCK_USER.name),
+    );
+
+    try {
+      const ranking = await syncCoffeeRanking({
+        userId: session?.userId ?? '',
+        spentCoffeeCups: state.spentCoffeeCups,
+        displayName: session?.displayName ?? MOCK_USER.name,
+      });
+      setCoffeeRanking(ranking);
+      if (ranking.live) {
+        updatePlayerRank(ranking.playerRank);
+      }
+    } finally {
+      setRankingLoading(false);
+    }
+  };
+
+  const closeRanking = async () => {
+    await buttonSound();
+    play('modalClose');
+    setShowRanking(false);
+  };
+
+  const handleStartHold = useCallback(async () => {
     await unlock();
     startHold();
-  };
+  }, [startHold, unlock]);
 
-  const handleStopHold = () => {
+  const handleStopHold = useCallback(() => {
     if (isHolding && holdProgress < 100) play('waterCancel');
     stopHold();
-  };
+  }, [holdProgress, isHolding, play, stopHold]);
 
-  const handleReset = async () => {
+  const handleReset = useCallback(async () => {
     await buttonSound();
     reset();
     setShowSettings(false);
-  };
+  }, [buttonSound, reset]);
 
-  const handleWinReset = async () => {
+  const handleDrinkTap = useCallback(() => {
+    completeDrink();
+    void unlock().then(() => buttonSound());
+  }, [buttonSound, completeDrink, unlock]);
+
+  const handleWatchAd = useCallback(async () => {
+    await unlock();
+    await watchAd();
+  }, [unlock, watchAd]);
+
+  const handleWinReset = useCallback(async () => {
     await buttonSound();
     reset();
-  };
+  }, [buttonSound, reset]);
+
+  const openComicSeries = useCallback((seriesId: string) => {
+    setComicTarget({ seriesId });
+    setComicInlineEntry(true);
+    setBonusView('comic');
+  }, []);
+
+  const openDailyGame = useCallback((gameId: DailyGameId) => {
+    setBonusView(gameId);
+  }, []);
+
+  const closeBonusFeature = useCallback(() => {
+    setBonusView(null);
+    setComicTarget(null);
+    setComicInlineEntry(false);
+  }, []);
+
+  const consumeComicTarget = useCallback(() => {
+    setComicTarget(null);
+  }, []);
+
+  const waterHint = readyToDrink
+    ? null
+    : needsAd
+      ? '오늘 물주기 완료 · 광고로 한 번 더'
+      : waterStatus.freeAvailable
+        ? '오늘 물주기 1회 남음'
+        : null;
+
+  const passiveHint = passiveActive ? '햇빛이 천천히 성장을 도와줘요' : null;
+  const drinkStage = isDrinkStage(state.growth);
 
   return (
     <div className="game">
-      <UserBar money={state.money} onOpenSettings={openSettings} />
+      <UserBar money={state.money} user={user} onOpenSettings={openSettings} />
 
-      {state.redeemed ? (
+      {loading ? (
+        <main className="game__main">
+          <p className="game__status">불러오는 중...</p>
+        </main>
+      ) : error ? (
+        <main className="game__main">
+          <p className="game__status game__status--error">{error}</p>
+        </main>
+      ) : state.redeemed ? (
         <main className="game__main">
           <section className="game__win">
             <div className="game__win-emoji" aria-hidden="true">
@@ -120,16 +306,21 @@ export function CoffeeGame() {
         </main>
       ) : (
         <>
-          <GrowthPanel growth={state.growth} />
-
           <main className="game__main">
+            {actionError && <p className="game__action-error">{actionError}</p>}
             <PlantScene
-              growth={state.growth}
+              growth={isHolding ? displayGrowth : state.growth}
+              plantGrowth={state.growth}
+              selectedCoffeeVariant={state.selectedCoffeeVariant}
               isWatering={isHolding}
               isReady={readyToDrink}
               tapBurst={tapBurst}
-              disabled={state.redeemed}
+              disabled={state.redeemed || (actionSyncing && !isDrinkCommitting)}
               readyToDrink={readyToDrink}
+              drinkUiActive={drinkUiActive}
+              isDrinkCommitting={isDrinkCommitting}
+              needsAd={needsAd}
+              watchingAd={watchingAd}
               holdMode={holdMode}
               isHolding={isHolding}
               holdProgress={holdProgress}
@@ -138,23 +329,99 @@ export function CoffeeGame() {
               holdRemainingSec={holdRemainingSec}
               onPointerDown={handleStartHold}
               onPointerUp={handleStopHold}
+              onDrinkTap={handleDrinkTap}
+              onWatchAd={handleWatchAd}
+              onCatPressStart={handleCatPressStart}
+              onCatPressEnd={handleCatPressEnd}
+              onOpenComicSeries={openComicSeries}
+              onOpenDailyGame={openDailyGame}
+              onOpenShop={openShop}
+              sceneDialogue={sceneDialogue}
             />
+
+            {drinkStage && (
+              <RecommendButtons
+                placement="below"
+                onOpenComicSeries={openComicSeries}
+                onOpenDailyGame={openDailyGame}
+                onOpenShop={openShop}
+              />
+            )}
+
+            <GrowthPanel
+              growth={isHolding ? displayGrowth : state.growth}
+              totalCoffees={state.totalCoffees}
+              emptiedCoffeeCups={state.spentCoffeeCups}
+              waterHint={waterHint}
+              passiveHint={passiveHint}
+              isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
+            />
+
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                className="game__test-btn"
+                disabled={state.redeemed || state.growth >= 100 || isHolding}
+                onClick={() => testBumpGrowth()}
+              >
+                테스트 +25%
+              </button>
+            )}
 
             <GameFlowFooter />
           </main>
         </>
       )}
 
-      <BottomNav onSettings={openSettings} />
+      <BottomNav onRank={() => void openRanking()} onShop={openShop} onSettings={openSettings} />
+
+      {showRanking && (
+        <RankingSheet
+          ranking={coffeeRanking}
+          loading={rankingLoading}
+          onClose={() => void closeRanking()}
+        />
+      )}
+
+      {showShop && (
+        <CharacterShopSheet
+          totalCoffees={state.totalCoffees}
+          ownedCoffeeVariants={state.ownedCoffeeVariants}
+          selectedCoffeeVariant={state.selectedCoffeeVariant}
+          busy={actionSyncing}
+          onPurchase={(slug) => void purchaseVariant(slug)}
+          onSelect={(slug) => void selectVariant(slug)}
+          onClose={() => void closeShop()}
+        />
+      )}
 
       {showOnboarding && <OnboardingModal onClose={closeOnboarding} />}
       {showSettings && (
         <SettingsSheet
+          user={user}
           totalWaters={state.totalWaters}
           totalCoffees={state.totalCoffees}
+          loggingIn={loggingIn}
+          authMessage={authMessage}
+          isTossInApp={isTossInApp}
+          onLoginWithToss={loginWithToss}
+          onLogout={logout}
           onReset={handleReset}
           onClose={closeSettings}
         />
+      )}
+
+      {bonusView !== null && (
+        <Suspense fallback={null}>
+          <BonusFeatureHost
+            farmerName={session?.displayName ?? MOCK_USER.name}
+            view={bonusView}
+            comicInitialTarget={comicTarget}
+            comicInlineEntry={comicInlineEntry}
+            onConsumeComicTarget={consumeComicTarget}
+            onClose={closeBonusFeature}
+          />
+        </Suspense>
       )}
     </div>
   );

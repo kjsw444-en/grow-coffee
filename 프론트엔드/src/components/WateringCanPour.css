@@ -1,0 +1,69 @@
+.watering-can-pour {
+  --pour-progress: 0;
+  position: absolute;
+  right: 8%;
+  bottom: 46%;
+  width: min(48%, 180px);
+  z-index: 6;
+  pointer-events: none;
+  transform-origin: 70% 65%;
+  opacity: 1;
+  transform:
+    translateY(calc(var(--pour-progress) * 0.1%))
+    rotate(calc(-18deg - var(--pour-progress) * 0.22deg))
+    scale(calc(0.92 + var(--pour-progress) * 0.0008));
+  transition: transform 0.12s ease;
+}
+
+.watering-can-pour__can {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 6px 12px rgba(40, 28, 18, 0.4));
+  user-select: none;
+}
+
+.watering-can-pour__stream {
+  position: absolute;
+  left: 6%;
+  bottom: 22%;
+  width: 32%;
+  height: 38%;
+  overflow: visible;
+}
+
+.watering-can-pour__drop {
+  position: absolute;
+  left: 42%;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(168, 214, 255, 0.9);
+  box-shadow: 0 0 6px rgba(140, 200, 255, 0.65);
+  animation: watering-can-drop 0.55s ease-in infinite;
+  opacity: clamp(0.4, calc(var(--pour-progress) / 100), 1);
+}
+
+.watering-can-pour__drop--2 {
+  left: 28%;
+  animation-delay: 0.15s;
+  animation-duration: 0.62s;
+}
+
+.watering-can-pour__drop--3 {
+  left: 58%;
+  animation-delay: 0.28s;
+  animation-duration: 0.48s;
+}
+
+@keyframes watering-can-drop {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(48px) scale(0.45);
+    opacity: 0;
+  }
+}

@@ -28,12 +28,53 @@
   user-select: none;
 }
 
+.plant-scene__bg--video {
+  aspect-ratio: 473 / 1024;
+  min-height: 280px;
+  object-fit: cover;
+  object-position: center center;
+  background: #000;
+}
+
+.plant-scene__art-wrap--drink {
+  min-height: 280px;
+}
+
+.plant-scene__top-stack {
+  position: absolute;
+  top: 2.2%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(calc(100% - 12px), 960px);
+  max-width: 960px;
+  pointer-events: none;
+}
+
+.plant-scene__top-stack .recommend-buttons {
+  position: static;
+  transform: none;
+  left: auto;
+  z-index: auto;
+  pointer-events: auto;
+}
+
+.plant-scene__top-stack .scene-dialogue {
+  margin-top: 50px;
+}
+
 .plant-scene__plant-slot {
   position: absolute;
   left: 50%;
-  bottom: 22%;
+  bottom: 18%;
   transform: translateX(-50%);
-  width: 42%;
+  width: min(76%, 300px);
+  height: min(76vw, 300px);
+  min-height: 250px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -41,35 +82,25 @@
   z-index: 1;
 }
 
-.plant-scene__plant-slot--pot {
-  bottom: 18%;
-  width: 58%;
-}
-
-.plant-scene__plant-slot--complete {
-  bottom: 20%;
-  width: 52%;
+/* 75% 커피 완성 이미지 — 다른 단계 대비 약 20% 축소 */
+.plant-scene__plant-slot--coffee {
+  width: min(61%, 240px);
+  height: min(61vw, 240px);
+  min-height: 200px;
 }
 
 .plant-scene__plant-visual {
-  transition: transform 0.25s ease;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .plant-scene__plant-img {
   display: block;
   width: 100%;
-  max-width: 160px;
-  height: auto;
+  height: 100%;
+  max-width: none;
   object-fit: contain;
+  object-position: center bottom;
   filter: drop-shadow(0 6px 14px var(--pastel-shadow-deep));
-}
-
-.plant-scene__plant-img--pot {
-  max-width: 220px;
-}
-
-.plant-scene__plant-img--complete {
-  max-width: 190px;
 }
 
 .plant-scene__stage-emoji {
@@ -96,7 +127,57 @@
   box-shadow: 0 0 0 3px #d8a858;
 }
 
+.plant-scene__action-slot--drink-finish {
+  bottom: 3%;
+  width: calc(100% - 24px);
+  max-width: 200px;
+  z-index: 4;
+}
+
+.plant-scene__drink-btn {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  padding: 9px 14px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #fff;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  animation: drink-heartbeat 1.35s ease-in-out infinite;
+}
+
+.plant-scene__drink-btn:active:not(:disabled) {
+  animation: none;
+  transform: scale(0.96);
+}
+
+.plant-scene__drink-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  animation: none;
+}
+
+.plant-scene__drink-btn--loading:disabled {
+  opacity: 0.85;
+}
+
 .plant-scene__action-slot--drink {
+  bottom: 4%;
+  width: calc(100% - 32px);
+}
+
+.plant-scene__action-slot--ad {
   bottom: 4%;
   width: calc(100% - 32px);
 }
@@ -140,5 +221,24 @@
 @keyframes plant-bounce {
   50% {
     transform: scale(1.02);
+  }
+}
+
+@keyframes drink-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(1.1);
+  }
+  24% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(1.07);
+  }
+  48% {
+    transform: scale(1);
   }
 }

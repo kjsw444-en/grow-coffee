@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useButtonSound } from '../audio/SoundProvider';
+import { shareWithCoffeeFriends } from '../services/tossShare';
 import './GameFlowFooter.css';
 
 const STEPS = [
@@ -9,8 +12,47 @@ const STEPS = [
 ];
 
 export function GameFlowFooter() {
+  const [sharePending, setSharePending] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const buttonSound = useButtonSound();
+
+  const handleShare = async () => {
+    if (sharePending) return;
+
+    await buttonSound();
+    setSharePending(true);
+    setShareMessage('공유 화면을 여는 중...');
+
+    try {
+      await shareWithCoffeeFriends({ onMessage: setShareMessage });
+    } finally {
+      setSharePending(false);
+    }
+  };
+
   return (
     <section className="game-flow" aria-label="게임 진행 순서">
+      <button
+        type="button"
+        className="game-flow__share"
+        disabled={sharePending}
+        onClick={() => void handleShare()}
+      >
+        <span className="game-flow__share-icon" aria-hidden="true">
+          ☕
+        </span>
+        <span className="game-flow__share-copy">
+          <strong>{sharePending ? '공유 준비 중...' : '커피 덕후에게 공유하기'}</strong>
+          <small>토스 친구에게 커피 키우기 초대</small>
+        </span>
+      </button>
+
+      {shareMessage && (
+        <p className="game-flow__share-message" role="status" aria-live="polite">
+          {shareMessage}
+        </p>
+      )}
+
       <p className="game-flow__title">게임 진행 순서</p>
       <div className="game-flow__steps">
         {STEPS.map((step, i) => (

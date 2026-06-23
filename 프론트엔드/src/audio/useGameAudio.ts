@@ -5,6 +5,7 @@ import { useSound } from './SoundProvider';
 
 type UseGameAudioArgs = {
   state: GameState;
+  growth: number;
   isHolding: boolean;
   lastEarned: number | null;
   showOnboarding: boolean;
@@ -12,12 +13,13 @@ type UseGameAudioArgs = {
 
 export function useGameAudio({
   state,
+  growth,
   isHolding,
   lastEarned,
   showOnboarding,
 }: UseGameAudioArgs) {
   const { play, startWaterLoop, stopWaterLoop, startAmbient, unlock } = useSound();
-  const prevGrowth = useRef(state.growth);
+  const prevGrowth = useRef(growth);
   const prevHolding = useRef(isHolding);
   const prevRedeemed = useRef(state.redeemed);
   const prevLastEarned = useRef(lastEarned);
@@ -40,18 +42,18 @@ export function useGameAudio({
 
   useEffect(() => {
     const prev = prevGrowth.current;
-    if (state.growth > prev) {
-      if (state.growth >= 100 && prev < 100) {
+    if (growth > prev) {
+      if (growth >= 100 && prev < 100) {
         play('waterComplete');
       } else {
         const crossed = STAGES.filter((s) => s.min < 100).find(
-          (stage) => prev < stage.min && state.growth >= stage.min,
+          (stage) => prev < stage.min && growth >= stage.min,
         );
         if (crossed) play(crossed.min >= 75 ? 'waterComplete' : 'growth');
       }
     }
-    prevGrowth.current = state.growth;
-  }, [state.growth, play]);
+    prevGrowth.current = growth;
+  }, [growth, play]);
 
   useEffect(() => {
     if (lastEarned !== null && lastEarned !== prevLastEarned.current) {

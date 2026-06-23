@@ -1,0 +1,33 @@
+.scene-dialogue {
+  width: 100%;
+  pointer-events: none;
+}
+
+.scene-dialogue__panel {
+  box-sizing: border-box;
+  width: min(100%, 228px);
+  max-width: 228px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 10px 14px;
+  background: rgba(30, 22, 14, 0.3);
+  border: none;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.scene-dialogue__text {
+  margin: 0;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  white-space: pre-line;
+  text-wrap: pretty;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}

@@ -1,0 +1,208 @@
+.character-shop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.character-shop__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(110, 104, 136, 0.35);
+  cursor: pointer;
+}
+
+.character-shop__sheet {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: min(82vh, 640px);
+  overflow: auto;
+  padding: 22px 20px calc(22px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: var(--pastel-bg-surface);
+}
+
+.character-shop__sheet h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--pastel-text);
+}
+
+.character-shop__notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 236, 244, 0.95) 0%, rgba(255, 224, 236, 0.9) 100%);
+  border: 1px solid rgba(255, 170, 196, 0.55);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #8b4a62;
+  text-align: center;
+}
+
+.character-shop__balance {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--pastel-text-soft);
+}
+
+.character-shop__balance strong {
+  color: var(--pastel-text-accent);
+}
+
+.character-shop__balance-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.character-shop__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.character-shop__item {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--pastel-border);
+  background: var(--pastel-bg-muted);
+}
+
+.character-shop__item--selected {
+  border-color: var(--pastel-mint-deep);
+  box-shadow: 0 0 0 1px var(--pastel-mint-deep);
+}
+
+.character-shop__thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.character-shop__meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.character-shop__meta strong {
+  font-size: 14px;
+  color: var(--pastel-text);
+}
+
+.character-shop__price {
+  font-size: 12px;
+  color: var(--pastel-text-soft);
+}
+
+.character-shop__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.character-shop__btn {
+  min-width: 64px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--pastel-border);
+  background: var(--pastel-bg-surface);
+  color: var(--pastel-text-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.character-shop__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.character-shop__btn--buy {
+  background: var(--pastel-lavender);
+}
+
+.character-shop__btn--active {
+  background: var(--pastel-mint);
+  color: var(--pastel-text);
+}
+
+.character-shop__confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.character-shop__confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(110, 104, 136, 0.28);
+  cursor: pointer;
+}
+
+.character-shop__confirm-card {
+  position: relative;
+  width: min(100%, 300px);
+  padding: 22px 18px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--pastel-border);
+  background: var(--pastel-bg-surface);
+  box-shadow: 0 12px 32px rgba(110, 104, 136, 0.22);
+}
+
+.character-shop__confirm-title {
+  margin: 0 0 18px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--pastel-text);
+  text-align: center;
+  word-break: keep-all;
+}
+
+.character-shop__confirm-title strong {
+  color: var(--pastel-text-accent);
+}
+
+.character-shop__confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.character-shop__confirm-btn {
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--pastel-border);
+  background: var(--pastel-bg-muted);
+  color: var(--pastel-text-soft);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.character-shop__confirm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.character-shop__confirm-btn--primary {
+  background: var(--pastel-lavender);
+  color: var(--pastel-text-accent);
+}

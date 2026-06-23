@@ -1,0 +1,142 @@
+.ranking-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.ranking-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(110, 104, 136, 0.35);
+  cursor: pointer;
+}
+
+.ranking-sheet__panel {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: min(78vh, 600px);
+  overflow: auto;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: var(--pastel-bg-surface);
+}
+
+.ranking-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ranking-sheet__head h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--pastel-text);
+}
+
+.ranking-sheet__close {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--pastel-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--pastel-text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ranking-sheet__note {
+  margin: 8px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pastel-text-muted);
+}
+
+.ranking-sheet__status {
+  margin: 24px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--pastel-text-soft);
+}
+
+.ranking-sheet__mine {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 236, 244, 0.95) 0%, rgba(255, 224, 236, 0.9) 100%);
+  border: 1px solid rgba(255, 170, 196, 0.55);
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b4a62;
+}
+
+.ranking-sheet__mine strong {
+  color: #c45a7a;
+}
+
+.ranking-sheet__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ranking-sheet__row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 252, 244, 0.9);
+  border: 1px solid #efe4d2;
+}
+
+.ranking-sheet__row--player {
+  background: #f4f0ff;
+  border-color: #d8ccf5;
+}
+
+.ranking-sheet__rank {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--pastel-text-muted);
+  text-align: center;
+}
+
+.ranking-sheet__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pastel-text);
+}
+
+.ranking-sheet__score {
+  font-size: 12px;
+  font-weight: 800;
+  font-style: normal;
+  color: #8b5a3c;
+  font-variant-numeric: tabular-nums;
+}
+
+.ranking-sheet__row--player .ranking-sheet__score {
+  color: #7b6fd6;
+}
+
+.ranking-sheet__total {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pastel-text-muted);
+}

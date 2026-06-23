@@ -2,46 +2,45 @@
 
 사용자가 보고 조작하는 화면.
 
-## 폴더 구조 (틀)
+## 폴더 구조
 
 ```
 src/
-├── layout/          # 앱 전체 껍데기 (모바일 프레임)
-├── pages/           # 화면 단위 (HomePage 등)
-├── components/      # UI 조각 (게임, 모달, 바)
+├── api/             # 백엔드 API 호출
+├── layout/          # 앱 전체 껍데기
+├── pages/           # 화면 단위
+├── components/      # UI 조각
 │   └── ui/          # 공통 버튼·카드
-└── game/            # 게임 로직·임시 데이터·상수
+└── game/            # 게임 훅·상수·타입
 ```
-
-
-- 로그인·메인·버튼·팝업 UI
-- 임시 데이터로 화면·흐름 테스트
-- 표시용 계산 (진행률, 천 단위 쉼표)
-
-## 하지 않는 일
-
-- 포인트·판매가 최종 확정
-- DB 저장
-- 조작 방지
 
 ## 현재 상태
 
-- [x] 커피 키우기 MVP (`CoffeeGame`)
-- [x] 임시 저장 (`localStorage`)
-- [x] 온보딩 팝업 (첫 방문)
-- [x] 임시 유저 바 (이름·랭킹·보유금)
-- [x] 설정 시트 (진행 초기화)
+- [x] 커피 키우기 UI (홀드 물주기 / 커피마시기)
+- [x] 백엔드 API 연동 (`/api/auth/guest`, `/api/game/water`, `/api/game/drink`)
+- [x] 온보딩·설정·사운드
 - [ ] 토스 샌드박스 UI 확인
-- [ ] 백엔드 API 연동 후 임시 데이터 제거
-
-## 이 채팅에서 하는 일
-
-**프론트엔드만** — 백엔드·Git·토스 로그인은 다른 채팅에서 진행
 
 ## 실행
 
+백엔드와 함께 실행:
+
 ```bash
+# 터미널 1
+cd ../백엔드
+npm run dev
+
+# 터미널 2
 npm install
-npm run dev:vite    # 브라우저
-npm run dev         # 토스 granite dev
+npm run dev:vite
+```
+
+로컬에서는 Vite proxy가 `/api` → `localhost:8787` 로 연결합니다.
+
+## 환경변수
+
+`.env.example` 참고. Railway 배포 후:
+
+```
+VITE_API_URL=https://your-api.up.railway.app
 ```

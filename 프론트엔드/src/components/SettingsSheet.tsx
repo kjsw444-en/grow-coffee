@@ -1,36 +1,41 @@
-import { useButtonSound, useSound } from '../audio/SoundProvider';
 import { GOAL_AMOUNT, SELL_PRICE } from '../game/constants';
 import { formatWon } from '../game/utils';
+import type { AuthUser } from '../hooks/useAuth';
 import './SettingsSheet.css';
 
 type SettingsSheetProps = {
+  user: AuthUser;
   totalWaters: number;
   totalCoffees: number;
+  loggingIn: boolean;
+  authMessage: string;
+  isTossInApp: boolean;
+  onLoginWithToss: () => void;
+  onLogout: () => void;
   onReset: () => void;
   onClose: () => void;
 };
 
+function sessionLabel(source: AuthUser['source']) {
+  if (source === 'toss') return '토스 로그인';
+  if (source === 'guest') return '게스트 세션';
+  if (source === 'mock') return '임시 데이터 (MOCK)';
+  return '오프라인';
+}
+
 export function SettingsSheet({
+  user,
   totalWaters,
   totalCoffees,
+  loggingIn,
+  authMessage,
+  isTossInApp,
+  onLoginWithToss,
+  onLogout,
   onReset,
   onClose,
 }: SettingsSheetProps) {
-  const { settings, setSettings } = useSound();
-  const buttonSound = useButtonSound();
-
-  const toggleMute = async () => {
-    await buttonSound();
-    setSettings({ muted: !settings.muted });
-  };
-
-  const onSfxVolume = async (value: number) => {
-    setSettings({ sfxVolume: value });
-  };
-
-  const onAmbientVolume = async (value: number) => {
-    setSettings({ ambientVolume: value });
-  };
+  const isTossLinked = user.source === 'toss';
 
   return (
     <div className="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -38,44 +43,44 @@ export function SettingsSheet({
       <div className="settings__sheet">
         <h2 id="settings-title">설정</h2>
 
-        <section className="settings__sound" aria-label="사운드 설정">
-          <h3 className="settings__sound-title">🔊 사운드</h3>
-          <button type="button" className="settings__sound-toggle" onClick={toggleMute}>
-            {settings.muted ? '사운드 켜기' : '사운드 끄기'}
-          </button>
-          <label className="settings__slider">
-            <span>효과음</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={settings.sfxVolume}
-              disabled={settings.muted}
-              onChange={(e) => onSfxVolume(Number(e.target.value))}
-            />
-          </label>
-          <label className="settings__slider">
-            <span>배경음</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={settings.ambientVolume}
-              disabled={settings.muted}
-              onChange={(e) => onAmbientVolume(Number(e.target.value))}
-            />
-          </label>
+        <section className="settings__login">
+          <div className="settings__login-head">
+            <span>계정</span>
+            <strong>{sessionLabel(user.source)}</strong>
+          </div>
+          <p className="settings__login-name">{user.name}</p>
+          {authMessage && <p className="settings__login-msg">{authMessage}</p>}
+          {isTossLinked ? (
+            <button type="button" className="settings__toss settings__toss--linked" disabled>
+              토스 연동됨
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="settings__toss"
+              onClick={onLoginWithToss}
+              disabled={loggingIn || !isTossInApp}
+            >
+              {loggingIn ? '로그인 중...' : '토스 로그인'}
+            </button>
+          )}
+          {!isTossInApp && !isTossLinked && (
+            <p className="settings__login-hint">토스 샌드박스 앱에서만 로그인할 수 있어요.</p>
+          )}
+          {user.source !== 'mock' && (
+            <button type="button" className="settings__logout" onClick={onLogout}>
+              로그아웃
+            </button>
+          )}
         </section>
 
         <dl className="settings__info">
           <div>
             <dt>개발 단계</dt>
-            <dd>1단계 · 프론트엔드</dd>
+            <dd>1단계 · 프론트 + 토스 로그인 UI</dd>
           </div>
           <div>
-            <dt>데이터 저장</dt>
+            <dt>게임 데이터</dt>
             <dd>localStorage (임시)</dd>
           </div>
           <div>
@@ -87,12 +92,12 @@ export function SettingsSheet({
           <div>
             <dt>플레이 기록</dt>
             <dd>
-              물 준 {totalWaters.toLocaleString('ko-KR')}회 · 판매 {totalCoffees}잔
+              물 준 {totalWaters.toLocaleString('ko-KR')}회 · 마신 커피 {totalCoffees}잔
             </dd>
           </div>
         </dl>
         <p className="settings__warn">
-          백엔드 연동 후 서버에 저장되고, 금액은 서버에서만 계산됩니다.
+          백엔드 연동 후 게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
         </p>
         <button type="button" className="settings__reset" onClick={onReset}>
           진행 데이터 초기화
@@ -104,3 +109,4 @@ export function SettingsSheet({
     </div>
   );
 }
+

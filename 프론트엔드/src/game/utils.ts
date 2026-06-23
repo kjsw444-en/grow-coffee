@@ -1,7 +1,22 @@
 import { COFFEE_STAGE_MIN, DRINK_STAGE_MIN, STAGES } from '../game/constants';
+import { roundGrowth } from './passiveGrowth';
+
+const STAGES_DESC = [...STAGES].reverse();
 
 export function getStage(growth: number) {
-  return [...STAGES].reverse().find((stage) => growth >= stage.min) ?? STAGES[0];
+  return STAGES_DESC.find((stage) => growth >= stage.min) ?? STAGES[0];
+}
+
+export function getStageGrowthRange(stage: (typeof STAGES)[number]) {
+  const index = STAGES.findIndex((item) => item.min === stage.min);
+  const next = STAGES[index + 1];
+
+  if (!next) {
+    return `${stage.min}%`;
+  }
+
+  const max = next.min - 1;
+  return `${stage.min}~${max}%`;
 }
 
 export function isCoffeeStage(growth: number) {
@@ -9,9 +24,13 @@ export function isCoffeeStage(growth: number) {
 }
 
 export function isDrinkStage(growth: number) {
-  return growth >= DRINK_STAGE_MIN;
+  return roundGrowth(growth) >= DRINK_STAGE_MIN;
 }
 
 export function formatWon(amount: number) {
   return `${amount.toLocaleString('ko-KR')}원`;
+}
+
+export function formatGrowthPercent(growth: number) {
+  return `${Math.round(growth)}%`;
 }

@@ -1,10 +1,12 @@
 import { useId, useRef } from 'react';
 import type { HoldMode } from '../game/constants';
+import { isCoffeeStage, isDrinkStage } from '../game/utils';
 import './WaterHoldCircle.css';
 
 type WaterHoldCircleProps = {
   disabled?: boolean;
   embedded?: boolean;
+  growth?: number;
   holdMode: HoldMode;
   isHolding: boolean;
   holdProgress: number;
@@ -25,6 +27,7 @@ function useRingSize(embedded: boolean) {
 export function WaterHoldCircle({
   disabled,
   embedded = false,
+  growth = 0,
   holdMode,
   isHolding,
   holdProgress,
@@ -44,15 +47,30 @@ export function WaterHoldCircle({
   const tipY = 110 + radius * Math.sin(tipTheta);
   const showTip = isHolding && progress > 1 && progress < 99.5;
   const isDrink = holdMode === 'drink';
+  const isBrew =
+    holdMode === 'brew' || (isCoffeeStage(growth) && !isDrinkStage(growth));
 
-  const idleLabel = isDrink ? '커피 마시기' : embedded ? '물주기' : '버튼을 눌러 물주기';
-  const holdingLabel = isDrink ? '커피 받는중' : embedded ? '물주는 중' : '물을 주는 중...';
-  const ariaLabel = isDrink ? '커피 마시기' : '물주기';
+  const idleLabel = isBrew
+    ? '커피 내리기'
+    : isDrink
+      ? '커피 마시기'
+      : embedded
+        ? '물주기'
+        : '버튼을 눌러 물주기';
+  const holdingLabel = isBrew
+    ? '커피 내리는중'
+    : isDrink
+      ? '커피 받는중'
+      : embedded
+        ? '물주는 중'
+        : '물을 주는 중...';
+  const ariaLabel = isBrew ? '커피 내리기' : isDrink ? '커피 마시기' : '물주기';
 
   const rootClass = [
     'water-hold',
     embedded ? 'water-hold--embedded' : '',
     isDrink ? 'water-hold--drink' : '',
+    isBrew ? 'water-hold--brew' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -60,7 +78,9 @@ export function WaterHoldCircle({
   return (
     <section className={rootClass}>
       {!embedded && (
-        <h2 className="water-hold__title">{isDrink ? '☕ 커피 마시기 ☕' : '💧 물주기 💧'}</h2>
+        <h2 className="water-hold__title">
+          {isBrew ? '☕ 커피 내리기 ☕' : isDrink ? '☕ 커피 마시기 ☕' : '💧 물주기 💧'}
+        </h2>
       )}
 
       <button
@@ -163,27 +183,21 @@ export function WaterHoldCircle({
             </>
           ) : (
             <>
-              {embedded && isDrink ? (
-                <div className="water-hold__drink-idle">
-                  <p className="water-hold__drink-line">커피</p>
-                  <p className="water-hold__drink-line">마시기</p>
-                  <p className="water-hold__reward-hint">+47원</p>
-                </div>
-              ) : (
-                <>
-                  <p className="water-hold__status">{idleLabel}</p>
-                  {!embedded && <p className="water-hold__target">4~7초</p>}
-                </>
-              )}
+              <p className="water-hold__status">{idleLabel}</p>
+              {!embedded && !isBrew && <p className="water-hold__target">4~7초</p>}
             </>
           )}
         </div>
       </button>
 
-      <p className="water-hold__warn">{embedded ? '떼면 취소' : '손을 떼면 취소돼요!'}</p>
+      {!embedded && <p className="water-hold__warn">손을 떼면 취소돼요!</p>}
       {!embedded && (
         <p className="water-hold__footer">
-          {isDrink ? '커피를 받는 동안 계속 버튼을 누르고 있어요' : '물 주는 동안 계속 버튼을 누르고 있어요'}
+          {isBrew
+            ? '커피 내리는 동안 계속 버튼을 누르고 있어요'
+            : isDrink
+              ? '커피를 받는 동안 계속 버튼을 누르고 있어요'
+              : '물 주는 동안 계속 버튼을 누르고 있어요'}
         </p>
       )}
     </section>
