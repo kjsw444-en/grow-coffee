@@ -48,6 +48,13 @@ async function attachPlayerRank(userId, payload) {
   return { ...payload, playerRank }
 }
 
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network'] === 'true') {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  }
+  next()
+})
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -62,6 +69,8 @@ app.use(
 
       callback(null, allowed)
     },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-grow-coffee-user', 'x-grow-coffee-dev'],
   }),
 )
 app.use(express.json({ limit: '512kb' }))

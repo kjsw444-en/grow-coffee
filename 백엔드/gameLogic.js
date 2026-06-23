@@ -16,12 +16,14 @@ import {
   normalizeOwnedCoffeeVariants,
   normalizeSelectedCoffeeVariant,
 } from './coffeeVariants.js'
+import { isHiddenCoffeeUnlocked, isHiddenCoffeeVariantSlug } from './hiddenCoffeeVariants.js'
 import {
   normalizePassiveQuota,
   repairGrowthAccrualSyncedAt,
   roundGrowth,
   settlePassiveGrowth,
   getPassiveDayKey,
+  getPassiveGrowthAccrualCap,
 } from './passiveGrowth.js'
 import {
   canWaterToday,
@@ -145,13 +147,14 @@ export function applyDevBumpPassive(state) {
   }
 
   const now = new Date().toISOString()
+  const accrualCap = getPassiveGrowthAccrualCap(claimed, DAILY_PASSIVE_GROWTH_CAP)
 
   return {
     ok: true,
     state: {
       ...current,
       dailyPassiveGrowth: roundGrowth(
-        Math.min(DAILY_PASSIVE_GROWTH_CAP, current.dailyPassiveGrowth + 100),
+        Math.min(accrualCap, current.dailyPassiveGrowth + 100),
       ),
       growthAccrualSyncedAt: now,
     },
@@ -227,7 +230,7 @@ export function applyClaimPassiveCoffee(state) {
     ...current,
     passiveCoffeesClaimed: claimed + 1,
     totalCoffees: current.totalCoffees + 1,
-    dailyPassiveGrowth: roundGrowth(Math.max(0, previewDaily - 100)),
+    dailyPassiveGrowth: previewDaily,
     growthAccrualSyncedAt: now,
   }
 
@@ -383,13 +386,15 @@ export function applyPurchaseCoffeeVariant(state, slug) {
 export function applySelectCoffeeVariant(state, slug) {
   const current = withSettledPassive(state)
   const safeSlug = String(slug || '').trim()
-
-  if (!isCoffeeVariantSlug(safeSlug)) {
-    return { ok: false, reason: 'invalid-variant', state: current }
-  }
-
   const owned = normalizeOwnedCoffeeVariants(current.ownedCoffeeVariants)
-  if (!owned.includes(safeSlug)) {
+
+  if (isHiddenCoffeeVariantSlug(safeSlug)) {
+    if (!isHiddenCoffeeUnlocked(safeSlug, owned)) {
+      return { ok: false, reason: 'not-owned', state: current }
+    }
+  } else if (!isCoffeeVariantSlug(safeSlug)) {
+    return { ok: false, reason: 'invalid-variant', state: current }
+  } else if (!owned.includes(safeSlug)) {
     return { ok: false, reason: 'not-owned', state: current }
   }
 

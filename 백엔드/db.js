@@ -29,19 +29,19 @@ function isMissingPassiveReactivateColumnError(error) {
 
 function warnMissingPassiveColumnOnce() {
   console.warn(
-    'game_states.passive_coffees_claimed 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+    'game_states.passive_coffees_claimed 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
   )
 }
 
 function warnMissingShareColumnOnce() {
   console.warn(
-    'game_states.share_reward_day_key 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+    'game_states.share_reward_day_key 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
   )
 }
 
 function warnMissingReactivateColumnOnce() {
   console.warn(
-    'game_states.passive_reactivate_day_key 컬럼 없음 — backend/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+    'game_states.passive_reactivate_day_key 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
   )
 }
 

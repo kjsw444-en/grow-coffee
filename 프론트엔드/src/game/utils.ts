@@ -5,6 +5,7 @@ import {
   GROWTH_PER_WATER,
   PASSIVE_GROWTH_DISPLAY_DECIMALS,
   STAGES,
+  TREE_GROWTH_DISPLAY_DECIMALS,
 } from './constants';
 import { roundGrowth } from './passiveGrowth';
 
@@ -52,15 +53,17 @@ export function formatGrowthPercent(growth: number) {
   return `${value.toFixed(GROWTH_DISPLAY_DECIMALS)}%`;
 }
 
-/** 커피나무 성장률 — 0·25·50·75·100% (물주기 1회 +25%) */
-export function formatTreeGrowthPercent(growth: number) {
-  const value = Math.min(100, Math.max(0, growth));
+/** 커피나무 성장률 — 소수 2자리, 물주기 중에는 displayGrowth와 함께 서서히 상승 */
+export function formatTreeGrowthPercent(
+  growth: number,
+  decimals = TREE_GROWTH_DISPLAY_DECIMALS,
+) {
+  const value = roundGrowth(Math.min(100, Math.max(0, growth)));
   if (value >= 100) {
-    return '100%';
+    return decimals > 0 ? `100.${'0'.repeat(decimals)}%` : '100%';
   }
 
-  const stepped = Math.round(value / GROWTH_PER_WATER) * GROWTH_PER_WATER;
-  return `${stepped}%`;
+  return `${value.toFixed(decimals)}%`;
 }
 
 /** 확정 성장치를 25% 단위로 맞춤 — UI·표시용 */

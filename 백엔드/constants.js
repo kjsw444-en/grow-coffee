@@ -9,7 +9,7 @@ export const GROWTH_PER_WATER = 25
 export const SELL_PRICE = 47
 export const SELL_BATCH_SIZE = 10
 export const SELL_BATCH_REWARD = 47
-export const HOLD_MIN_SEC = 4
+export const HOLD_MIN_SEC = 3
 export const ACTION_COOLDOWN_MS = HOLD_MIN_SEC * 1000
 
 /** 햇빛 방치 — 1분당 5%, 20분 = 100%, 하루 최대 2잔(200%) */

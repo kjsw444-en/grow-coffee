@@ -36,7 +36,7 @@ export function GameFlowFooter({
 
     try {
       const message = await onShareReward(setShareMessage);
-      setShareMessage(message);
+      setShareMessage(message || null);
     } catch {
       setShareMessage('공유 리워드를 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
     }

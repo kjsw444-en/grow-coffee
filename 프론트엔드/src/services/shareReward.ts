@@ -59,6 +59,7 @@ function runTossShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessage'])
     let rewarded = false;
     let rewardState: GameState | null = null;
     let rewardPlayerRank: number | null = null;
+    let rewardAmount = SHARE_REWARD_COFFEE_AMOUNT;
     let settled = false;
 
     const finish = (outcome: ShareRewardOutcome) => {
@@ -77,6 +78,7 @@ function runTossShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessage'])
             rewarded = true;
             rewardState = claimOutcome.state;
             rewardPlayerRank = claimOutcome.playerRank ?? null;
+            rewardAmount = claimOutcome.amount;
           } else if (claimOutcome?.status === 'already-claimed') {
             finish(claimOutcome);
             return;
@@ -105,7 +107,7 @@ function runTossShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessage'])
       if (rewarded && rewardState) {
         finish({
           status: 'rewarded',
-          amount: SHARE_REWARD_COFFEE_AMOUNT,
+          amount: rewardAmount,
           state: rewardState,
           playerRank: rewardPlayerRank,
         });
@@ -113,10 +115,7 @@ function runTossShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessage'])
       }
 
       if (closeReason === 'noReward') {
-        finish({
-          status: 'already-claimed',
-          message: '오늘 공유 리워드는 이미 받았어요. 내일 다시 시도해 주세요.',
-        });
+        finish({ status: 'cancelled', message: '공유를 마쳤어요.' });
         return;
       }
 
@@ -135,10 +134,11 @@ function runTossShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessage'])
               .then((result) => {
                 rewarded = true;
                 rewardState = result.state;
-                onMessage?.(`공유 완료! 내린 커피 ${result.rewardAmount ?? SHARE_REWARD_COFFEE_AMOUNT}잔을 받았어요.`);
+                rewardAmount = result.rewardAmount ?? SHARE_REWARD_COFFEE_AMOUNT;
+                onMessage?.(`공유 완료! 내린 커피 ${rewardAmount}잔을 받았어요.`);
                 return {
                   status: 'rewarded' as const,
-                  amount: result.rewardAmount ?? SHARE_REWARD_COFFEE_AMOUNT,
+                  amount: rewardAmount,
                   state: result.state,
                   playerRank: result.playerRank ?? null,
                 };
@@ -196,7 +196,7 @@ export async function runShareRewardFlow(
 export function shareRewardStatusMessage(outcome: ShareRewardOutcome) {
   switch (outcome.status) {
     case 'rewarded':
-      return `공유 완료! 내린 커피 ${outcome.amount}잔을 받았어요.`;
+      return '';
     case 'already-claimed':
       return outcome.message;
     case 'cancelled':

@@ -7,18 +7,58 @@ const USER_ID_KEY = 'grow-coffee-user-id'
 const SESSION_SOURCE_KEY = 'grow-coffee-session-source'
 const DISPLAY_NAME_KEY = 'grow-coffee-display-name'
 
+const VITE_DEV_PORTS = new Set(['5173', '5174', '4173'])
+
+function getDevBackendBase() {
+  return 'http://127.0.0.1:8787'
+}
+
 function getApiBase() {
   const configured = import.meta.env.VITE_API_URL?.trim()
   if (configured) {
     return configured.replace(/\/$/, '')
   }
 
-  // Granite(8081) 등 Vite proxy 밖에서 열릴 때 /api 요청이 백엔드에 닿지 않음 → 로컬은 직접 연결
-  if (import.meta.env.DEV) {
-    return 'http://localhost:8787'
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const { hostname, port } = window.location
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
+
+    // Vite dev(5173 등): 같은 출처 /api → vite proxy → 8787 (CORS·PNA 문제 없음)
+    if (isLocalHost && VITE_DEV_PORTS.has(port)) {
+      return ''
+    }
+
+    // Granite shell(8081) 등: 백엔드 직접 연결
+    if (isLocalHost) {
+      return getDevBackendBase()
+    }
   }
 
   return ''
+}
+
+export function getApiBaseForDebug() {
+  return getApiBase() || `${typeof window !== 'undefined' ? window.location.origin : ''}/api (proxy)`
+}
+
+export async function fetchBackendHealth(timeoutMs = 3000) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const base = getApiBase()
+  const url = base ? `${base}/api/health` : '/api/health'
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: import.meta.env.DEV ? { 'x-grow-coffee-dev': '1' } : {},
+    })
+    if (!response.ok) {
+      throw new Error(`백엔드 health ${response.status}`)
+    }
+    return (await response.json()) as { ok: boolean }
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 export function isBackendConfigured() {
@@ -103,8 +143,8 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function performRequest(path: string, options: RequestOptions, timeoutMs: number) {
-  const { headers, ...fetchOptions } = options
+async function performRequest(path: string, options: RequestOptions = {}) {
+  const { headers, timeoutMs = 20000, ...fetchOptions } = options
   const userId = getStoredUserId()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
@@ -136,6 +176,13 @@ async function performRequest(path: string, options: RequestOptions, timeoutMs: 
     if (error instanceof Error && error.name === 'AbortError') {
       throw new ApiRequestError('서버 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.')
     }
+    if (error instanceof TypeError || (error instanceof Error && error.message === 'Failed to fetch')) {
+      throw new ApiRequestError(
+        import.meta.env.DEV
+          ? '백엔드(8787)에 연결되지 않아요. 백엔드 npm run dev 실행 후 Ctrl+Shift+R 새로고침해 주세요.'
+          : '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
+      )
+    }
     throw error
   } finally {
     clearTimeout(timeoutId)
@@ -143,22 +190,7 @@ async function performRequest(path: string, options: RequestOptions, timeoutMs: 
 }
 
 async function request(path: string, options: RequestOptions = {}) {
-  const timeoutMs = options.timeoutMs ?? 20000
-
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      reject(new ApiRequestError('서버 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.'))
-    }, timeoutMs)
-  })
-
-  try {
-    return await Promise.race([performRequest(path, options, timeoutMs), timeoutPromise])
-  } finally {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle)
-    }
-  }
+  return performRequest(path, options)
 }
 
 export type RankingEntry = {
@@ -434,5 +466,6 @@ export async function ensureTossSession({
     state: body.state,
     playerRank: body.playerRank ?? null,
     balanceRules: body.balanceRules ?? DEFAULT_BALANCE_RULES,
+    passiveGrowthPreview: body.passiveGrowthPreview,
   }
 }

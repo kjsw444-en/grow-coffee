@@ -29,7 +29,7 @@
 
 .game-flow__share:disabled {
   opacity: 0.72;
-  cursor: wait;
+  cursor: default;
 }
 
 .game-flow__share-icon {

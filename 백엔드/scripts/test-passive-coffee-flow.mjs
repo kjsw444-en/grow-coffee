@@ -139,19 +139,25 @@ test('9 — 재활성은 하루 1회만', () => {
   assert.equal(passiveUi(state).canReactivate, false)
 })
 
-test('200% 누적 후 1잔 받기 — 게이지 0% 유지', () => {
-  const state = {
-    ...initialGameState,
-    passiveDayKey: dayKey,
-    dailyPassiveGrowth: 200,
-    passiveCoffeesClaimed: 0,
-  }
-  const claim = applyClaimPassiveCoffee(state)
-  assert.equal(claim.ok, true)
-  const ui = passiveUi(claim.state)
-  assert.equal(ui.claimed, 1)
-  assert.equal(ui.unclaimed, 0)
-  assert.equal(ui.gauge, 0)
+test('1잔 받기 전 40분 대기해도 100%에서 충전 멈춤', () => {
+  let state = accrueMinutes(
+    {
+      ...initialGameState,
+      passiveDayKey: dayKey,
+      dailyPassiveGrowth: 0,
+      passiveCoffeesClaimed: 0,
+    },
+    21,
+  )
+  assert.equal(passiveUi(state).canClaim, true)
+  assert.ok(passiveUi(state).daily <= 100)
+
+  state = accrueMinutes(state, 21)
+  const ui = passiveUi(state)
+  assert.ok(ui.daily <= 100, `expected daily<=100, got ${ui.daily}`)
+  assert.equal(ui.claimed, 0)
+  assert.equal(ui.canClaim, true)
+  assert.equal(passiveUi(state).gauge, 100)
 })
 
 console.log('passive-coffee-flow tests passed')

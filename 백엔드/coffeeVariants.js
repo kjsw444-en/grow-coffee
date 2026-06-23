@@ -1,4 +1,4 @@
-export const COFFEE_VARIANT_SLUGS = [
+export const FEMALE_COFFEE_VARIANT_SLUGS = [
   'parttime-latte',
   'student-coldbrew',
   'blonde-hazelnut',
@@ -7,7 +7,18 @@ export const COFFEE_VARIANT_SLUGS = [
   'chic-vanilla-latte',
 ]
 
-/** 무료 기본 캐릭터 — 카페라떼 */
+export const MALE_COFFEE_VARIANT_SLUGS = [
+  'm-parttime-latte',
+  'm-student-coldbrew',
+  'm-blonde-hazelnut',
+  'm-dolce-latte',
+  'm-sexy-americano',
+  'm-chic-vanilla-latte',
+]
+
+export const COFFEE_VARIANT_SLUGS = [...FEMALE_COFFEE_VARIANT_SLUGS, ...MALE_COFFEE_VARIANT_SLUGS]
+
+/** 무료 기본 캐릭터 — 여성 카페라떼 */
 export const DEFAULT_COFFEE_VARIANT_SLUG = 'parttime-latte'
 
 export const COFFEE_VARIANT_PURCHASE_COST = 100
@@ -39,13 +50,7 @@ export function normalizeOwnedCoffeeVariants(raw) {
   return [...owned]
 }
 
-export function normalizeSelectedCoffeeVariant(raw, owned) {
-  const slug = String(raw || '').trim()
-  if (isCoffeeVariantSlug(slug) && owned.includes(slug)) {
-    return slug
-  }
-  return DEFAULT_COFFEE_VARIANT_SLUG
-}
+export { normalizeSelectedCoffeeVariant } from './hiddenCoffeeVariants.js'
 
 export function getAvailableCoffeeCups(state) {
   return Math.max(0, Math.floor(Number(state.totalCoffees) || 0))

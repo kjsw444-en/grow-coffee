@@ -25,6 +25,30 @@
   color: #b42318;
 }
 
+.game__action-error {
+  margin: 0 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(180, 35, 24, 0.08);
+  border: 1px solid rgba(180, 35, 24, 0.2);
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.game__connection-warning {
+  margin: 0 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(138, 90, 40, 0.1);
+  border: 1px solid rgba(138, 90, 40, 0.22);
+  color: #7a4f1f;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .game__win {
   flex: 1;
   display: flex;

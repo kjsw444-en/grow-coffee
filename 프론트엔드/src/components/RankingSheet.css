@@ -58,6 +58,17 @@
   color: var(--pastel-text-muted);
 }
 
+.ranking-sheet__error {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(180, 35, 24, 0.08);
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .ranking-sheet__status {
   margin: 24px 0;
   text-align: center;

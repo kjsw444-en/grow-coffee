@@ -21,9 +21,9 @@ export const PASSIVE_DISPLAY_TICK_MS = 250;
 /** 성장률 React 반영 최소 간격(ms) — 과도한 리렌더 방지 */
 export const DISPLAY_GROWTH_COMMIT_MS = 200;
 /** 커피나무 성장률 표시 — 물주기 25% 단위라 정수만 */
-export const TREE_GROWTH_DISPLAY_DECIMALS = 0;
+export const TREE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 방치 커피 게이지 표시 소수 자릿수 */
-export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 5;
+export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 
@@ -39,7 +39,7 @@ export const WATERING_CAN_SRC = '/images/plant/watering-can.png?v=11';
 export const CAT_BUTTON_SRC = '/images/cat-button.png?v=5';
 export const CAT_BUTTON_PRESSED_SRC = '/images/cat-button-pressed.png?v=1';
 /** 커피마시기 단계(100%) — 커피 종류별 영상 (이미지와 슬러그로 매칭) */
-export { COFFEE_VARIANTS, type CoffeeVariant, type CoffeeVariantSlug } from './coffeeVariants';
+export { COFFEE_DRINK_LINES, COFFEE_VARIANTS, type CoffeeDrinkLine, type CoffeeDrinkLineId, type CoffeeVariant, type CoffeeVariantGender, type CoffeeVariantSlug } from './coffeeVariants';
 import { COFFEE_VARIANTS } from './coffeeVariants';
 
 export const DRINK_VIDEO_SOURCES = COFFEE_VARIANTS.map((variant) => variant.video);

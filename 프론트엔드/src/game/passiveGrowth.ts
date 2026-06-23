@@ -14,8 +14,6 @@ export const DEFAULT_BALANCE_RULES: BalanceRules = {
   dailyPassiveGrowthCap: DAILY_PASSIVE_GROWTH_CAP,
 };
 
-export const PASSIVE_GROWTH_RESET_NOTE = '방치 커피는 20분(100%)마다 받기 · 하루 2잔 · 재활성(광고)은 하루 1회';
-
 export function roundGrowth(value: number) {
   return Math.round(value * 1e7) / 1e7;
 }
@@ -38,17 +36,6 @@ export function repairGrowthAccrualSyncedAt(raw: {
   }
 
   return parsed.toISOString();
-}
-
-export function computePassiveDisplayGrowth(
-  state: Pick<
-    import('./types').GameState,
-    'growth' | 'dailyPassiveGrowth' | 'growthAccrualSyncedAt' | 'redeemed' | 'passiveDayKey'
-  >,
-  _rules: BalanceRules = DEFAULT_BALANCE_RULES,
-  _now = Date.now(),
-) {
-  return roundGrowth(Math.min(100, Math.max(0, state.growth)));
 }
 
 export function getPassiveDayKey(date = new Date()) {
@@ -78,7 +65,13 @@ export function normalizePassiveQuota(
   const passiveCoffeesClaimed = Math.max(0, Math.floor(state.passiveCoffeesClaimed ?? 0));
 
   if (!dayKey) {
-    return { passiveDayKey: today, dailyPassiveGrowth, passiveCoffeesClaimed };
+    return {
+      passiveDayKey: today,
+      dailyPassiveGrowth: roundGrowth(
+        Math.min(dailyPassiveGrowth, getPassiveGrowthAccrualCap(passiveCoffeesClaimed)),
+      ),
+      passiveCoffeesClaimed,
+    };
   }
 
   if (dayKey !== today) {
@@ -87,19 +80,38 @@ export function normalizePassiveQuota(
 
   return {
     passiveDayKey: today,
-    dailyPassiveGrowth,
+    dailyPassiveGrowth: roundGrowth(
+      Math.min(dailyPassiveGrowth, getPassiveGrowthAccrualCap(passiveCoffeesClaimed)),
+    ),
     passiveCoffeesClaimed,
   };
 }
 
-/** 방치 누적 — 성장 게이지 100%·마시기와 별도, 일일 캡까지 계속 */
+/** 현재 잔 충전 상한 — 0잔 받음→100%, 1잔 받음→200%, 2잔 완료→더 이상 없음 */
+export function getPassiveGrowthAccrualCap(
+  passiveCoffeesClaimed = 0,
+  dailyCap = DAILY_PASSIVE_GROWTH_CAP,
+) {
+  const maxCups = Math.max(1, Math.floor(dailyCap / 100));
+  const claimed = Math.min(maxCups, Math.max(0, Math.floor(passiveCoffeesClaimed)));
+
+  if (claimed >= maxCups) {
+    return roundGrowth(claimed * 100);
+  }
+
+  return Math.min(dailyCap, (claimed + 1) * 100);
+}
+
+/** 방치 누적 — 현재 잔 100%까지만, 받기 후 다음 잔 충전 */
 export function canAccruePassiveGrowth(
   _growth: number,
   redeemed: boolean,
   dailyPassiveGrowth = 0,
   dailyCap = DAILY_PASSIVE_GROWTH_CAP,
+  passiveCoffeesClaimed = 0,
 ) {
-  return !redeemed && dailyPassiveGrowth < dailyCap;
+  const accrualCap = getPassiveGrowthAccrualCap(passiveCoffeesClaimed, dailyCap);
+  return !redeemed && dailyPassiveGrowth < accrualCap;
 }
 
 export function getPassiveGrowthDelta({
@@ -130,12 +142,21 @@ export function getPassiveGrowthDelta({
 export function computePassivePreviewDeltas(
   state: Pick<
     import('./types').GameState,
-    'growth' | 'dailyPassiveGrowth' | 'growthAccrualSyncedAt' | 'redeemed' | 'passiveDayKey'
+    | 'growth'
+    | 'dailyPassiveGrowth'
+    | 'passiveCoffeesClaimed'
+    | 'growthAccrualSyncedAt'
+    | 'redeemed'
+    | 'passiveDayKey'
   >,
   rules: BalanceRules,
   now = Date.now(),
 ) {
   const passiveQuota = normalizePassiveQuota(state);
+  const accrualCap = getPassiveGrowthAccrualCap(
+    passiveQuota.passiveCoffeesClaimed,
+    rules.dailyPassiveGrowthCap,
+  );
 
   if (
     !canAccruePassiveGrowth(
@@ -143,6 +164,7 @@ export function computePassivePreviewDeltas(
       state.redeemed,
       passiveQuota.dailyPassiveGrowth,
       rules.dailyPassiveGrowthCap,
+      passiveQuota.passiveCoffeesClaimed,
     )
   ) {
     return { quotaDelta: 0, growthDelta: 0 };
@@ -158,21 +180,9 @@ export function computePassivePreviewDeltas(
     elapsedMs,
     baseRatePerSecond: rules.passiveGrowthPerSecond,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
-    dailyCap: rules.dailyPassiveGrowthCap,
+    dailyCap: accrualCap,
     redeemed: state.redeemed,
   });
-}
-
-/** @deprecated growth 게이지 미리보기만 — computePassivePreviewDeltas 사용 */
-export function computePassivePreviewDelta(
-  state: Pick<
-    import('./types').GameState,
-    'growth' | 'dailyPassiveGrowth' | 'growthAccrualSyncedAt' | 'redeemed' | 'passiveDayKey'
-  >,
-  rules: BalanceRules,
-  now = Date.now(),
-) {
-  return computePassivePreviewDeltas(state, rules, now).growthDelta;
 }
 
 export function computePassiveQuotaPreview(
@@ -214,10 +224,10 @@ export function mergePassiveQuotaFromServer(
   const incomingReactivate = String(incoming.passiveReactivateDayKey || '');
 
   const incomingIsFreshReset =
+    incomingQ.passiveDayKey &&
+    incomingQ.passiveDayKey !== localQ.passiveDayKey &&
     incomingQ.passiveCoffeesClaimed === 0 &&
-    incomingQ.dailyPassiveGrowth === 0 &&
-    !incomingReactivate &&
-    (localQ.passiveCoffeesClaimed > 0 || localQ.dailyPassiveGrowth > 0);
+    incomingQ.dailyPassiveGrowth === 0;
 
   if (incomingIsFreshReset) {
     return {
@@ -231,8 +241,7 @@ export function mergePassiveQuotaFromServer(
   return {
     passiveDayKey: incomingQ.passiveDayKey || localQ.passiveDayKey,
     dailyPassiveGrowth:
-      incomingQ.passiveCoffeesClaimed > localQ.passiveCoffeesClaimed ||
-      incomingQ.dailyPassiveGrowth < localQ.dailyPassiveGrowth
+      incomingQ.passiveCoffeesClaimed > localQ.passiveCoffeesClaimed
         ? incomingQ.dailyPassiveGrowth
         : roundGrowth(Math.max(localQ.dailyPassiveGrowth, incomingQ.dailyPassiveGrowth)),
     passiveCoffeesClaimed: Math.max(localQ.passiveCoffeesClaimed, incomingQ.passiveCoffeesClaimed),
@@ -252,7 +261,7 @@ export function getPassiveCupStats(
   const maxCups = Math.max(1, Math.floor(dailyCap / 100));
   const claimedCups = Math.min(maxCups, Math.max(0, Math.floor(passiveCoffeesClaimed)));
   const unclaimedGrowth = roundGrowth(Math.max(0, dailyPassiveGrowth - claimedCups * 100));
-  const claimableCups = Math.min(maxCups - claimedCups, Math.floor(unclaimedGrowth / 100));
+  const claimableCups = unclaimedGrowth >= 100 ? Math.min(1, maxCups - claimedCups) : 0;
   const canClaim = claimableCups >= 1;
   const chargingPercent = roundGrowth(Math.min(100, unclaimedGrowth));
   const complete = claimedCups >= maxCups;
@@ -301,10 +310,45 @@ export function getPassiveUiStats(
   );
 }
 
-export function buildPassiveCoffeeClaim(state: import('./types').GameState) {
+/** 성장 패널 하단 — 한 줄 요약 */
+export function formatPassivePanelHint(
+  stats: ReturnType<typeof getPassiveUiStats>,
+  passiveGrowthPerSecond: number,
+) {
+  const { cupsReceived, maxCups, cupFillPercent, canClaim, complete, canReactivate } = stats;
+
+  if (canClaim) {
+    return `방치 커피 ${cupsReceived}/${maxCups}잔 · 100% · 받기 가능`;
+  }
+
+  if (complete && canReactivate) {
+    return `방치 커피 ${maxCups}/${maxCups}잔 · 재활성하면 다시 충전`;
+  }
+
+  if (complete) {
+    return `방치 커피 ${maxCups}/${maxCups}잔 · 오늘 수령 완료`;
+  }
+
+  const parts = [`방치 커피 ${cupsReceived}/${maxCups}잔`, `${cupFillPercent.toFixed(1)}%`];
+
+  if (cupFillPercent < 100 && passiveGrowthPerSecond > 0) {
+    const remaining = 100 - cupFillPercent;
+    const seconds = Math.ceil(remaining / passiveGrowthPerSecond);
+    if (seconds > 0) {
+      parts.push(seconds < 60 ? `약 ${seconds}초 후 1잔` : `약 ${Math.ceil(seconds / 60)}분 후 1잔`);
+    }
+  }
+
+  return parts.join(' · ');
+}
+
+export function buildPassiveCoffeeClaim(
+  state: import('./types').GameState,
+  rules: BalanceRules = DEFAULT_BALANCE_RULES,
+) {
   const passiveQuota = normalizePassiveQuota(state);
   const current = { ...state, ...passiveQuota };
-  const previewDaily = computePassiveQuotaPreview(current, DEFAULT_BALANCE_RULES);
+  const previewDaily = computePassiveQuotaPreview(current, rules);
 
   if (current.redeemed) {
     return { ok: false as const, reason: 'already-redeemed' as const, state: current };
@@ -313,7 +357,7 @@ export function buildPassiveCoffeeClaim(state: import('./types').GameState) {
   const stats = getPassiveCupStats(
     previewDaily,
     current.passiveCoffeesClaimed,
-    DEFAULT_BALANCE_RULES.dailyPassiveGrowthCap,
+    rules.dailyPassiveGrowthCap,
     current.passiveReactivateDayKey,
   );
 
@@ -329,7 +373,7 @@ export function buildPassiveCoffeeClaim(state: import('./types').GameState) {
       ...current,
       passiveCoffeesClaimed: current.passiveCoffeesClaimed + 1,
       totalCoffees: current.totalCoffees + 1,
-      dailyPassiveGrowth: roundGrowth(Math.max(0, previewDaily - 100)),
+      dailyPassiveGrowth: roundGrowth(previewDaily),
       growthAccrualSyncedAt: now,
     },
     lastEarned: 1,
@@ -381,6 +425,7 @@ export function accrueClientPassivePreview(
     import('./types').GameState,
     | 'growth'
     | 'dailyPassiveGrowth'
+    | 'passiveCoffeesClaimed'
     | 'growthAccrualSyncedAt'
     | 'redeemed'
     | 'passiveDayKey'

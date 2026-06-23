@@ -25,6 +25,7 @@ type GrowthPanelProps = {
   claimingPassiveCoffee?: boolean;
   reactivatingPassiveCoffee?: boolean;
   claimSyncBlocked?: boolean;
+  reactivateSyncBlocked?: boolean;
   passiveClaimFeedback?: { tone: 'error' | 'success'; text: string } | null;
   waterHint?: string | null;
   passiveHint?: string | null;
@@ -48,6 +49,7 @@ function GrowthPanelComponent({
   claimingPassiveCoffee = false,
   reactivatingPassiveCoffee = false,
   claimSyncBlocked = false,
+  reactivateSyncBlocked = false,
   passiveClaimFeedback = null,
   waterHint,
   passiveHint,
@@ -59,7 +61,7 @@ function GrowthPanelComponent({
   sellDisabled = false,
   sellPending = false,
 }: GrowthPanelProps) {
-  const labelGrowth = percentGrowth ?? growth;
+  const labelGrowth = isWatering ? growth : (percentGrowth ?? growth);
   const stage = getStage(labelGrowth);
   const barWidth = Math.min(100, Math.max(0, growth));
   const barLive = Boolean(isWatering);
@@ -72,8 +74,9 @@ function GrowthPanelComponent({
   const passivePulse =
     passiveCoffee &&
     ((passiveCoffee.canClaim && !claimingPassiveCoffee && !claimSyncBlocked) ||
-      (passiveCoffee.canReactivate && !reactivatingPassiveCoffee));
+      (passiveCoffee.canReactivate && !reactivatingPassiveCoffee && !reactivateSyncBlocked));
   const passiveClaimDisabled = claimingPassiveCoffee || claimSyncBlocked;
+  const passiveReactivateDisabled = reactivatingPassiveCoffee || reactivateSyncBlocked;
 
   return (
     <section className="growth-panel">
@@ -130,8 +133,8 @@ function GrowthPanelComponent({
             {passiveCoffee.canReactivate && onReactivatePassiveCoffee && (
               <button
                 type="button"
-                className={`growth-panel__passive-claim growth-panel__passive-claim--reactivate${reactivatingPassiveCoffee ? ' growth-panel__passive-claim--claiming' : ''}${passivePulse ? ' growth-panel__passive-claim--pulse' : ''}`}
-                disabled={reactivatingPassiveCoffee}
+                className={`growth-panel__passive-claim growth-panel__passive-claim--reactivate${reactivatingPassiveCoffee ? ' growth-panel__passive-claim--claiming' : ''}${passivePulse ? ' growth-panel__passive-claim--pulse' : ''}${reactivateSyncBlocked && !reactivatingPassiveCoffee ? ' growth-panel__passive-claim--blocked' : ''}`}
+                disabled={passiveReactivateDisabled}
                 onClick={onReactivatePassiveCoffee}
               >
                 {reactivatingPassiveCoffee ? '재활성 중…' : '재활성'}
@@ -171,7 +174,11 @@ function GrowthPanelComponent({
 
       <div className="growth-panel__head">
         <span className="growth-panel__label">커피나무 성장률</span>
-        <span className="growth-panel__percent">{formatTreeGrowthPercent(labelGrowth)}</span>
+        <span
+          className={`growth-panel__percent${barLive ? ' growth-panel__percent--live' : ''}`}
+        >
+          {formatTreeGrowthPercent(labelGrowth)}
+        </span>
       </div>
       <div className="growth-panel__bar">
         <div

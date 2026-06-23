@@ -61,6 +61,16 @@ npm run dev
 
 헬스체크: http://localhost:8787/api/health
 
+## 테스트
+
+```bash
+npm run test
+```
+
+방치 커피·물주기 쿼터·공유 리워드 로직을 `scripts/test-*.mjs`로 검증합니다.
+
+> **참고:** 예전에 `backend/`와 `백엔드/`가 Git에 중복 등록되어 있었습니다. 현재는 **`백엔드/`만** 유지합니다.
+
 ## Supabase
 
 1. **새** Supabase 프로젝트 (goldcat DB 재사용 ❌)

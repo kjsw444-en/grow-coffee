@@ -1,4 +1,5 @@
 import type { GameState } from './types';
+import { getRefillActionLabel, isCoffeeStage } from './utils';
 
 export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -99,6 +100,47 @@ export function getWaterStatus(state: GameState) {
 }
 
 export type GrowActionSlot = 'water' | 'ad' | 'drink';
+
+function getGrowHoldActionLabel(growth: number) {
+  return isCoffeeStage(growth) ? '커피 내리기' : '물주기';
+}
+
+/** 성장 패널 — 물주기·내리기·보충 안내 (상태별 한 줄) */
+export function formatWaterPanelHint({
+  growth,
+  readyToDrink,
+  growActionSlot,
+  waterStatus,
+}: {
+  growth: number;
+  readyToDrink: boolean;
+  growActionSlot: GrowActionSlot;
+  waterStatus: ReturnType<typeof getWaterStatus>;
+}) {
+  const refillLabel = getRefillActionLabel(growth);
+  const actionLabel = getGrowHoldActionLabel(growth);
+
+  if (readyToDrink) {
+    if (waterStatus.needsAd) {
+      return `100% · 커피 마신 뒤 「${refillLabel}」 필요`;
+    }
+    return null;
+  }
+
+  if (growActionSlot === 'ad') {
+    return `1회 완료 · 「${refillLabel}」 누르면 ${actionLabel} 이어갈 수 있어요`;
+  }
+
+  if (waterStatus.freeAvailable) {
+    return `오늘 첫 ${actionLabel} · 아래 버튼 꾹 누르기 (+25%)`;
+  }
+
+  if (waterStatus.adWaterCredits > 0) {
+    return `${actionLabel} 가능 · 아래 버튼 꾹 누르기 (+25%)`;
+  }
+
+  return null;
+}
 
 /** 하단 액션 — 마시기 > 광고 > 물주기·내리기 */
 export function getGrowActionSlot({

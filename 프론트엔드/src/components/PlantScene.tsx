@@ -7,12 +7,15 @@ import {
   PLANT_BG_SRC,
 } from '../game/constants';
 import {
-  getActiveCoffeeVariant,
-  getNextCoffeeVariantFallback,
-  preloadCoffeeVariantVideo,
-  type CoffeeVariant,
   type CoffeeVariantSlug,
 } from '../game/coffeeVariants';
+import {
+  getActiveCoffeePlayback,
+  getNextCoffeePlaybackFallback,
+  preloadCoffeePlayback,
+  type CoffeePlayback,
+  type SelectedCoffeeSlug,
+} from '../game/hiddenCoffeeVariants';
 import { getStage, isCoffeeStage, isDrinkStage } from '../game/utils';
 import { CatBonusButton } from './CatBonusButton';
 import { SceneDialogueBox } from './SceneDialogueBox';
@@ -29,8 +32,9 @@ type PlantSceneProps = {
   growth: number;
   /** 성장 게이지용 — 단계 이미지는 plantGrowth 기준 */
   plantGrowth: number;
-  /** 75% 커피·100% 영상 — 선택된 캐릭터 */
-  selectedCoffeeVariant: CoffeeVariantSlug;
+  /** 75% 커피·100% 영상 — 선택된 캐릭터 또는 히든 */
+  selectedCoffeeVariant: SelectedCoffeeSlug;
+  ownedCoffeeVariants: CoffeeVariantSlug[];
   isWatering: boolean;
   isReady: boolean;
   tapBurst: boolean;
@@ -67,6 +71,7 @@ function PlantSceneComponent({
   growth,
   plantGrowth,
   selectedCoffeeVariant,
+  ownedCoffeeVariants,
   isWatering,
   isReady,
   tapBurst,
@@ -113,18 +118,19 @@ function PlantSceneComponent({
   const showDrinkVideo = drinkUiActive && !isHolding;
   const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
   const showCoffeeVariant = isCoffeeStage(plantGrowth) || drinkStage;
-  const storedVariant = useMemo((): CoffeeVariant | null => {
+  const storedPlayback = useMemo((): CoffeePlayback | null => {
     if (!showCoffeeVariant) return null;
-    return getActiveCoffeeVariant(plantGrowth, selectedCoffeeVariant);
-  }, [showCoffeeVariant, plantGrowth, selectedCoffeeVariant]);
-  const [blockedVideoSlugs, setBlockedVideoSlugs] = useState<CoffeeVariantSlug[]>([]);
-  const playbackVariant: CoffeeVariant | null = storedVariant
-    ? blockedVideoSlugs.includes(storedVariant.id)
-      ? getNextCoffeeVariantFallback(storedVariant.id, blockedVideoSlugs) ?? storedVariant
-      : storedVariant
+    return getActiveCoffeePlayback(plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants);
+  }, [showCoffeeVariant, plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants]);
+  const [blockedVideoSlugs, setBlockedVideoSlugs] = useState<SelectedCoffeeSlug[]>([]);
+  const playback: CoffeePlayback | null = storedPlayback
+    ? blockedVideoSlugs.includes(storedPlayback.id)
+      ? getNextCoffeePlaybackFallback(storedPlayback, blockedVideoSlugs, ownedCoffeeVariants) ??
+        storedPlayback
+      : storedPlayback
     : null;
-  const plantImageSrc = coffeeStage && storedVariant ? storedVariant.image : stage.image;
-  const plantImageKey = coffeeStage && storedVariant ? storedVariant.id : stage.min;
+  const plantImageSrc = coffeeStage && storedPlayback ? storedPlayback.image : stage.image;
+  const plantImageKey = coffeeStage && storedPlayback ? storedPlayback.id : stage.min;
   const bgSrc = coffeeStage ? COFFEE_COMPLETE_BG_SRC : PLANT_BG_SRC;
 
   useEffect(() => {
@@ -133,31 +139,34 @@ function PlantSceneComponent({
   }, [plantGrowth]);
 
   useEffect(() => {
-    if (!storedVariant) return;
-    preloadCoffeeVariantVideo(storedVariant);
-  }, [storedVariant]);
+    if (!storedPlayback) return;
+    preloadCoffeePlayback(storedPlayback);
+  }, [storedPlayback]);
 
   useEffect(() => {
-    if (!playbackVariant || playbackVariant.id === storedVariant?.id) return;
-    preloadCoffeeVariantVideo(playbackVariant);
-  }, [playbackVariant, storedVariant?.id]);
+    if (!playback || playback.id === storedPlayback?.id) return;
+    preloadCoffeePlayback(playback);
+  }, [playback, storedPlayback?.id]);
 
-  const drinkVideoSrc = playbackVariant?.video ?? null;
+  const drinkVideoSrc = playback?.video ?? null;
   const showWateringCan =
     isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showAdSlot;
 
-  const markVideoBroken = useCallback((variant: CoffeeVariant | null) => {
-    if (!variant) return;
-    setBlockedVideoSlugs((prev) => {
-      if (prev.includes(variant.id)) return prev;
-      const next = [...prev, variant.id];
-      const fallback = getNextCoffeeVariantFallback(variant.id, next);
-      if (fallback) {
-        preloadCoffeeVariantVideo(fallback);
-      }
-      return next;
-    });
-  }, []);
+  const markVideoBroken = useCallback(
+    (current: CoffeePlayback | null) => {
+      if (!current) return;
+      setBlockedVideoSlugs((prev) => {
+        if (prev.includes(current.id)) return prev;
+        const next = [...prev, current.id];
+        const fallback = getNextCoffeePlaybackFallback(current, next, ownedCoffeeVariants);
+        if (fallback) {
+          preloadCoffeePlayback(fallback);
+        }
+        return next;
+      });
+    },
+    [ownedCoffeeVariants],
+  );
 
   useEffect(() => {
     if (showDrinkVideo && !wasDrinkStageRef.current) {
@@ -239,7 +248,7 @@ function PlantSceneComponent({
     const onCanPlayThrough = () => startOnce();
     const onError = () => {
       if (cancelled) return;
-      markVideoBroken(playbackVariant);
+      markVideoBroken(playback);
     };
 
     video.addEventListener('loadeddata', onLoadedData);
@@ -260,7 +269,7 @@ function PlantSceneComponent({
       video.removeEventListener('error', onError);
       video.pause();
     };
-  }, [showDrinkVideo, drinkVideoSrc, playbackVariant, markVideoBroken, playDrinkVideo]);
+  }, [showDrinkVideo, drinkVideoSrc, playback, markVideoBroken, playDrinkVideo]);
 
   return (
     <section className="plant-scene">
@@ -315,13 +324,13 @@ function PlantSceneComponent({
           {!showDrinkVideo && (
             <div
               className={`plant-scene__plant-slot${coffeeStage ? ' plant-scene__plant-slot--coffee' : ''}`}
-              aria-label={`성장 단계: ${storedVariant?.label ?? stage.label}`}
+              aria-label={`성장 단계: ${storedPlayback?.label ?? stage.label}`}
             >
               <img
                 key={plantImageKey}
                 className="plant-scene__plant-visual plant-scene__plant-img"
                 src={plantImageSrc}
-                alt={`${storedVariant?.label ?? stage.label} 커피`}
+                alt={`${storedPlayback?.label ?? stage.label} 커피`}
               />
             </div>
           )}

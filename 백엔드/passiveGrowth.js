@@ -8,19 +8,44 @@ export function roundGrowth(value) {
   return Math.round(Number(value) * 1e7) / 1e7
 }
 
+/** 현재 잔 충전 상한 — 받기 전에는 100%에서 멈춤 */
+export function getPassiveGrowthAccrualCap(
+  passiveCoffeesClaimed = 0,
+  dailyCap = DAILY_PASSIVE_GROWTH_CAP,
+) {
+  const maxCups = Math.max(1, Math.floor(dailyCap / 100))
+  const claimed = Math.min(maxCups, Math.max(0, Math.floor(passiveCoffeesClaimed)))
+
+  if (claimed >= maxCups) {
+    return roundGrowth(claimed * 100)
+  }
+
+  return Math.min(dailyCap, (claimed + 1) * 100)
+}
+
 export function normalizePassiveQuota(raw) {
   const today = getPassiveDayKey()
   const dayKey = String(raw?.passiveDayKey || '')
-  const dailyPassiveGrowth = roundGrowth(Math.max(0, Number(raw?.dailyPassiveGrowth ?? 0)))
+  let dailyPassiveGrowth = roundGrowth(Math.max(0, Number(raw?.dailyPassiveGrowth ?? 0)))
   const passiveCoffeesClaimed = Math.max(0, Math.floor(Number(raw?.passiveCoffeesClaimed ?? 0)))
 
   if (!dayKey) {
-    return { passiveDayKey: today, dailyPassiveGrowth, passiveCoffeesClaimed }
+    return {
+      passiveDayKey: today,
+      dailyPassiveGrowth: roundGrowth(
+        Math.min(dailyPassiveGrowth, getPassiveGrowthAccrualCap(passiveCoffeesClaimed)),
+      ),
+      passiveCoffeesClaimed,
+    }
   }
 
   if (dayKey !== today) {
     return { passiveDayKey: today, dailyPassiveGrowth: 0, passiveCoffeesClaimed: 0 }
   }
+
+  dailyPassiveGrowth = roundGrowth(
+    Math.min(dailyPassiveGrowth, getPassiveGrowthAccrualCap(passiveCoffeesClaimed)),
+  )
 
   return {
     passiveDayKey: today,
@@ -51,20 +76,24 @@ export function parseGrowthAccrualSyncedAt(raw) {
   return new Date(repaired)
 }
 
-/** 방치 누적(dailyPassiveGrowth) — 성장 게이지 100%·마시기와 무관하게 일일 캡까지 계속 */
+/** 방치 누적 — 현재 잔 100%까지만, 받기 후 다음 잔 충전 */
 export function canAccruePassiveGrowth(state) {
   const passive = normalizePassiveQuota(state)
+  const accrualCap = getPassiveGrowthAccrualCap(passive.passiveCoffeesClaimed)
 
-  return !state.redeemed && passive.dailyPassiveGrowth < DAILY_PASSIVE_GROWTH_CAP
+  return !state.redeemed && passive.dailyPassiveGrowth < accrualCap
 }
 
 export function calculatePassiveGrowthDelta({
   from,
   to,
   dailyPassiveGrowth,
+  passiveCoffeesClaimed = 0,
   redeemed,
 }) {
-  if (redeemed || dailyPassiveGrowth >= DAILY_PASSIVE_GROWTH_CAP) {
+  const accrualCap = getPassiveGrowthAccrualCap(passiveCoffeesClaimed)
+
+  if (redeemed || dailyPassiveGrowth >= accrualCap) {
     return { quotaDelta: 0, growthDelta: 0 }
   }
 
@@ -77,7 +106,7 @@ export function calculatePassiveGrowthDelta({
 
   const seconds = (toMs - fromMs) / 1000
   const raw = seconds * PASSIVE_GROWTH_PER_SECOND
-  const roomInDaily = Math.max(0, DAILY_PASSIVE_GROWTH_CAP - dailyPassiveGrowth)
+  const roomInDaily = Math.max(0, accrualCap - dailyPassiveGrowth)
   const quotaDelta = roundGrowth(Math.min(raw, roomInDaily))
 
   return { quotaDelta, growthDelta: 0 }
@@ -92,31 +121,7 @@ export function settlePassiveGrowth(state, now = new Date()) {
     from: syncedAt,
     to: now,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
-    redeemed: current.redeemed,
-  })
-
-  return {
-    ...current,
-    ...passiveQuota,
-    dailyPassiveGrowth: roundGrowth(passiveQuota.dailyPassiveGrowth + quotaDelta),
-    growthAccrualSyncedAt: now.toISOString(),
-  }
-}
-
-/** 방치 시간·일일 캡만 갱신 — growth 수치는 물주기(+25%)로만 변경 */
-export function syncPassiveQuota(state, now = new Date()) {
-  const current = {
-    ...state,
-    growth: roundGrowth(state?.growth ?? 0),
-    redeemed: Boolean(state?.redeemed),
-  }
-  const passiveQuota = normalizePassiveQuota(current)
-  const syncedAt = parseGrowthAccrualSyncedAt(current)
-
-  const { quotaDelta } = calculatePassiveGrowthDelta({
-    from: syncedAt,
-    to: now,
-    dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
+    passiveCoffeesClaimed: passiveQuota.passiveCoffeesClaimed,
     redeemed: current.redeemed,
   })
 
@@ -136,6 +141,7 @@ export function previewPassiveGrowth(state, now = new Date()) {
     from: syncedAt,
     to: now,
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
+    passiveCoffeesClaimed: passiveQuota.passiveCoffeesClaimed,
     redeemed: state.redeemed,
   })
 

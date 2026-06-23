@@ -213,7 +213,7 @@
 .growth-panel__passive-gauge-percent {
   flex-shrink: 0;
   min-width: 5.8em;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   color: #6a8a58;
   text-align: right;
@@ -307,6 +307,8 @@
 }
 
 .growth-panel__percent {
+  flex-shrink: 0;
+  min-width: 5.5em;
   font-size: 24px;
   font-weight: 800;
   line-height: 1;
@@ -314,6 +316,11 @@
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+  text-align: right;
+}
+
+.growth-panel__percent--live {
+  color: #c4a574;
 }
 
 .growth-panel__bar {

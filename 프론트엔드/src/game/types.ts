@@ -1,4 +1,5 @@
 import type { CoffeeVariantSlug } from './coffeeVariants';
+import type { SelectedCoffeeSlug } from './hiddenCoffeeVariants';
 
 export type GameState = {
   growth: number;
@@ -14,7 +15,7 @@ export type GameState = {
   dailyPassiveGrowth: number;
   /** 오늘 방치 커피 받기로 수령한 잔 수 (0~2) */
   passiveCoffeesClaimed: number;
-  selectedCoffeeVariant: CoffeeVariantSlug;
+  selectedCoffeeVariant: SelectedCoffeeSlug;
   ownedCoffeeVariants: CoffeeVariantSlug[];
   /** 상점에서 비운 커피잔 누적 — 랭킹 기준 */
   spentCoffeeCups: number;

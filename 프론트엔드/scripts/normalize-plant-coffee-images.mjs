@@ -26,6 +26,16 @@ const COFFEE_ASSET_MAP = {
   'plant-coffee-chic-vanilla-latte.png': '02a7c28d',
 };
 
+/** 남성 6종 — 원본 준비 후 UUID 조각 추가
+ * plant-coffee-m-parttime-latte.png
+ * plant-coffee-m-student-coldbrew.png
+ * plant-coffee-m-blonde-hazelnut.png
+ * plant-coffee-m-dolce-latte.png
+ * plant-coffee-m-sexy-americano.png
+ * plant-coffee-m-chic-vanilla-latte.png
+ */
+const MALE_COFFEE_ASSET_MAP = {};
+
 function isOuterBackground(r, g, b) {
   return r <= BLACK_THRESHOLD && g <= BLACK_THRESHOLD && b <= BLACK_THRESHOLD;
 }

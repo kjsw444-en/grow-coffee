@@ -33,8 +33,8 @@ import {
 } from './constants';
 import {
   normalizeOwnedCoffeeVariants,
-  normalizeSelectedCoffeeVariant,
 } from './coffeeVariants';
+import { normalizeSelectedCoffeeVariant } from './hiddenCoffeeVariants';
 import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
@@ -63,6 +63,7 @@ import {
   buildResetState,
   canAccruePassiveGrowth,
   DEFAULT_BALANCE_RULES,
+  getPassiveGrowthAccrualCap,
   getPassiveCupStats,
   getPassiveUiStats,
   repairGrowthAccrualSyncedAt,
@@ -80,6 +81,7 @@ import {
   grantAdWaterCredit,
   mergeWaterQuotaFromServer,
   needsAdForWater,
+  normalizeWaterQuota,
   withNormalizedQuota,
 } from './waterQuota';
 import { usePassiveGrowthTick } from './usePassiveGrowthTick';
@@ -163,6 +165,7 @@ export function useCoffeeGame() {
   const [isDrinkCommitting, setIsDrinkCommitting] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+  const [connectionWarning, setConnectionWarning] = useState<string | null>(null);
   const [claimingPassiveCoffee, setClaimingPassiveCoffee] = useState(false);
   const [passiveClaimFeedback, setPassiveClaimFeedback] = useState<{
     tone: 'error' | 'success';
@@ -328,17 +331,18 @@ export function useCoffeeGame() {
   const beginPassiveClaimUi = useCallback(() => {
     releasePassiveClaimUi();
     claimingPassiveRef.current = true;
-    syncingRef.current = true;
     setClaimingPassiveCoffee(true);
-    setActionSyncing(true);
     passiveClaimSafetyTimerRef.current = setTimeout(() => {
+      if (!claimingPassiveRef.current) return;
       passiveClaimSafetyTimerRef.current = null;
       releasePassiveClaimUi();
       setPassiveClaimFeedback({
         tone: 'error',
-        text: '백엔드(8787)에 연결되지 않아요. 백엔드 npm run dev 실행 후 Ctrl+Shift+R 새로고침해 주세요.',
+        text: import.meta.env.DEV
+          ? '요청이 멈췄어요. 백엔드 npm run dev 실행 후 Ctrl+Shift+R 새로고침해 주세요.'
+          : '요청이 멈췄어요. 네트워크 확인 후 다시 시도해 주세요.',
       });
-    }, 11000);
+    }, 13000);
   }, [releasePassiveClaimUi]);
 
   const applyStateWithPreview = useCallback(
@@ -373,12 +377,14 @@ export function useCoffeeGame() {
         applyAuthoritativeState(next.state);
       }
       if (next.source === 'mock') {
-        setError(
+        setConnectionWarning(
           next.connectionError
-            ? `서버 연결 실패: ${next.connectionError}`
-            : '백엔드 서버를 실행해 주세요.',
+            ? `서버 연결 실패 · 오프라인으로 플레이 중 (${next.connectionError})`
+            : '오프라인 모드 · 진행은 이 기기에만 저장돼요',
         );
+        setError(null);
       } else {
+        setConnectionWarning(null);
         setError(null);
       }
     },
@@ -832,8 +838,12 @@ export function useCoffeeGame() {
     }
 
     const stats = getPassiveUiStats(prev, balanceRulesRef.current);
-    if (stats.complete && !stats.canReactivate) {
-      showSceneDialogue('오늘 방치 커피는 모두 받았어요.');
+    if (stats.complete) {
+      showSceneDialogue(
+        stats.canReactivate
+          ? '방치 커피 2/2 · 재활성 후 다시 충전할 수 있어요.'
+          : '오늘 방치 커피는 모두 받았어요.',
+      );
       return;
     }
 
@@ -866,7 +876,7 @@ export function useCoffeeGame() {
     const next = {
       ...prev,
       dailyPassiveGrowth: Math.min(
-        DAILY_PASSIVE_GROWTH_CAP,
+        getPassiveGrowthAccrualCap(prev.passiveCoffeesClaimed, DAILY_PASSIVE_GROWTH_CAP),
         prev.dailyPassiveGrowth + 100,
       ),
       growthAccrualSyncedAt: new Date().toISOString(),
@@ -1021,7 +1031,13 @@ export function useCoffeeGame() {
   const claimShareReward = useCallback(
     async (onMessage?: (message: string) => void) => {
       const currentSession = sessionRef.current;
-      if (!currentSession?.userId || sharingReward || syncingRef.current) {
+      if (sharingReward) {
+        return '공유를 처리하는 중이에요…';
+      }
+      if (syncingRef.current) {
+        return '다른 동작을 처리 중이에요. 잠시 후 다시 시도해 주세요.';
+      }
+      if (!currentSession?.userId) {
         return shareRewardStatusMessage({
           status: 'unsupported',
           message: '백엔드 서버를 실행해 주세요.',
@@ -1078,15 +1094,6 @@ export function useCoffeeGame() {
       claimingPassiveRef.current = false;
     }
 
-    if (syncingRef.current) {
-      setPassiveClaimFeedback({
-        tone: 'error',
-        text: '다른 동작을 처리 중이에요. 잠시 후 다시 시도해 주세요.',
-      });
-      showSceneDialogue('잠시만 기다려 주세요…');
-      return false;
-    }
-
     const epoch = stateEpochRef.current;
     const currentSession = sessionRef.current;
     const before = stateRef.current;
@@ -1104,7 +1111,7 @@ export function useCoffeeGame() {
       return false;
     }
 
-    const preview = buildPassiveCoffeeClaim(before);
+    const preview = buildPassiveCoffeeClaim(before, balanceRulesRef.current);
     if (!preview.ok) {
       const text =
         preview.reason === 'not-ready'
@@ -1346,12 +1353,12 @@ export function useCoffeeGame() {
   usePassiveGrowthTick({
     stateRef,
     balanceRules,
-    isHolding,
     passiveActive: canAccruePassiveGrowth(
       state.growth,
       state.redeemed,
       state.dailyPassiveGrowth,
       balanceRules.dailyPassiveGrowthCap,
+      state.passiveCoffeesClaimed,
     ) && !claimingPassiveCoffee && !reactivatingPassiveCoffee,
     onPassiveUpdate: applyPassiveAccrual,
     onTick: bumpPassiveClock,
@@ -1421,7 +1428,13 @@ export function useCoffeeGame() {
   });
   const showWatchAdButton = growActionSlot === 'ad';
   const passiveActive =
-    canAccruePassiveGrowth(state.growth, state.redeemed, state.dailyPassiveGrowth) &&
+    canAccruePassiveGrowth(
+      state.growth,
+      state.redeemed,
+      state.dailyPassiveGrowth,
+      balanceRules.dailyPassiveGrowthCap,
+      state.passiveCoffeesClaimed,
+    ) &&
     !claimingPassiveCoffee &&
     !reactivatingPassiveCoffee;
 
@@ -1430,6 +1443,7 @@ export function useCoffeeGame() {
     state,
     displayGrowth,
     balanceRules,
+    connectionWarning,
     loading,
     error,
     actionError,

@@ -5,10 +5,11 @@ import './RankingSheet.css';
 type RankingSheetProps = {
   ranking: CoffeeRankingView | null;
   loading?: boolean;
+  error?: string | null;
   onClose: () => void;
 };
 
-export function RankingSheet({ ranking, loading = false, onClose }: RankingSheetProps) {
+export function RankingSheet({ ranking, loading = false, error = null, onClose }: RankingSheetProps) {
   const buttonSound = useButtonSound();
 
   const handleClose = async () => {
@@ -36,6 +37,12 @@ export function RankingSheet({ ranking, loading = false, onClose }: RankingSheet
             </>
           )}
         </p>
+
+        {error && !loading && (
+          <p className="ranking-sheet__error" role="status">
+            {error}
+          </p>
+        )}
 
         {loading || !ranking ? (
           <p className="ranking-sheet__status">랭킹을 불러오는 중...</p>

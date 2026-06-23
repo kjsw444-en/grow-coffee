@@ -2,14 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useGameAudio } from '../audio/useGameAudio';
 import { useButtonSound, useSound } from '../audio/SoundProvider';
 import { ONBOARDING_KEY, MOCK_USER } from '../game/mockData';
-import { formatPassiveCupHint, formatPassiveEtaHint, getPassiveUiStats } from '../game/usePassiveGrowthTick';
-import { DAILY_PASSIVE_GROWTH_CAP, GOAL_AMOUNT, PASSIVE_GROWTH_PER_SECOND, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
-import { DEFAULT_BALANCE_RULES, PASSIVE_GROWTH_RESET_NOTE } from '../game/passiveGrowth';
+import { formatPassivePanelHint, getPassiveUiStats } from '../game/passiveGrowth';
+import { GOAL_AMOUNT, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
+import { formatWaterPanelHint } from '../game/waterQuota';
 import { randomCatNudgeDialogue } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
 import { initInterstitialAds } from '../services/interstitialAd';
 import { initRewardedAds } from '../services/rewardedAd';
-import { formatWon, getRefillActionLabel, isDrinkStage } from '../game/utils';
+import { formatWon, isDrinkStage } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import type { DailyGameId } from '../services/dailyGamePick';
 import type { BonusFeatureView } from '../features/goldcat/BonusFeatureHost';
@@ -63,6 +63,8 @@ export function CoffeeGame() {
   const {
     session,
     state,
+    balanceRules,
+    connectionWarning,
     loading,
     error,
     actionError,
@@ -124,6 +126,7 @@ export function CoffeeGame() {
   const [showRanking, setShowRanking] = useState(false);
   const [coffeeRanking, setCoffeeRanking] = useState<CoffeeRankingView | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
+  const [rankingError, setRankingError] = useState<string | null>(null);
   const [bonusView, setBonusView] = useState<BonusFeatureView>(null);
   const [comicTarget, setComicTarget] = useState<ComicInitialTarget | null>(null);
   const [comicInlineEntry, setComicInlineEntry] = useState(false);
@@ -228,6 +231,7 @@ export function CoffeeGame() {
     play('modalOpen');
     setShowRanking(true);
     setRankingLoading(true);
+    setRankingError(null);
     setCoffeeRanking(
       getCoffeeRanking(state.spentCoffeeCups, session?.displayName ?? MOCK_USER.name),
     );
@@ -241,7 +245,11 @@ export function CoffeeGame() {
       setCoffeeRanking(ranking);
       if (ranking.live) {
         updatePlayerRank(ranking.playerRank);
+      } else if (session?.userId) {
+        setRankingError('실시간 랭킹을 불러오지 못했어요 · 오프라인 미리보기');
       }
+    } catch {
+      setRankingError('랭킹을 불러오지 못했어요 · 오프라인 미리보기');
     } finally {
       setRankingLoading(false);
     }
@@ -309,33 +317,21 @@ export function CoffeeGame() {
     void unlock().then(() => buttonSound());
   }, [buttonSound, sellBatch, unlock]);
 
-  const waterHint = useMemo(() => {
-    const refillLabel = getRefillActionLabel(state.growth);
-    if (readyToDrink) {
-      return waterStatus.needsAd ? `다음 물주기·내리기는 「${refillLabel}」 후 가능` : null;
-    }
-    if (growActionSlot === 'ad') {
-      return `물주기·내리기 1회 사용 · 아래 「${refillLabel}」 필요`;
-    }
-    if (waterStatus.freeAvailable) {
-      return '첫 물주기·내리기 가능';
-    }
-    if (waterStatus.adWaterCredits > 0) {
-      return `${refillLabel} 사용 가능 · 물주기·내리기 가능`;
-    }
-    return null;
-  }, [
-    growActionSlot,
-    readyToDrink,
-    state.growth,
-    waterStatus.adWaterCredits,
-    waterStatus.freeAvailable,
-    waterStatus.needsAd,
-  ]);
+  const waterHint = useMemo(
+    () =>
+      formatWaterPanelHint({
+        growth: state.growth,
+        readyToDrink,
+        growActionSlot,
+        waterStatus,
+      }),
+    [growActionSlot, readyToDrink, state.growth, waterStatus],
+  );
 
   const passiveCupStats = useMemo(
-    () => getPassiveUiStats(state, DEFAULT_BALANCE_RULES),
+    () => getPassiveUiStats(state, balanceRules),
     [
+      balanceRules,
       passiveClock,
       state.dailyPassiveGrowth,
       state.passiveCoffeesClaimed,
@@ -346,28 +342,10 @@ export function CoffeeGame() {
     ],
   );
 
-  const passiveHint = useMemo(() => {
-    const passiveCupHint = formatPassiveCupHint(
-      state.dailyPassiveGrowth,
-      state.passiveCoffeesClaimed,
-      DAILY_PASSIVE_GROWTH_CAP,
-      state.passiveReactivateDayKey,
-    );
-    const passiveEtaHint =
-      passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
-        ? formatPassiveEtaHint(passiveCupStats.cupFillPercent, PASSIVE_GROWTH_PER_SECOND)
-        : null;
-    return [passiveCupHint, passiveEtaHint, PASSIVE_GROWTH_RESET_NOTE].filter(Boolean).join(' · ');
-  }, [
-    passiveActive,
-    passiveClock,
-    passiveCupStats.canClaim,
-    passiveCupStats.complete,
-    passiveCupStats.cupFillPercent,
-    state.dailyPassiveGrowth,
-    state.passiveCoffeesClaimed,
-    state.passiveReactivateDayKey,
-  ]);
+  const passiveHint = useMemo(
+    () => formatPassivePanelHint(passiveCupStats, balanceRules.passiveGrowthPerSecond),
+    [balanceRules.passiveGrowthPerSecond, passiveCupStats],
+  );
 
   const drinkStage = useMemo(
     () => isDrinkStage(isHolding ? state.growth : displayGrowth),
@@ -407,10 +385,16 @@ export function CoffeeGame() {
         <>
           <main className="game__main">
             {actionError && <p className="game__action-error">{actionError}</p>}
+            {connectionWarning && (
+              <p className="game__connection-warning" role="status">
+                {connectionWarning}
+              </p>
+            )}
             <PlantScene
               growth={displayGrowth}
               plantGrowth={isHolding ? state.growth : displayGrowth}
               selectedCoffeeVariant={state.selectedCoffeeVariant}
+              ownedCoffeeVariants={state.ownedCoffeeVariants}
               isWatering={isHolding}
               isReady={readyToDrink}
               tapBurst={tapBurst}
@@ -475,21 +459,19 @@ export function CoffeeGame() {
               onReactivatePassiveCoffee={() => void reactivatePassiveCoffee()}
               claimingPassiveCoffee={claimingPassiveCoffee}
               reactivatingPassiveCoffee={reactivatingPassiveCoffee}
-              claimSyncBlocked={actionSyncing && !claimingPassiveCoffee}
+              claimSyncBlocked={false}
+              reactivateSyncBlocked={actionSyncing && !reactivatingPassiveCoffee}
               passiveClaimFeedback={passiveClaimFeedback}
               waterHint={waterHint}
               passiveHint={passiveHint}
               isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
               isPassivelyAccruing={
-                passiveActive &&
-                !isHolding &&
-                !passiveCupStats.canClaim &&
-                !passiveCupStats.complete
+                passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
               }
               canSellBatch={canSellBatch}
               sellBatchLabel={`${SELL_BATCH_SIZE}잔 판매 (+${formatWon(SELL_BATCH_REWARD)})`}
               onSellBatch={() => void handleSellBatch()}
-              sellDisabled={sellingBatch || isHolding}
+              sellDisabled={sellingBatch || isHolding || actionSyncing}
               sellPending={sellingBatch}
             />
 
@@ -518,7 +500,7 @@ export function CoffeeGame() {
               onShareReward={claimShareReward}
               sharingReward={sharingReward}
               shareRewardAvailable={shareRewardAvailable}
-              disabled={state.redeemed || loading}
+              disabled={state.redeemed || loading || actionSyncing}
             />
           </main>
         </>
@@ -541,6 +523,7 @@ export function CoffeeGame() {
         <RankingSheet
           ranking={coffeeRanking}
           loading={rankingLoading}
+          error={rankingError}
           onClose={() => void closeRanking()}
         />
       )}
