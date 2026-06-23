@@ -5,7 +5,6 @@ import {
   devBumpPassiveGame,
   drinkGame,
   fetchGameState,
-  isBackendConfigured,
   purchaseCoffeeVariant,
   reactivatePassiveCoffeeGame,
   resetGame,
@@ -64,7 +63,6 @@ import {
   canAccruePassiveGrowth,
   DEFAULT_BALANCE_RULES,
   getPassiveGrowthAccrualCap,
-  getPassiveCupStats,
   getPassiveUiStats,
   repairGrowthAccrualSyncedAt,
   roundGrowth,
@@ -102,7 +100,7 @@ function normalizeLoadedState(raw: GameState) {
   );
   const normalized: GameState = {
     ...raw,
-    growth: sanitizeGrowthForWaters(raw.growth ?? 0, totalWaters),
+    growth: sanitizeGrowthForWaters(raw.growth ?? 0),
     money: readCount(raw, 'money', 'money'),
     totalCoffees: readCount(raw, 'totalCoffees', 'total_coffees'),
     totalWaters,
@@ -1056,7 +1054,7 @@ export function useCoffeeGame() {
       try {
         const outcome = await runShareRewardFlow({ onMessage });
 
-        if (outcome.state) {
+        if ('state' in outcome && outcome.state) {
           applyAuthoritativeState(outcome.state, { epoch });
         }
 
@@ -1379,17 +1377,7 @@ export function useCoffeeGame() {
     }
 
     prevPassiveCanClaimRef.current = stats.canClaim;
-  }, [
-    balanceRules,
-    passiveClock,
-    showSceneDialogue,
-    state.dailyPassiveGrowth,
-    state.passiveCoffeesClaimed,
-    state.passiveReactivateDayKey,
-    state.growthAccrualSyncedAt,
-    state.redeemed,
-    state.passiveDayKey,
-  ]);
+  }, [balanceRules, passiveClock, showSceneDialogue, state]);
 
   useEffect(
     () => () => {

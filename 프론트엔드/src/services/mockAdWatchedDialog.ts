@@ -7,6 +7,8 @@
  * 3. .env에 VITE_TOSS_REWARDED_AD_GROUP_ID 설정
  */
 
+import { resolveRewardedAdGroupId } from './adsConfig';
+
 /** true면 항상 「광고 대체창」 확인 창 사용 (토스 앱 실광고 테스트 시 false) */
 export const USE_MOCK_AD_WATCHED_DIALOG = false;
 
@@ -18,8 +20,7 @@ export function shouldUseMockRewardedAd() {
     return true;
   }
 
-  const adGroupId = import.meta.env.VITE_TOSS_REWARDED_AD_GROUP_ID?.trim();
-  return !adGroupId;
+  return !resolveRewardedAdGroupId();
 }
 
 function removeExistingOverlay() {

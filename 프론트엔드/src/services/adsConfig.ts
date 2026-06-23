@@ -8,3 +8,52 @@ export const TEST_REWARDED_AD_GROUP_ID = 'ait-ad-test-rewarded-id';
 export const TEST_INTERSTITIAL_AD_GROUP_ID = 'ait-ad-test-interstitial-id';
 export const TEST_LIST_BANNER_AD_GROUP_ID = 'ait-ad-test-banner-id';
 export const TEST_FEED_BANNER_AD_GROUP_ID = 'ait-ad-test-native-image-id';
+
+export function isTestAdsForced() {
+  return import.meta.env.VITE_TOSS_USE_TEST_ADS === 'true';
+}
+
+/** env → (테스트 강제 시 test fallback) → live fallback */
+export function resolveAdGroupId(
+  envValue: string | undefined,
+  liveFallback: string,
+  testFallback: string,
+) {
+  const configured = envValue?.trim();
+  if (isTestAdsForced()) {
+    return configured || testFallback;
+  }
+  return configured || liveFallback;
+}
+
+export function resolveTextBannerAdGroupId() {
+  return resolveAdGroupId(
+    import.meta.env.VITE_TOSS_TEXT_BANNER_AD_GROUP_ID,
+    LIVE_TEXT_BANNER_AD_GROUP_ID,
+    TEST_LIST_BANNER_AD_GROUP_ID,
+  );
+}
+
+export function resolveImageBannerAdGroupId() {
+  return resolveAdGroupId(
+    import.meta.env.VITE_TOSS_IMAGE_BANNER_AD_GROUP_ID,
+    LIVE_IMAGE_BANNER_AD_GROUP_ID,
+    TEST_FEED_BANNER_AD_GROUP_ID,
+  );
+}
+
+export function resolveRewardedAdGroupId() {
+  return resolveAdGroupId(
+    import.meta.env.VITE_TOSS_REWARDED_AD_GROUP_ID,
+    LIVE_REWARDED_AD_GROUP_ID,
+    TEST_REWARDED_AD_GROUP_ID,
+  );
+}
+
+export function resolveInterstitialAdGroupId() {
+  return resolveAdGroupId(
+    import.meta.env.VITE_TOSS_INTERSTITIAL_AD_GROUP_ID,
+    LIVE_INTERSTITIAL_AD_GROUP_ID,
+    TEST_INTERSTITIAL_AD_GROUP_ID,
+  );
+}

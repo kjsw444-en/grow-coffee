@@ -1,8 +1,5 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
-import {
-  LIVE_INTERSTITIAL_AD_GROUP_ID,
-  TEST_INTERSTITIAL_AD_GROUP_ID,
-} from './adsConfig';
+import { resolveInterstitialAdGroupId } from './adsConfig';
 import { USE_MOCK_AD_WATCHED_DIALOG } from './mockAdWatchedDialog';
 import { showMockInterstitialDialog } from './mockInterstitialDialog';
 
@@ -16,14 +13,7 @@ let loadCleanup: (() => void) | null = null;
 let loadPromise: Promise<boolean> | null = null;
 
 function getInterstitialAdGroupId() {
-  const configured = import.meta.env.VITE_TOSS_INTERSTITIAL_AD_GROUP_ID?.trim();
-  const forceTest = import.meta.env.VITE_TOSS_USE_TEST_ADS === 'true';
-
-  if (forceTest) {
-    return configured || TEST_INTERSTITIAL_AD_GROUP_ID;
-  }
-
-  return configured || LIVE_INTERSTITIAL_AD_GROUP_ID;
+  return resolveInterstitialAdGroupId();
 }
 
 export function shouldUseMockInterstitialAd() {
@@ -31,8 +21,7 @@ export function shouldUseMockInterstitialAd() {
     return true;
   }
 
-  const adGroupId = import.meta.env.VITE_TOSS_INTERSTITIAL_AD_GROUP_ID?.trim();
-  return !adGroupId;
+  return !resolveInterstitialAdGroupId();
 }
 
 export function isInterstitialAdSupported() {

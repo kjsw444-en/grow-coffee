@@ -1,9 +1,7 @@
 import { TossAds } from '@apps-in-toss/web-framework';
 import {
-  LIVE_IMAGE_BANNER_AD_GROUP_ID,
-  LIVE_TEXT_BANNER_AD_GROUP_ID,
-  TEST_FEED_BANNER_AD_GROUP_ID,
-  TEST_LIST_BANNER_AD_GROUP_ID,
+  resolveImageBannerAdGroupId,
+  resolveTextBannerAdGroupId,
 } from './adsConfig';
 
 export type BannerVariant = 'list' | 'feed';
@@ -11,19 +9,7 @@ export type BannerVariant = 'list' | 'feed';
 let tossAdsInitialized = false;
 
 function getBannerAdGroupId(variant: BannerVariant) {
-  const configured =
-    variant === 'list'
-      ? import.meta.env.VITE_TOSS_TEXT_BANNER_AD_GROUP_ID?.trim()
-      : import.meta.env.VITE_TOSS_IMAGE_BANNER_AD_GROUP_ID?.trim();
-  const forceTest = import.meta.env.VITE_TOSS_USE_TEST_ADS === 'true';
-  const liveFallback = variant === 'list' ? LIVE_TEXT_BANNER_AD_GROUP_ID : LIVE_IMAGE_BANNER_AD_GROUP_ID;
-  const testFallback = variant === 'list' ? TEST_LIST_BANNER_AD_GROUP_ID : TEST_FEED_BANNER_AD_GROUP_ID;
-
-  if (forceTest) {
-    return configured || testFallback;
-  }
-
-  return configured || liveFallback;
+  return variant === 'list' ? resolveTextBannerAdGroupId() : resolveImageBannerAdGroupId();
 }
 
 function ensureTossAdsInitialized() {

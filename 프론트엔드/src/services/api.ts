@@ -217,6 +217,7 @@ export type PlayerSession = {
   state?: GameState
   balanceRules?: BalanceRules
   passiveGrowthPreview?: PassiveGrowthPreview
+  connectionError?: string
 }
 
 export type PassiveGrowthPreview = {

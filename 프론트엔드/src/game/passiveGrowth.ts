@@ -193,7 +193,12 @@ export function computePassivePreviewDeltas(
 export function computePassiveQuotaPreview(
   state: Pick<
     import('./types').GameState,
-    'growth' | 'dailyPassiveGrowth' | 'growthAccrualSyncedAt' | 'redeemed' | 'passiveDayKey'
+    | 'growth'
+    | 'dailyPassiveGrowth'
+    | 'passiveCoffeesClaimed'
+    | 'growthAccrualSyncedAt'
+    | 'redeemed'
+    | 'passiveDayKey'
   >,
   rules: BalanceRules = DEFAULT_BALANCE_RULES,
   now = Date.now(),

@@ -22,13 +22,26 @@
 5. **Railway** — 백엔드·DB 운영 배포 ✅
 6. **Toss 연동** — 샌드박스 실기기 로그인 테스트 필요
 
-## 현재 운영 상태
+## 현재 운영 상태 (점검 완료)
 
-- GitHub: `https://github.com/kjsw444-en/grow-coffee.git`
-- Railway API: `https://grow-coffee-production.up.railway.app`
-- Health check: `https://grow-coffee-production.up.railway.app/api/health`
-- 운영 저장소: Supabase (`storageReady: true`)
-- 프론트 검증: `npm run build:vite` 통과, `npm run lint` 오류·경고 0개
+| 항목 | 상태 |
+|------|------|
+| GitHub | `https://github.com/kjsw444-en/grow-coffee.git` · `main` ↔ `origin/main` 동기화 |
+| Railway API | `https://grow-coffee-production.up.railway.app` · health OK |
+| Supabase | `storageReady: true` |
+| 영상 에셋 | `백엔드/public/videos/` 18개 · `/assets/videos/` 제공 |
+| 백엔드 테스트 | passive / water-quota / share-reward 통과 |
+| 프론트 | `npm run lint` · `build:vite` · `test` 통과 |
+| 광고 ID (live) | `.env` 4종 = `adsConfig.ts` fallback과 일치 |
+
+### 광고 ID 매핑
+
+| 용도 | env 변수 | live ID |
+|------|----------|---------|
+| 텍스트 배너 | `VITE_TOSS_TEXT_BANNER_AD_GROUP_ID` | `ait.v2.live.2fe2c692b337425b` |
+| 이미지 배너 | `VITE_TOSS_IMAGE_BANNER_AD_GROUP_ID` | `ait.v2.live.eb8a9681efbe49b5` |
+| 리워드 | `VITE_TOSS_REWARDED_AD_GROUP_ID` | `ait.v2.live.d1a37fcea48c4f83` |
+| 전면 | `VITE_TOSS_INTERSTITIAL_AD_GROUP_ID` | `ait.v2.live.64d34a1ab30647cc` |
 
 ## 빠른 실행 (프론트)
 

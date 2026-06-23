@@ -5,7 +5,7 @@ import { roundGrowth } from './passiveGrowth';
 
 /** growth 0~100% 클램프 — 방치 성장은 물주기 횟수와 무관 */
 
-export function sanitizeGrowthForWaters(growth: number, _totalWaters?: number) {
+export function sanitizeGrowthForWaters(growth: number) {
 
   return roundGrowth(Math.min(100, Math.max(0, growth)));
 
@@ -87,13 +87,7 @@ export const PRE_DRINK_DISPLAY_MAX = 99.9999999;
 
 /** @deprecated 방치는 커피나무 growth와 분리 — authoritativeGrowth만 반환 */
 
-export function previewPassiveDisplayGrowth(
-
-  authoritativeGrowth: number,
-
-  _passivePreviewDelta: number,
-
-) {
+export function previewPassiveDisplayGrowth(authoritativeGrowth: number) {
 
   return roundGrowth(Math.min(100, Math.max(0, authoritativeGrowth)));
 

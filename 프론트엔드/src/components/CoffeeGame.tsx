@@ -330,16 +330,7 @@ export function CoffeeGame() {
 
   const passiveCupStats = useMemo(
     () => getPassiveUiStats(state, balanceRules),
-    [
-      balanceRules,
-      passiveClock,
-      state.dailyPassiveGrowth,
-      state.passiveCoffeesClaimed,
-      state.passiveReactivateDayKey,
-      state.growthAccrualSyncedAt,
-      state.redeemed,
-      state.passiveDayKey,
-    ],
+    [state, balanceRules],
   );
 
   const passiveHint = useMemo(

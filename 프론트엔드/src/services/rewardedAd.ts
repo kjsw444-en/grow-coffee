@@ -1,8 +1,5 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
-import {
-  LIVE_REWARDED_AD_GROUP_ID,
-  TEST_REWARDED_AD_GROUP_ID,
-} from './adsConfig';
+import { resolveRewardedAdGroupId } from './adsConfig';
 import {
   USE_MOCK_AD_WATCHED_DIALOG,
   shouldUseMockRewardedAd,
@@ -21,14 +18,7 @@ let loadCleanup: (() => void) | null = null;
 let loadPromise: Promise<boolean> | null = null;
 
 function getRewardedAdGroupId() {
-  const configured = import.meta.env.VITE_TOSS_REWARDED_AD_GROUP_ID?.trim();
-  const forceTest = import.meta.env.VITE_TOSS_USE_TEST_ADS === 'true';
-
-  if (forceTest) {
-    return configured || TEST_REWARDED_AD_GROUP_ID;
-  }
-
-  return configured || LIVE_REWARDED_AD_GROUP_ID;
+  return resolveRewardedAdGroupId();
 }
 
 export function isRewardedAdSupported() {
