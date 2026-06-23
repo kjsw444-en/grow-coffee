@@ -92,7 +92,7 @@ export function SettingsSheet({
           <div>
             <dt>플레이 기록</dt>
             <dd>
-              물 준 {totalWaters.toLocaleString('ko-KR')}회 · 마신 커피 {totalCoffees}잔
+              물 준 {totalWaters.toLocaleString('ko-KR')}회 · 내린 커피 {totalCoffees}잔
             </dd>
           </div>
         </dl>

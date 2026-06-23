@@ -24,11 +24,11 @@ function GrowthPanelComponent({
   return (
     <section className="growth-panel">
       <div className="growth-panel__coffee-row">
-        <div className="growth-panel__coffee-stat" aria-label={`마신 커피 ${totalCoffees}잔`}>
+        <div className="growth-panel__coffee-stat" aria-label={`내린 커피 ${totalCoffees}잔`}>
           <span className="growth-panel__coffee-icon" aria-hidden="true">
             ☕
           </span>
-          <span className="growth-panel__coffee-label">마신 커피</span>
+          <span className="growth-panel__coffee-label">내린 커피</span>
           <strong className="growth-panel__coffee-count">{totalCoffees.toLocaleString('ko-KR')}잔</strong>
         </div>
         <div className="growth-panel__coffee-stat growth-panel__coffee-stat--emptied" aria-label={`비운 커피잔 ${emptiedCoffeeCups}잔`}>

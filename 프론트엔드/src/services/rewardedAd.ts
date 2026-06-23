@@ -1,5 +1,8 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
-import { showRewardedAd as showMockRewardedAd } from './adBridge';
+import { USE_MOCK_AD_WATCHED_DIALOG, showMockAdWatchedDialog } from './mockAdWatchedDialog';
+
+/** 실광고 사용 시 mockAdWatchedDialog.ts 분기·파일 삭제 (파일 상단 주석 참고) */
+export { USE_MOCK_AD_WATCHED_DIALOG };
 
 const TEST_REWARDED_AD_GROUP_ID = 'ait-ad-test-rewarded-id';
 const LOAD_TIMEOUT_MS = 20000;
@@ -155,8 +158,12 @@ export function initRewardedAds() {
 }
 
 export async function watchRewardedAd(): Promise<boolean> {
+  if (USE_MOCK_AD_WATCHED_DIALOG) {
+    return showMockAdWatchedDialog();
+  }
+
   if (!isRewardedAdSupported()) {
-    return showMockRewardedAd();
+    return showMockAdWatchedDialog();
   }
 
   if (requestInFlight) {
@@ -169,7 +176,7 @@ export async function watchRewardedAd(): Promise<boolean> {
     if (adStatus !== 'loaded') {
       const loaded = await preloadRewardedAd();
       if (!loaded) {
-        return showMockRewardedAd();
+        return showMockAdWatchedDialog();
       }
     }
 
@@ -180,7 +187,7 @@ export async function watchRewardedAd(): Promise<boolean> {
 
     return true;
   } catch {
-    return showMockRewardedAd();
+    return showMockAdWatchedDialog();
   } finally {
     requestInFlight = false;
   }

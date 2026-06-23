@@ -14,7 +14,7 @@ import {
   waterGame,
   type PlayerSession,
 } from '../services/api';
-import { showRewardedAd } from '../services/adBridge';
+import { watchRewardedAd } from '../services/rewardedAd';
 import { initPlayerSession, isTossInApp, loginWithTossSession } from '../services/tossBridge';
 import {
   type HoldMode,
@@ -77,6 +77,11 @@ function normalizeLoadedState(raw: GameState) {
     totalCoffees: readCount(raw, 'totalCoffees', 'total_coffees'),
     totalWaters,
     spentCoffeeCups: readCount(raw, 'spentCoffeeCups', 'spent_coffee_cups'),
+    waterDayKey: String(
+      raw.waterDayKey ?? (raw as GameState & { water_day_key?: string }).water_day_key ?? '',
+    ),
+    watersToday: readCount(raw, 'watersToday', 'waters_today'),
+    adWaterCredits: readCount(raw, 'adWaterCredits', 'ad_water_credits'),
     ownedCoffeeVariants,
     selectedCoffeeVariant: normalizeSelectedCoffeeVariant(
       raw.selectedCoffeeVariant ??
@@ -711,7 +716,7 @@ export function useCoffeeGame() {
     setActionError(null);
 
     try {
-      const watched = await showRewardedAd();
+      const watched = await watchRewardedAd();
       if (!watched) return;
 
       const result = await watchAdGame();
@@ -752,6 +757,8 @@ export function useCoffeeGame() {
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
   const waterStatus = getWaterStatus(state);
   const needsAd = waterStatus.needsAd && !readyToDrink;
+  const showWatchAdButton =
+    needsAd || (!waterStatus.canWater && !readyToDrink && !isReadyToDrinkGrowth(state.growth));
   const passiveActive = canAccruePassiveGrowth(state.growth, state.redeemed);
 
   return {
@@ -780,6 +787,7 @@ export function useCoffeeGame() {
     drinkUiActive,
     isDrinkCommitting,
     needsAd,
+    showWatchAdButton,
     canWater: waterStatus.canWater,
     waterStatus,
     watchingAd,

@@ -32,7 +32,7 @@ export function sceneDialogueForDrink() {
 }
 
 export function sceneDialogueForAdReward() {
-  return formatSceneDialogue('광고를 보고 물주기 기회를 얻었어요!');
+  return formatSceneDialogue('광고를 보고 물주기·내리기 기회를 얻었어요!');
 }
 
 const CAT_NUDGE_DIALOGUES = [
@@ -45,7 +45,7 @@ const CAT_NUDGE_DIALOGUES = [
   '커피냥이 씨앗 키우면 칭찬해 줄 것 같아요!',
   '커피냥이 오늘의 추천 버튼을 눌러보라고 살짝 낚시 중이에요~',
   '커피냥이 커피 상점에 가자고 졸라요! 구매하면 캐릭터가 추가된대요~',
-  '커피냥이 마신 커피로 새 캐릭터를 살 수 있다고 알려줘요!',
+  '커피냥이 내린 커피로 새 캐릭터를 살 수 있다고 알려줘요!',
   '커피냥이 커피를 구매하면 해당 캐릭터가 추가된다고 설명해요~',
   '커피냥이 커피 상점에서 캐릭터를 모아보자고 손짓해요!',
 ] as const;

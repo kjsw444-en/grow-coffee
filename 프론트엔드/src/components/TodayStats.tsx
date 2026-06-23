@@ -19,7 +19,7 @@ export function TodayStats({ totalWaters, totalCoffees, money, lastEarned }: Tod
           <dd>{totalWaters}회</dd>
         </div>
         <div>
-          <dt>마신 커피</dt>
+          <dt>내린 커피</dt>
           <dd>{totalCoffees}잔</dd>
         </div>
         <div>

@@ -37,7 +37,7 @@ export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
             🪙
           </span>
           <div>
-            <p className="user-bar__balance-label">보유 금액</p>
+            <p className="user-bar__balance-label">커피값</p>
             <p className="user-bar__balance">{formatWon(money)}</p>
           </div>
         </div>

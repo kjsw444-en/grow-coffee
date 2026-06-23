@@ -38,6 +38,8 @@ type PlantSceneProps = {
   drinkUiActive: boolean;
   isDrinkCommitting?: boolean;
   needsAd: boolean;
+  showWatchAdButton: boolean;
+  canWater: boolean;
   watchingAd: boolean;
   holdMode: HoldMode;
   isHolding: boolean;
@@ -69,6 +71,8 @@ function PlantSceneComponent({
   drinkUiActive,
   isDrinkCommitting = false,
   needsAd,
+  showWatchAdButton,
+  canWater,
   watchingAd,
   holdMode,
   isHolding,
@@ -96,6 +100,7 @@ function PlantSceneComponent({
   unlockedRef.current = unlocked;
   const stage = getStage(plantGrowth);
   const drinkStage = isDrinkStage(plantGrowth) || isDrinkCommitting;
+  const growHoldDisabled = disabled || showWatchAdButton || !canWater;
   /** 영상은 state 100% + 마시기 준비 + 홀드 종료 후에만 — API 처리 중에도 유지 */
   const showDrinkVideo = drinkUiActive && !isHolding;
   const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
@@ -131,7 +136,7 @@ function PlantSceneComponent({
 
   const drinkVideoSrc = playbackVariant?.video ?? null;
   const showWateringCan =
-    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !needsAd;
+    isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showWatchAdButton;
 
   const markVideoBroken = useCallback((variant: CoffeeVariant | null) => {
     if (!variant) return;
@@ -314,10 +319,10 @@ function PlantSceneComponent({
           )}
           <WateringCanPour active={showWateringCan} progress={holdProgress} />
           <div
-            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${needsAd ? 'plant-scene__action-slot--ad' : ''}`}
+            className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${showWatchAdButton ? 'plant-scene__action-slot--ad' : ''}`}
           >
-            {needsAd ? (
-              <WatchAdButton disabled={disabled} loading={watchingAd} onWatchAd={onWatchAd} />
+            {showWatchAdButton ? (
+              <WatchAdButton disabled={disabled} loading={watchingAd} embedded onWatchAd={onWatchAd} />
             ) : drinkStage ? (
               <button
                 type="button"
@@ -339,7 +344,7 @@ function PlantSceneComponent({
               <WaterHoldCircle
                 embedded
                 growth={growth}
-                disabled={disabled}
+                disabled={growHoldDisabled}
                 holdMode={holdMode}
                 isHolding={isHolding}
                 holdProgress={holdProgress}

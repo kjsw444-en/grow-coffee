@@ -65,7 +65,7 @@ export function CharacterShopSheet({
         <h2 id="character-shop-title">커피 상점</h2>
         <p className="character-shop__notice">커피를 구매하면 해당 캐릭터가 제공됩니다.</p>
         <p className="character-shop__balance">
-          마신 커피 <strong>{availableCups}잔</strong>
+          내린 커피 <strong>{availableCups}잔</strong>
         </p>
 
         <ul className="character-shop__list">

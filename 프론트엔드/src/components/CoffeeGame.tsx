@@ -72,6 +72,8 @@ export function CoffeeGame() {
     drinkUiActive,
     isDrinkCommitting,
     needsAd,
+    showWatchAdButton,
+    canWater,
     watchingAd,
     actionSyncing,
     displayGrowth,
@@ -267,9 +269,9 @@ export function CoffeeGame() {
   const waterHint = readyToDrink
     ? null
     : needsAd
-      ? '오늘 물주기 완료 · 광고로 한 번 더'
+      ? '오늘 무료 성장 완료 · 광고로 한 번 더'
       : waterStatus.freeAvailable
-        ? '오늘 물주기 1회 남음'
+        ? '오늘 물주기·내리기 1회 남음'
         : null;
 
   const passiveHint = passiveActive ? '햇빛이 천천히 성장을 도와줘요' : null;
@@ -320,6 +322,8 @@ export function CoffeeGame() {
               drinkUiActive={drinkUiActive}
               isDrinkCommitting={isDrinkCommitting}
               needsAd={needsAd}
+              showWatchAdButton={showWatchAdButton}
+              canWater={canWater}
               watchingAd={watchingAd}
               holdMode={holdMode}
               isHolding={isHolding}

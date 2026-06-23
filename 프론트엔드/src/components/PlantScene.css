@@ -178,8 +178,9 @@
 }
 
 .plant-scene__action-slot--ad {
-  bottom: 4%;
-  width: calc(100% - 32px);
+  bottom: 2%;
+  width: min(calc(100% - 24px), 168px);
+  z-index: 3;
 }
 
 .plant-scene__frame--water .plant-scene__plant-visual {

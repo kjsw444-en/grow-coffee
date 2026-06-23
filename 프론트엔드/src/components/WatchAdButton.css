@@ -52,3 +52,35 @@
   background: rgba(255, 252, 244, 0.85);
   font-size: 11px;
 }
+
+.watch-ad__label {
+  white-space: nowrap;
+}
+
+.watch-ad--embedded {
+  width: 100%;
+  gap: 0;
+}
+
+.watch-ad--embedded .watch-ad__btn {
+  width: 100%;
+  max-width: none;
+  min-height: 148px;
+  padding: 14px 16px;
+  border-radius: 999px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.watch-ad--embedded .watch-ad__icon {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.watch-ad--embedded .watch-ad__label {
+  font-size: 15px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}

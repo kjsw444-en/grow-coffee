@@ -134,13 +134,13 @@ app.post('/api/game/water', requireUser, async (req, res) => {
     }
 
     const current = await getGameState(req.userId)
-    const result = devBypass ? applyDevTestWater(current) : applyWater(current)
+    const result = applyWater(current)
 
     if (!result.ok) {
       const messages = {
         'already-redeemed': '이미 목표를 달성했어요.',
         'ready-to-drink': '이제 커피를 마실 수 있어요.',
-        'need-ad': '오늘 물주기를 모두 사용했어요. 광고를 보고 다시 물을 주세요.',
+        'need-ad': '오늘 물주기·내리기를 모두 사용했어요. 광고를 보고 다시 시도해 주세요.',
       }
       res.status(400).json({
         ok: false,
@@ -199,7 +199,7 @@ app.post('/api/game/dev/bump', requireUser, async (req, res) => {
   }
 })
 
-/** DEV 전용 — 마신 커피 잔 수 설정 */
+/** DEV 전용 — 내린 커피 잔 수 설정 */
 app.post('/api/game/dev/set-coffees', requireUser, async (req, res) => {
   if (!isDevRequest(req)) {
     res.status(404).json({ ok: false, message: 'Not found' })
@@ -288,7 +288,7 @@ app.post('/api/game/purchase-variant', requireUser, async (req, res) => {
         'invalid-variant': '존재하지 않는 캐릭터예요.',
         'already-free': '기본 캐릭터는 구매할 수 없어요.',
         'already-owned': '이미 보유한 캐릭터예요.',
-        'not-enough-cups': '마신 커피 잔이 부족해요. (100잔 필요)',
+        'not-enough-cups': '내린 커피 잔이 부족해요. (100잔 필요)',
       }
       res.status(400).json({
         ok: false,
