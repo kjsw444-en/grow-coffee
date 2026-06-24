@@ -75,6 +75,34 @@ function mapProfileRow(row) {
   }
 }
 
+function isDuplicateDeviceIdError(error) {
+  const code = String(error?.code ?? '')
+  const message = String(error?.message ?? '')
+  return code === '23505' && message.includes('profiles_device_id_key')
+}
+
+async function fetchProfileByDeviceId(supabase, deviceId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, source')
+    .eq('device_id', deviceId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+async function discardOrphanAuthUser(supabase, userId) {
+  try {
+    await supabase.auth.admin.deleteUser(userId)
+  } catch {
+    // race loser cleanup — best effort
+  }
+}
+
 function mapGameRow(row) {
   return sanitizeLoadedGameState({
     growth: row.growth,
@@ -299,6 +327,13 @@ export async function resolveGuestSession(deviceId, displayName) {
   })
 
   if (profileError) {
+    if (isDuplicateDeviceIdError(profileError)) {
+      const raced = await fetchProfileByDeviceId(supabase, safeDeviceId)
+      if (raced) {
+        await discardOrphanAuthUser(supabase, userId)
+        return mapProfileRow(raced)
+      }
+    }
     throw profileError
   }
 

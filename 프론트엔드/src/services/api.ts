@@ -413,27 +413,41 @@ export async function selectCoffeeVariant(slug: string) {
   }) as Promise<{ ok: true; state: GameState }>
 }
 
+let inflightGuestSession: Promise<PlayerSession> | null = null
+
 export async function ensureGuestSession(displayName: string): Promise<PlayerSession> {
-  const body = await request('/api/auth/guest', {
-    method: 'POST',
-    body: JSON.stringify({
-      deviceId: getDeviceId(),
-      displayName,
-    }),
-  })
+  if (inflightGuestSession) {
+    return inflightGuestSession
+  }
 
-  setStoredUserId(body.userId)
-  setStoredSessionSource(body.source)
-  setStoredDisplayName(body.displayName)
+  inflightGuestSession = (async () => {
+    const body = await request('/api/auth/guest', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: getDeviceId(),
+        displayName,
+      }),
+    })
 
-  return {
-    userId: body.userId,
-    displayName: body.displayName,
-    source: body.source,
-    state: body.state,
-    playerRank: body.playerRank ?? null,
-    balanceRules: body.balanceRules ?? DEFAULT_BALANCE_RULES,
-    passiveGrowthPreview: body.passiveGrowthPreview,
+    setStoredUserId(body.userId)
+    setStoredSessionSource(body.source)
+    setStoredDisplayName(body.displayName)
+
+    return {
+      userId: body.userId,
+      displayName: body.displayName,
+      source: body.source,
+      state: body.state,
+      playerRank: body.playerRank ?? null,
+      balanceRules: body.balanceRules ?? DEFAULT_BALANCE_RULES,
+      passiveGrowthPreview: body.passiveGrowthPreview,
+    }
+  })()
+
+  try {
+    return await inflightGuestSession
+  } finally {
+    inflightGuestSession = null
   }
 }
 
