@@ -23,6 +23,7 @@ import {
 import { formatSceneDialogue } from '../game/sceneDialogue';
 import { getTodayKey } from '../services/dailyGameStorage';
 import { hasSeenShopHeartbeatToday, markShopHeartbeatSeenToday } from '../services/shopHeartbeat';
+import { watchRewardedAd } from '../services/rewardedAd';
 import { ComicSeriesInlineList } from './ComicSeriesInlineList';
 import { DailyGameInlineList } from './DailyGameInlineList';
 import { RecommendExpandPanel } from './RecommendExpandPanel';
@@ -52,6 +53,8 @@ export function RecommendButtons({
   const [dinnerItem, setDinnerItem] = useState<DinnerRecommendation>(() => getActiveDinnerRecommendation());
   const [shopCalm, setShopCalm] = useState(() => hasSeenShopHeartbeatToday());
   const [shopBubbleVisible, setShopBubbleVisible] = useState(false);
+  const [rerollLoading, setRerollLoading] = useState<RecommendKind | null>(null);
+  const [rerollNotice, setRerollNotice] = useState<Partial<Record<RecommendKind, string>>>({});
   const buttonSound = useButtonSound();
 
   useEffect(() => {
@@ -86,6 +89,10 @@ export function RecommendButtons({
       return;
     }
 
+    if (kind === 'coffee' || kind === 'dinner') {
+      setRerollNotice((prev) => ({ ...prev, [kind]: undefined }));
+    }
+
     if (kind === 'coffee') {
       setCoffeeItem(getActiveCoffeeRecommendation());
     } else if (kind === 'dinner') {
@@ -96,22 +103,42 @@ export function RecommendButtons({
   };
 
   const handleReroll = useCallback(
-    (kind: RecommendKind) => {
-      void buttonSound();
-      const dateKey = getTodayKey();
+    async (kind: RecommendKind) => {
+      if (rerollLoading) return;
 
-      if (kind === 'coffee') {
-        const next = rerollCoffeeRecommendation(dateKey);
-        saveRecommendReroll('coffee', next.id, dateKey);
-        setCoffeeItem(next);
-        return;
+      await buttonSound();
+      setRerollNotice((prev) => ({ ...prev, [kind]: undefined }));
+      setRerollLoading(kind);
+
+      try {
+        const watched = await watchRewardedAd(
+          kind === 'coffee' ? 'recommend-coffee' : 'recommend-dinner',
+        );
+        if (!watched) {
+          setRerollNotice((prev) => ({
+            ...prev,
+            [kind]: '광고 시청을 완료해야 다른 메뉴를 볼 수 있어요.',
+          }));
+          return;
+        }
+
+        const dateKey = getTodayKey();
+
+        if (kind === 'coffee') {
+          const next = rerollCoffeeRecommendation(dateKey);
+          saveRecommendReroll('coffee', next.id, dateKey);
+          setCoffeeItem(next);
+          return;
+        }
+
+        const next = rerollDinnerRecommendation(dateKey);
+        saveRecommendReroll('dinner', next.id, dateKey);
+        setDinnerItem(next);
+      } finally {
+        setRerollLoading(null);
       }
-
-      const next = rerollDinnerRecommendation(dateKey);
-      saveRecommendReroll('dinner', next.id, dateKey);
-      setDinnerItem(next);
     },
-    [buttonSound],
+    [buttonSound, rerollLoading],
   );
 
   const openDailyGame = async (gameId: DailyGameId) => {
@@ -164,7 +191,9 @@ export function RecommendButtons({
             <RecommendExpandPanel
               item={coffeeItem}
               label="오늘의 커피 추천"
-              onReroll={() => handleReroll('coffee')}
+              rerollLoading={rerollLoading === 'coffee'}
+              rerollNotice={rerollNotice.coffee ?? null}
+              onReroll={() => void handleReroll('coffee')}
             />
           )}
         </div>
@@ -223,7 +252,9 @@ export function RecommendButtons({
             <RecommendExpandPanel
               item={dinnerItem}
               label="오늘의 저녁 추천"
-              onReroll={() => handleReroll('dinner')}
+              rerollLoading={rerollLoading === 'dinner'}
+              rerollNotice={rerollNotice.dinner ?? null}
+              onReroll={() => void handleReroll('dinner')}
             />
           )}
         </div>

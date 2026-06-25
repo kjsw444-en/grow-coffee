@@ -1,0 +1,142 @@
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(110, 104, 136, 0.28);
+  pointer-events: none;
+}
+
+.tutorial-overlay--hint {
+  place-items: end center;
+  padding-bottom: 148px;
+  background: transparent;
+}
+
+.tutorial-overlay__card {
+  width: min(100%, 360px);
+  padding: 22px 20px;
+  border-radius: 24px;
+  background: var(--pastel-bg-surface);
+  box-shadow: 0 20px 50px var(--pastel-shadow-deep);
+  border: 1px solid var(--pastel-pink);
+  pointer-events: auto;
+}
+
+.tutorial-overlay__card--center {
+  text-align: center;
+}
+
+.tutorial-overlay__card--bottom {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(235, 227, 255, 0.5) 0%, rgba(221, 212, 245, 0.5) 100%);
+  border: 2.5px solid #ef4444;
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.15),
+    0 12px 32px rgba(150, 130, 190, 0.22);
+}
+
+.tutorial-overlay__card--bottom .tutorial-overlay__hint {
+  color: #5f5388;
+}
+
+.tutorial-overlay__card--heartbeat {
+  transform-origin: center bottom;
+  animation: tutorial-hint-heartbeat 1.35s ease-in-out infinite;
+}
+
+@keyframes tutorial-hint-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 1px rgba(239, 68, 68, 0.15),
+      0 12px 32px rgba(150, 130, 190, 0.22);
+  }
+  12% {
+    transform: scale(1.045);
+    box-shadow:
+      0 0 0 1px rgba(239, 68, 68, 0.15),
+      0 0 0 6px rgba(239, 68, 68, 0.1),
+      0 14px 34px rgba(150, 130, 190, 0.28);
+  }
+  24% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 1px rgba(239, 68, 68, 0.15),
+      0 0 0 4px rgba(239, 68, 68, 0.08),
+      0 13px 33px rgba(150, 130, 190, 0.25);
+  }
+  48% {
+    transform: scale(1);
+  }
+}
+
+.tutorial-overlay__badge {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pastel-text-accent);
+}
+
+.tutorial-overlay__card h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: var(--pastel-text);
+}
+
+.tutorial-overlay__body {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--pastel-text-soft);
+}
+
+.tutorial-overlay__body strong {
+  color: var(--pastel-text-accent);
+}
+
+.tutorial-overlay__hint {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--pastel-text);
+}
+
+.tutorial-overlay__pulse {
+  display: inline-block;
+  animation: tutorial-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tutorial-pulse {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.tutorial-overlay__cta {
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: 14px;
+  background: var(--pastel-gradient-primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px var(--pastel-shadow);
+}

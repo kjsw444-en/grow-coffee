@@ -50,8 +50,8 @@
   width: 153px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 0;
+  gap: 4px;
+  margin: -10px 0 0;
   padding: 0;
   pointer-events: auto;
 }
@@ -61,31 +61,51 @@
   z-index: 2;
   line-height: normal;
   width: 100%;
-  margin-top: 0;
+  margin: 0;
   pointer-events: auto;
 }
 
 .recommend-buttons__reroll-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  min-height: 24px;
+  min-height: 26px;
+  height: 26px;
   margin: 0;
-  padding: 5px 8px;
+  padding: 0 8px;
   border: 1px solid #e8d0a8;
   border-radius: 999px;
   background: linear-gradient(180deg, #fff6e8 0%, #f3dfc0 100%);
   color: #5a3a20;
   font-family: 'Noto Sans KR', sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(120, 90, 50, 0.12);
+  box-sizing: border-box;
 }
 
-.recommend-buttons__reroll-btn:active {
+.recommend-buttons__reroll-btn:active:not(:disabled) {
   transform: scale(0.98);
+}
+
+.recommend-buttons__reroll-btn:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.recommend-buttons__reroll-notice {
+  margin: 4px 0 0;
+  color: #8a4a28;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .recommend-buttons__sub-stack {
@@ -99,7 +119,7 @@
 }
 
 .recommend-buttons__sub-stack--panel-open {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .recommend-buttons__btn--active-sub {

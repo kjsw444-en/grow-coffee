@@ -53,6 +53,56 @@
   --pastel-gradient-win: linear-gradient(180deg, #fce8b8, #f8d0c8);
   --pastel-gradient-primary: linear-gradient(180deg, #f0c4dc, #e4b4d4);
 
+  /* 1일 1게임 — 파스텔 베이지 + 민트·핑크·골드 */
+  --coffee-bg-outer: #f3ebe2;
+  --coffee-bg-screen: linear-gradient(180deg, #faf6f0 0%, #fff9f4 38%, #fdf5ee 100%);
+  --coffee-bg-main: linear-gradient(180deg, #faf6f0 0%, #f5ebe3 55%, #f0e4d8 100%);
+  --coffee-bg-surface: #fff9f4;
+  --coffee-bg-card: linear-gradient(180deg, #fff9f4 0%, #faf3ea 100%);
+  --coffee-bg-panel: rgba(255, 249, 244, 0.94);
+  --coffee-bg-icon: #f5ebe3;
+  --coffee-bg-hero: linear-gradient(135deg, #fceee6 0%, #f5ebe3 40%, #e8f3ea 100%);
+  --coffee-bg-hero-subtle: rgba(255, 255, 255, 0.52);
+  --coffee-text: #6d6358;
+  --coffee-text-soft: #9a8f82;
+  --coffee-text-muted: #bfb3a6;
+  --coffee-text-accent: #b8929a;
+  --coffee-text-reward: #c4a055;
+  --coffee-text-on-hero: #5a5048;
+  --coffee-text-hero-sub: #8a7d70;
+  --coffee-primary-dark: #6a5c50;
+  --coffee-primary: #a8887a;
+  --coffee-primary-mid: #b8956a;
+  --coffee-border: #eadfce;
+  --coffee-border-soft: #f2e8da;
+  --coffee-badge-bg: #fef3d8;
+  --coffee-badge-text: #a67c3a;
+  --coffee-badge-done-bg: #dff5e8;
+  --coffee-badge-done-text: #5a9a72;
+  --coffee-badge-ad-bg: #fce8f0;
+  --coffee-badge-ad-text: #b87898;
+  --coffee-badge-exhausted-bg: #f0ebe6;
+  --coffee-badge-exhausted-text: #a89888;
+  --coffee-progress-track: #f0e6d8;
+  --coffee-progress-fill: linear-gradient(90deg, var(--pastel-mint-deep), var(--pastel-lemon-deep));
+  --coffee-btn-primary: linear-gradient(180deg, #f5dda8 0%, #d4a855 100%);
+  --coffee-btn-primary-solid: #d4a855;
+  --coffee-btn-accent: linear-gradient(180deg, #f8dcea 0%, #e8b8c8 100%);
+  --coffee-btn-mint: #a8dfc8;
+  --coffee-shadow: rgba(180, 150, 120, 0.12);
+  --coffee-shadow-deep: rgba(160, 130, 100, 0.16);
+  --coffee-overlay-scrim: rgba(90, 80, 70, 0.42);
+  --coffee-state-success-bg: #dff5e8;
+  --coffee-state-success-border: #a8dfc8;
+  --coffee-state-success-text: #5a9a72;
+  --coffee-state-warn-bg: #fef3d8;
+  --coffee-state-warn-border: #fce8b8;
+  --coffee-state-error-bg: #fce8ee;
+  --coffee-state-error-border: #f0c4d4;
+  --coffee-state-error-text: #b87888;
+  --coffee-state-flash-bg: #fef3d8;
+  --coffee-state-flash-border: #f5dda8;
+
   color: var(--pastel-text);
   background: var(--pastel-bg-outer);
 }

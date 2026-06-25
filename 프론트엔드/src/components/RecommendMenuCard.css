@@ -81,6 +81,21 @@
   line-height: 1.3;
 }
 
+.recommend-buttons__menu-panel .recommend-menu-card--image {
+  line-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+}
+
+.recommend-buttons__menu-panel .recommend-menu-card__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  vertical-align: top;
+}
+
 .recommend-buttons__menu-panel .recommend-menu-card__text {
   right: 4%;
   width: 54%;
