@@ -1,5 +1,5 @@
 import { useId, useRef } from 'react';
-import type { HoldMode } from '../game/constants';
+import { HOLD_DURATION_LABEL, type HoldMode } from '../game/constants';
 import { isCoffeeStage, isDrinkStage } from '../game/utils';
 import './WaterHoldCircle.css';
 
@@ -184,7 +184,7 @@ export function WaterHoldCircle({
           ) : (
             <>
               <p className="water-hold__status">{idleLabel}</p>
-              {!embedded && !isBrew && <p className="water-hold__target">3~5초</p>}
+              {!embedded && !isBrew && <p className="water-hold__target">{HOLD_DURATION_LABEL}</p>}
             </>
           )}
         </div>

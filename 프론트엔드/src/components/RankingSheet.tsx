@@ -22,14 +22,14 @@ export function RankingSheet({ ranking, loading = false, error = null, onClose }
       <button type="button" className="ranking-sheet__backdrop" onClick={() => void handleClose()} aria-label="닫기" />
       <div className="ranking-sheet__panel">
         <div className="ranking-sheet__head">
-          <h2 id="ranking-sheet-title">비운 커피잔 랭킹 TOP{COFFEE_RANKING_SIZE}</h2>
+          <h2 id="ranking-sheet-title">내린 커피 소모 랭킹 TOP{COFFEE_RANKING_SIZE}</h2>
           <button type="button" className="ranking-sheet__close" onClick={() => void handleClose()}>
             닫기
           </button>
         </div>
 
         <p className="ranking-sheet__note">
-          상점에서 사용한 커피잔 누적 기준
+          「내린 커피 마시기」 소모 누적 기준
           {ranking && (
             <>
               {' · '}
@@ -49,7 +49,7 @@ export function RankingSheet({ ranking, loading = false, error = null, onClose }
         ) : (
           <>
             <p className="ranking-sheet__mine">
-              내 순위 <strong>{ranking.playerRank}위</strong> · 비운 커피잔{' '}
+              내 순위 <strong>{ranking.playerRank}위</strong> · 내린 커피 소모{' '}
               <strong>{ranking.playerSpentCoffeeCups}잔</strong>
               {!ranking.inTop50 && ' · TOP50 밖'}
             </p>

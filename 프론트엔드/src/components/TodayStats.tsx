@@ -23,16 +23,16 @@ export function TodayStats({ totalWaters, totalCoffees, money, lastEarned }: Tod
           <dd>{totalCoffees}잔</dd>
         </div>
         <div>
-          <dt>누적 수익</dt>
+          <dt>누적 커피값</dt>
           <dd>{formatWon(money)}</dd>
         </div>
         <div>
-          <dt>{SELL_BATCH_SIZE}잔 판매</dt>
+          <dt>{SELL_BATCH_SIZE}잔 커피값</dt>
           <dd>{formatWon(SELL_BATCH_REWARD)}</dd>
         </div>
       </dl>
       {lastEarned !== null && (
-        <p className="today-stats__earn">방금 +{formatWon(lastEarned)} 판매!</p>
+        <p className="today-stats__earn">방금 +{formatWon(lastEarned)} 커피값!</p>
       )}
     </section>
   );

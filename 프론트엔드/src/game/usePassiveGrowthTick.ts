@@ -24,10 +24,9 @@ export function usePassiveGrowthTick({
     const current = stateRef.current;
 
     if (
-      current.redeemed ||
       !canAccruePassiveGrowth(
         current.growth,
-        current.redeemed,
+        false,
         current.dailyPassiveGrowth,
         balanceRules.dailyPassiveGrowthCap,
         current.passiveCoffeesClaimed,

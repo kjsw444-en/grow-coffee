@@ -2,86 +2,99 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
-  background: var(--pastel-bg-app);
-  border-bottom: 1px solid var(--pastel-border);
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #faf4ec 0%, #f5ebe2 100%);
+  border-bottom: 1px solid #e8ddd2;
 }
 
 .user-bar__profile {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .user-bar__avatar {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #fff;
-  box-shadow: 0 3px 10px var(--pastel-shadow);
+  border: 1.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(180, 150, 120, 0.12);
   background: var(--pastel-peach);
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .user-bar__name {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--pastel-text);
+  color: #7a6a5c;
+  line-height: 1.2;
 }
 
 .user-bar__meta {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--pastel-text-muted);
+  margin: 1px 0 0;
+  font-size: 10px;
+  color: #a89484;
+  line-height: 1.2;
 }
 
 .user-bar__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.user-bar__mute {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .user-bar__balance-box {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 16px;
-  background: var(--pastel-lemon);
-  border: 1px solid var(--pastel-lemon-deep);
-  box-shadow: 0 2px 8px var(--pastel-shadow);
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(255, 252, 247, 0.92);
+  border: 1px solid #e8ddd2;
+  box-shadow: 0 1px 4px rgba(180, 150, 120, 0.1);
 }
 
 .user-bar__coin {
-  font-size: 22px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .user-bar__balance-label {
   margin: 0;
-  font-size: 10px;
-  color: var(--pastel-text-soft);
+  font-size: 9px;
+  color: #a89484;
+  line-height: 1.1;
 }
 
 .user-bar__balance {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
-  color: var(--pastel-text-lemon);
+  color: #8a7358;
+  line-height: 1.15;
 }
 
 .user-bar__settings {
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--pastel-border);
-  border-radius: 12px;
-  background: var(--pastel-bg-surface);
-  color: var(--pastel-text-soft);
-  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e8ddd2;
+  border-radius: 10px;
+  background: rgba(255, 252, 247, 0.92);
+  color: #a89484;
+  font-size: 15px;
   cursor: pointer;
 }

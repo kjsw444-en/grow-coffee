@@ -1,5 +1,5 @@
 import type { GameState } from './types';
-import { getRefillActionLabel, isCoffeeStage } from './utils';
+import { getRefillActionLabel, isCoffeeStage, isDrinkStage } from './utils';
 
 export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -147,12 +147,16 @@ export function getGrowActionSlot({
   readyToDrink,
   isDrinkCommitting,
   state,
+  visualGrowth,
 }: {
   readyToDrink: boolean;
   isDrinkCommitting: boolean;
   state: GameState;
+  visualGrowth?: number;
 }): GrowActionSlot {
   if (readyToDrink || isDrinkCommitting) return 'drink';
+  const growthForStage = visualGrowth ?? state.growth;
+  if (isDrinkStage(growthForStage)) return 'drink';
   if (needsAdForWater(state)) return 'ad';
   return 'water';
 }

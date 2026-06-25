@@ -7,6 +7,8 @@ import { initialState } from './types';
 export type BalanceRules = {
   passiveGrowthPerSecond: number;
   dailyPassiveGrowthCap: number;
+  brewedCoffeeDrinkOptions?: number[];
+  brewedCoffeePointPerCup?: number;
   mediaAssets?: {
     coffeeVideoVersion: number;
     hiddenVideoVersion: number;
@@ -47,14 +49,22 @@ export function getPassiveDayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
 
-/** 서버 applyReset과 동일 — 진행 데이터 초기화용 */
-export function buildResetState() {
+/** 서버 applyReset과 동일 — 진행 데이터 초기화용 (접속 룰렛 일일 상태는 유지) */
+export function buildResetState(
+  current?: Pick<
+    import('./types').GameState,
+    'dailyLoginRouletteDayKey' | 'dailyLoginRouletteRewardCups' | 'dailyLoginRouletteRespinDayKey'
+  >,
+) {
   const now = new Date().toISOString();
   return {
     ...initialState,
     growthAccrualSyncedAt: now,
     passiveDayKey: getPassiveDayKey(),
     passiveReactivateDayKey: '',
+    dailyLoginRouletteDayKey: current?.dailyLoginRouletteDayKey ?? '',
+    dailyLoginRouletteRewardCups: current?.dailyLoginRouletteRewardCups ?? 0,
+    dailyLoginRouletteRespinDayKey: current?.dailyLoginRouletteRespinDayKey ?? '',
   };
 }
 

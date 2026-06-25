@@ -1,5 +1,6 @@
 import { formatWon } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
+import { SoundMuteButton } from './SoundMuteButton';
 import './UserBar.css';
 
 type UserBarProps = {
@@ -32,6 +33,7 @@ export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
       </div>
 
       <div className="user-bar__right">
+        <SoundMuteButton className="user-bar__mute" />
         <div className="user-bar__balance-box">
           <span className="user-bar__coin" aria-hidden="true">
             🪙

@@ -165,6 +165,22 @@ export function getUnlockedHiddenCoffeeSlugs(
   );
 }
 
+/** 구매 등으로 처음 해금된 히든 1종 (없으면 null) */
+export function getFirstNewlyUnlockedHidden(
+  beforeOwned: readonly CoffeeVariantSlug[],
+  afterOwned: readonly CoffeeVariantSlug[],
+): HiddenCoffeeVariant | null {
+  for (const entry of HIDDEN_COFFEE_VARIANTS) {
+    if (
+      !isHiddenCoffeeUnlocked(entry.id, beforeOwned) &&
+      isHiddenCoffeeUnlocked(entry.id, afterOwned)
+    ) {
+      return getHiddenCoffeeVariantById(entry.id);
+    }
+  }
+  return null;
+}
+
 export function normalizeSelectedCoffeeVariant(
   raw: unknown,
   owned: readonly CoffeeVariantSlug[],

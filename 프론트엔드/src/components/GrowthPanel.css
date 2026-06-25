@@ -2,8 +2,10 @@
   margin: 0 16px;
   padding: 14px 16px 12px;
   border-radius: 16px;
-  background: rgba(255, 252, 244, 0.92);
+  background:
+    url('/images/growth-panel-bg.png') center top / cover no-repeat;
   border: 1px solid #e8d4b0;
+  overflow: hidden;
 }
 
 .growth-panel__coffee-row {
@@ -27,6 +29,84 @@
 .growth-panel__coffee-stat--emptied {
   background: #f4f0ff;
   border-color: #d8ccf5;
+}
+
+.growth-panel__coffee-stat-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.growth-panel__coffee-stat--tip {
+  width: 100%;
+  margin: 0;
+  appearance: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.growth-panel__coffee-stat--tip:focus-visible {
+  outline: 2px solid #7b6fd6;
+  outline-offset: 2px;
+}
+
+.growth-panel__coffee-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 6;
+  width: min(240px, calc(100vw - 48px));
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #c9bce8;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(90, 70, 170, 0.18);
+}
+
+.growth-panel__coffee-tip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 24px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: #fff;
+  border-left: 1px solid #c9bce8;
+  border-top: 1px solid #c9bce8;
+}
+
+.growth-panel__coffee-tip--left {
+  left: 0;
+  right: auto;
+}
+
+.growth-panel__coffee-tip--left::before {
+  left: 24px;
+  right: auto;
+}
+
+.growth-panel__coffee-tip-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5a4a8a;
+}
+
+.growth-panel__coffee-tip-body {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #5c5348;
+  word-break: keep-all;
+}
+
+.growth-panel__coffee-tip-body:last-child {
+  margin-bottom: 0;
+}
+
+.growth-panel__coffee-tip-body strong {
+  color: #4a3d6e;
 }
 
 .growth-panel__coffee-icon {
@@ -370,21 +450,366 @@
   color: #7a9a68;
 }
 
-.growth-panel__sell-btn {
-  display: block;
+.growth-panel__sell-wrap {
+  position: relative;
   width: 100%;
   margin-top: 10px;
+}
+
+.growth-panel__sell-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 5;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(100%, 220px);
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 2px solid #d9c9a8;
+  background: rgba(30, 22, 14, 0.52);
+  box-shadow: 0 4px 14px rgba(20, 12, 6, 0.22);
+  pointer-events: none;
+  animation: growth-panel-sell-bubble-enter 0.22s ease-out;
+}
+
+.growth-panel__sell-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(30, 22, 14, 0.52);
+  border-right: 2px solid #d9c9a8;
+  border-bottom: 2px solid #d9c9a8;
+}
+
+.growth-panel__sell-bubble-text {
+  margin: 0;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+@keyframes growth-panel-sell-bubble-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.growth-panel__sell-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  margin-top: 0;
   padding: 10px 14px;
   border: 1px solid #d4b896;
   border-radius: 12px;
   background: linear-gradient(180deg, #fff8eb 0%, #f5e6cc 100%);
   color: #7a4f2a;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.growth-panel__sell-btn-label {
   font-size: 13px;
   font-weight: 800;
-  cursor: pointer;
+  line-height: 1.2;
+}
+
+.growth-panel__sell-btn-hint {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #9a7868;
+  letter-spacing: -0.02em;
+}
+
+.growth-panel__sell-btn:disabled .growth-panel__sell-btn-hint {
+  color: #a06858;
 }
 
 .growth-panel__sell-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+  pointer-events: none;
+}
+
+.growth-panel__drink-picker {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 251, 243, 0.96);
+  border: 1px solid #e8d4b0;
+}
+
+.growth-panel__drink-picker-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #7a4f2a;
+  text-align: center;
+}
+
+.growth-panel__drink-options {
+  display: grid;
+  gap: 8px;
+}
+
+.growth-panel__drink-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #dcc4a0;
+  border-radius: 10px;
+  background: #fff8eb;
+  color: #7a4f2a;
+  cursor: pointer;
+}
+
+.growth-panel__drink-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.growth-panel__drink-option-cups {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.growth-panel__drink-option-points {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9a6b3f;
+}
+
+.growth-panel__drink-picker-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8a7a68;
+  word-break: keep-all;
+}
+
+.growth-panel__drink-picker-close {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a7a68;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.growth-panel__attendance {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(165deg, rgba(255, 248, 244, 0.98) 0%, rgba(255, 240, 246, 0.96) 100%);
+  border: 1px solid #ecd9cf;
+  box-shadow: 0 2px 10px rgba(220, 170, 185, 0.12);
+}
+
+.growth-panel__attendance--complete {
+  border-color: #f0c4d4;
+  background: linear-gradient(165deg, rgba(255, 245, 248, 0.99) 0%, rgba(255, 232, 242, 0.97) 100%);
+}
+
+.growth-panel__attendance-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.growth-panel__attendance-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.growth-panel__attendance-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9a5c6e;
+}
+
+.growth-panel__attendance-today {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 800;
+  color: #9a5c6e;
+}
+
+.growth-panel__attendance-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.growth-panel__attendance-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #f3e4df;
+  overflow: hidden;
+}
+
+.growth-panel__attendance-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f5c6d6 0%, #e8a8be 100%);
+  transition: width 0.25s ease;
+}
+
+.growth-panel__attendance-fill--complete {
+  background: linear-gradient(90deg, #f8b8cc 0%, #e894b0 100%);
+}
+
+.growth-panel__attendance-streak {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #b07a8a;
+  white-space: nowrap;
+}
+
+.growth-panel__attendance-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #a08088;
+  word-break: keep-all;
+}
+
+.growth-panel__attendance-rewards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@keyframes attendance-reward-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 3px 0 #e8a8be, 0 6px 14px rgba(232, 168, 190, 0.28);
+  }
+
+  14% {
+    transform: scale(1.035);
+    box-shadow: 0 4px 0 #e8a8be, 0 8px 18px rgba(232, 168, 190, 0.34);
+  }
+
+  28% {
+    transform: scale(1);
+    box-shadow: 0 3px 0 #e8a8be, 0 6px 14px rgba(232, 168, 190, 0.28);
+  }
+
+  42% {
+    transform: scale(1.05);
+    box-shadow: 0 5px 0 #e094ae, 0 10px 20px rgba(224, 148, 174, 0.36);
+  }
+
+  56% {
+    transform: scale(1);
+    box-shadow: 0 3px 0 #e8a8be, 0 6px 14px rgba(232, 168, 190, 0.28);
+  }
+}
+
+@keyframes attendance-streak-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 3px 0 #d8a0b8, 0 6px 14px rgba(216, 160, 184, 0.26);
+  }
+
+  14% {
+    transform: scale(1.035);
+  }
+
+  28% {
+    transform: scale(1);
+  }
+
+  42% {
+    transform: scale(1.05);
+  }
+
+  56% {
+    transform: scale(1);
+  }
+}
+
+.growth-panel__attendance-reward-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff3f7 0%, #f8d4e2 52%, #f0b8cc 100%);
+  color: #8b4a5c;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #e8a8be, 0 6px 14px rgba(232, 168, 190, 0.28);
+  transform-origin: center;
+  transition: filter 0.15s ease;
+}
+
+.growth-panel__attendance-reward-btn:not(:disabled) {
+  animation: attendance-reward-heartbeat 1.55s ease-in-out infinite;
+}
+
+.growth-panel__attendance-reward-btn:active:not(:disabled) {
+  animation: none;
+  transform: scale(0.98);
+}
+
+.growth-panel__attendance-reward-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  animation: none;
+  box-shadow: 0 2px 0 #e8c8d4;
+}
+
+.growth-panel__attendance-reward-btn--streak {
+  background: linear-gradient(180deg, #fff8fa 0%, #f5dce8 52%, #ebc4d8 100%);
+  color: #7a4560;
+  box-shadow: 0 3px 0 #d8a0b8, 0 6px 14px rgba(216, 160, 184, 0.26);
+}
+
+.growth-panel__attendance-reward-btn--streak:not(:disabled) {
+  animation: attendance-streak-heartbeat 1.55s ease-in-out infinite;
+  animation-delay: 0.12s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .growth-panel__attendance-reward-btn:not(:disabled),
+  .growth-panel__attendance-reward-btn--streak:not(:disabled) {
+    animation: none;
+  }
 }

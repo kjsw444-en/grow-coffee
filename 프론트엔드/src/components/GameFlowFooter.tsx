@@ -26,6 +26,7 @@ export function GameFlowFooter({
   disabled = false,
 }: GameFlowFooterProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
   const buttonSound = useButtonSound();
 
   const handleShare = async () => {
@@ -45,6 +46,11 @@ export function GameFlowFooter({
   const shareHint = shareRewardAvailable
     ? `공유하면 내린 커피 ${SHARE_REWARD_COFFEE_AMOUNT}잔 · 하루 1회`
     : '오늘 공유 리워드 완료 · 내일 다시 가능';
+
+  const handleNotifyOptIn = async () => {
+    await buttonSound();
+    setNotifyMessage('토스 푸시 알림 연동 검토 중이에요. 곧 만나요!');
+  };
 
   return (
     <section className="game-flow" aria-label="게임 진행 순서">
@@ -68,6 +74,27 @@ export function GameFlowFooter({
       {shareMessage && (
         <p className="game-flow__share-message" role="status" aria-live="polite">
           {shareMessage}
+        </p>
+      )}
+
+      <button
+        type="button"
+        className="game-flow__notify"
+        disabled={disabled}
+        onClick={() => void handleNotifyOptIn()}
+      >
+        <span className="game-flow__notify-icon" aria-hidden="true">
+          🔔
+        </span>
+        <span className="game-flow__notify-copy">
+          <strong>새로운 커피, 기능 나오면 알람받기</strong>
+          <small>토스 푸시 알림 · 준비 중</small>
+        </span>
+      </button>
+
+      {notifyMessage && (
+        <p className="game-flow__notify-message" role="status" aria-live="polite">
+          {notifyMessage}
         </p>
       )}
 

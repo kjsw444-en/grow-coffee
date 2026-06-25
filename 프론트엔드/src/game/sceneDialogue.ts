@@ -56,16 +56,65 @@ export function sceneDialogueForGrowthComplete(mode: import('./constants').HoldM
 
 export function sceneDialogueForDrink() {
 
-  return formatSceneDialogue('커피 한 잔을 마셨어요! 내린 커피 +1');
+  return formatSceneDialogue('커피를 마셨어요! 내린 커피 +1');
 
 }
 
 
 
-export function sceneDialogueForSellBatch(reward: number) {
+export function sceneDialogueForSellBatch(cupCount: number, reward: number) {
 
-  return formatSceneDialogue(`커피 10잔을 판매했어요! ${formatWon(reward)}을 벌었어요.`);
+  return formatSceneDialogue(
+    `내린 커피 ${cupCount.toLocaleString('ko-KR')}잔을 마셨어요! ${formatWon(reward)} 포인트를 받았어요.`,
+  );
 
+}
+
+export function sceneDialogueForDailyPointCap() {
+  return formatSceneDialogue(
+    '오늘은 커피 한 잔 값(4,700원)만큼 받았어요! ☕\n내일도 커피나무와 함께 키워봐요.',
+  );
+}
+
+export function sceneDialogueForHiddenCharacterUnlock(label: string) {
+  return formatSceneDialogue(`히든 커플 ${label}을(를) 만났어요! 💕\n새 영상을 확인해 보세요.`);
+}
+
+export function sceneDialogueForBrewedSpent200(totalSpent: number) {
+  return formatSceneDialogue(
+    `내린 커피 ${totalSpent.toLocaleString('ko-KR')}잔! 진짜 커피 애호가네요 ☕`,
+  );
+}
+
+export function sceneDialogueForShopPurchase2(purchaseCount: number) {
+  return formatSceneDialogue(
+    `커피 상점에서 ${purchaseCount.toLocaleString('ko-KR')}번째 캐릭터까지 모았어요! 🛍️`,
+  );
+}
+
+export function sceneDialogueForReviewPreviewComplete() {
+  return formatSceneDialogue('[테스트] 여기서 토스 리뷰 팝업이 뜹니다.');
+}
+
+export function sceneDialogueForAttendanceGoal(baseDialogue: string) {
+  return formatSceneDialogue(`${baseDialogue}\n오늘 출석 목표를 달성했어요! 옆에서 보상을 받아 주세요.`);
+}
+
+export function sceneDialogueForAttendanceDailyClaim(rewardCups: number) {
+  return formatSceneDialogue(
+    `출석 보상! 내린 커피 ${rewardCups.toLocaleString('ko-KR')}잔을 받았어요.`,
+  );
+}
+
+export function sceneDialogueForAttendanceStreakClaim(rewardCups: number) {
+  return formatSceneDialogue(
+    `7일 연속 출석! 내린 커피 ${rewardCups.toLocaleString('ko-KR')}잔을 받았어요.`,
+  );
+}
+
+/** @deprecated reviewPrompt REVIEW_PRIMING_COPY 사용 */
+export function sceneDialogueForReviewPriming(copy: string) {
+  return formatSceneDialogue(copy);
 }
 
 
@@ -91,7 +140,7 @@ export function sceneDialogueForPassiveReady() {
 }
 
 export function sceneDialogueForPassiveClaim() {
-  return formatSceneDialogue('방치 커피 1잔을 내린 커피에 추가했어요!');
+  return formatSceneDialogue('방치 커피+1 = 내린 커피+1');
 }
 
 export function sceneDialogueForPassiveReactivate() {
@@ -118,7 +167,7 @@ const CAT_NUDGE_DIALOGUES = [
 
   '커피냥이 커피 상점에 가자고 졸라요! 구매하면 캐릭터가 추가된대요~',
 
-  '커피냥이 내린 커피로 새 캐릭터를 살 수 있다고 알려줘요!',
+  '커피냥이 마신 커피로 새 캐릭터를 살 수 있다고 알려줘요!',
 
   '커피냥이 커피를 구매하면 해당 캐릭터가 추가된다고 설명해요~',
 

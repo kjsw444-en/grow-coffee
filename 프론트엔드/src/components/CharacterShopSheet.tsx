@@ -3,6 +3,7 @@ import { useButtonSound } from '../audio/SoundProvider';
 import {
   COFFEE_DRINK_LINES,
   COFFEE_VARIANT_PURCHASE_COST,
+  formatDrunkCoffeePurchaseCost,
   formatCoffeeVariantName,
   getAvailableCoffeeCups,
   getCoffeeVariantById,
@@ -20,7 +21,7 @@ import { HiddenCoffeePairThumb } from './HiddenCoffeePairThumb';
 import './CharacterShopSheet.css';
 
 type CharacterShopSheetProps = {
-  totalCoffees: number;
+  spentCoffeeCups: number;
   ownedCoffeeVariants: CoffeeVariantSlug[];
   selectedCoffeeVariant: SelectedCoffeeSlug;
   busy?: boolean;
@@ -55,7 +56,7 @@ function VariantSlot({
       <span className="character-shop__slot-gender">{variant.genderLabel}</span>
       <img className="character-shop__slot-thumb" src={variant.image} alt="" />
       <span className="character-shop__slot-status">
-        {isDefaultFree ? '기본' : isOwned ? (isSelected ? '사용 중' : '보유') : `${COFFEE_VARIANT_PURCHASE_COST}잔`}
+        {isDefaultFree ? '기본' : isOwned ? (isSelected ? '사용 중' : '보유') : formatDrunkCoffeePurchaseCost()}
       </span>
       {isOwned ? (
         <button
@@ -85,7 +86,7 @@ function VariantSlot({
 }
 
 export function CharacterShopSheet({
-  totalCoffees,
+  spentCoffeeCups,
   ownedCoffeeVariants,
   selectedCoffeeVariant,
   busy = false,
@@ -97,7 +98,7 @@ export function CharacterShopSheet({
   const sheetScrollTopRef = useRef(0);
   const [pendingPurchase, setPendingPurchase] = useState<CoffeeVariantSlug | null>(null);
   const buttonSound = useButtonSound();
-  const availableCups = getAvailableCoffeeCups({ totalCoffees, spentCoffeeCups: 0 });
+  const availableCups = getAvailableCoffeeCups({ spentCoffeeCups });
   const owned = new Set(ownedCoffeeVariants);
   const pendingVariant = pendingPurchase ? getCoffeeVariantById(pendingPurchase) : null;
 
@@ -200,10 +201,12 @@ export function CharacterShopSheet({
       <div ref={sheetRef} className="character-shop__sheet">
         <h2 id="character-shop-title">커피 상점</h2>
         <p className="character-shop__notice">
-          커피 종류마다 여성·남성 캐릭터가 있어요. 특정 조합을 모두 구매하면 ❤️ 히든 커플 영상이 열려요.
+          커피 종류마다 여성·남성 캐릭터가 있어요. 캐릭터 구매는{' '}
+          <strong>{formatDrunkCoffeePurchaseCost()}</strong>이 필요해요. 특정 조합을 모두 구매하면 ❤️ 히든 커플
+          영상이 열려요.
         </p>
         <p className="character-shop__balance">
-          내린 커피 <strong>{availableCups}잔</strong>
+          보유 {formatDrunkCoffeePurchaseCost(availableCups)}
         </p>
 
         <ul className="character-shop__line-list">
@@ -243,6 +246,7 @@ export function CharacterShopSheet({
             <p id="character-shop-confirm-title" className="character-shop__confirm-title">
               <strong>{formatCoffeeVariantName(pendingVariant)}</strong> 구매하시겠습니까?
             </p>
+            <p className="character-shop__confirm-cost">{formatDrunkCoffeePurchaseCost()} 사용</p>
             <div className="character-shop__confirm-actions">
               <button
                 type="button"

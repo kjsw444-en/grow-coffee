@@ -1,7 +1,7 @@
 import { contactsViral } from '@apps-in-toss/web-framework';
 import type { GameState } from '../game/types';
 import { SHARE_REWARD_COFFEE_AMOUNT, SHARE_REWARD_MODULE_ID } from '../game/constants';
-import { ApiRequestError, claimShareRewardGame, isBackendConfigured } from './api';
+import { ApiRequestError, claimShareRewardGame, getServerUnavailableMessage, isBackendConfigured } from './api';
 import { isTossInApp } from './tossBridge';
 
 export type ShareRewardOutcome =
@@ -23,7 +23,7 @@ async function runDevShareRewardFlow(onMessage?: ShareRewardFlowOptions['onMessa
   if (!isBackendConfigured()) {
     return {
       status: 'unsupported',
-      message: '백엔드 서버를 실행해 주세요.',
+      message: getServerUnavailableMessage(),
     };
   }
 

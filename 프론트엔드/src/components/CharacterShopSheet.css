@@ -282,6 +282,13 @@
   color: var(--pastel-text-accent);
 }
 
+.character-shop__confirm-cost {
+  margin: -8px 0 18px;
+  font-size: 14px;
+  color: var(--pastel-text-muted, #6b5344);
+  text-align: center;
+}
+
 .character-shop__confirm-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

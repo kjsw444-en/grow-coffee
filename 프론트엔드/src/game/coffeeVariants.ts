@@ -93,6 +93,12 @@ export const DEFAULT_COFFEE_VARIANT_SLUG: CoffeeVariantSlug = 'parttime-latte';
 
 export const COFFEE_VARIANT_PURCHASE_COST = 100;
 
+export function formatDrunkCoffeePurchaseCost(
+  amount: number = COFFEE_VARIANT_PURCHASE_COST,
+): string {
+  return `마신 커피 ${amount.toLocaleString('ko-KR')}잔`;
+}
+
 const COFFEE_IMAGE_VERSION = 5;
 
 const SLUG_TO_LINE = new Map<CoffeeVariantSlug, CoffeeDrinkLine>(
@@ -209,10 +215,10 @@ export function normalizeOwnedCoffeeVariants(raw: unknown): CoffeeVariantSlug[] 
 }
 
 export function getAvailableCoffeeCups(state: {
-  totalCoffees: number;
+  totalCoffees?: number;
   spentCoffeeCups?: number;
 }) {
-  return Math.max(0, Math.floor(Number(state.totalCoffees) || 0));
+  return Math.max(0, Math.floor(Number(state.spentCoffeeCups) || 0));
 }
 
 export function getEmptiedCoffeeCups(state: { spentCoffeeCups?: number }) {
