@@ -3,6 +3,8 @@ import {
   GROWTH_PER_WATER,
   SELL_BATCH_REWARD,
   SELL_BATCH_SIZE,
+  BREWED_COFFEE_DRINK_OPTIONS,
+  getBrewedCoffeePointReward,
   SHARE_REWARD_COFFEE_AMOUNT,
   DAILY_PASSIVE_GROWTH_CAP,
   initialGameState,
@@ -34,6 +36,19 @@ import {
 } from './waterQuota.js'
 import { hasClaimedShareRewardToday, markShareRewardClaimed } from './shareReward.js'
 import { hasUsedPassiveReactivateToday, markPassiveReactivateUsed } from './passiveReactivate.js'
+import { normalizeMinigameRewardMask } from './minigameReward.js'
+import {
+  applyAttendanceFromTreeHarvest,
+  applyClaimAttendanceDailyReward,
+  applyClaimAttendanceStreakBonus as claimAttendanceStreakBonusRaw,
+  normalizeAttendance,
+} from './attendance.js'
+import {
+  DAILY_POINT_CAP,
+  getDailyPointRoom,
+  normalizePointDayKey,
+  settleDailyPoint,
+} from './dailyPoint.js'
 
 function clampGrowth(growth) {
   return roundGrowth(Math.min(100, Math.max(0, growth)))
@@ -43,6 +58,7 @@ export function normalizeGameState(raw) {
   const totalWaters = raw?.totalWaters ?? raw?.totalTaps ?? raw?.total_waters ?? 0
   const quota = normalizeWaterQuota(raw)
   const passive = normalizePassiveQuota(raw)
+  const minigameRewards = normalizeMinigameRewardMask(raw)
   const ownedCoffeeVariants = normalizeOwnedCoffeeVariants(
     raw?.ownedCoffeeVariants ?? raw?.owned_coffee_variants,
   )
@@ -61,18 +77,47 @@ export function normalizeGameState(raw) {
     selectedCoffeeVariant,
     ownedCoffeeVariants,
     spentCoffeeCups: Math.max(0, Math.floor(Number(raw?.spentCoffeeCups ?? raw?.spent_coffee_cups ?? 0))),
+    lifetimeDrunkCoffees: Math.max(
+      0,
+      Math.floor(Number(raw?.lifetimeDrunkCoffees ?? raw?.lifetime_drunk_coffees ?? 0)),
+    ),
+    lifetimeBrewedSpent: Math.max(
+      0,
+      Math.floor(
+        Number(
+          raw?.lifetimeBrewedSpent ??
+            raw?.lifetime_brewed_spent ??
+            raw?.lifetimeDrunkCoffees ??
+            raw?.lifetime_drunk_coffees ??
+            0,
+        ),
+      ),
+    ),
     shareRewardDayKey: String(raw?.shareRewardDayKey ?? raw?.share_reward_day_key ?? ''),
     passiveReactivateDayKey: String(
       raw?.passiveReactivateDayKey ?? raw?.passive_reactivate_day_key ?? '',
     ),
+    ...minigameRewards,
     ...passive,
     ...quota,
+    ...normalizeAttendance(raw),
+    pointDayKey: normalizePointDayKey(raw),
+    dailyLoginRouletteDayKey: String(
+      raw?.dailyLoginRouletteDayKey ?? raw?.daily_login_roulette_day_key ?? '',
+    ),
+    dailyLoginRouletteRewardCups: Math.max(
+      0,
+      Number(raw?.dailyLoginRouletteRewardCups ?? raw?.daily_login_roulette_reward_cups ?? 0),
+    ),
+    dailyLoginRouletteRespinDayKey: String(
+      raw?.dailyLoginRouletteRespinDayKey ?? raw?.daily_login_roulette_respin_day_key ?? '',
+    ),
   }
 }
 
 /** DB/부트스트랩 로드 시 — growth 0~100%만 보정 */
 export function sanitizeLoadedGameState(raw) {
-  const normalized = normalizeGameState(raw)
+  const normalized = withSettledDailyPoint(normalizeGameState(raw))
 
   return {
     ...normalized,
@@ -84,12 +129,12 @@ function withSettledPassive(state, now = new Date()) {
   return settlePassiveGrowth(normalizeGameState(state), now)
 }
 
+function withSettledDailyPoint(state, now = new Date()) {
+  return settleDailyPoint(withSettledPassive(state, now), now)
+}
+
 export function applyWater(state) {
   const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
-  }
 
   if (current.growth >= 100) {
     return { ok: false, reason: 'ready-to-drink', state: current, lastEarned: null }
@@ -114,10 +159,6 @@ export function applyWater(state) {
 export function applyDevTestWater(state) {
   const current = withSettledPassive(state)
 
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
-  }
-
   if (roundGrowth(current.growth) >= 100) {
     return { ok: false, reason: 'ready-to-drink', state: current, lastEarned: null }
   }
@@ -134,10 +175,6 @@ export function applyDevTestWater(state) {
 /** DEV 전용 — 방치 커피 게이지 +100% (서버 저장) */
 export function applyDevBumpPassive(state) {
   const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current }
-  }
 
   const maxCups = Math.floor(DAILY_PASSIVE_GROWTH_CAP / 100) || 2
   const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
@@ -164,10 +201,6 @@ export function applyDevBumpPassive(state) {
 export function applyWatchAd(state) {
   const current = withSettledPassive(state)
 
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current }
-  }
-
   if (!needsAdForWater(current)) {
     return { ok: false, reason: 'not-needed', state: current }
   }
@@ -182,10 +215,6 @@ export function applyWatchAd(state) {
 
 export function applyShareReward(state) {
   const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, rewardAmount: 0 }
-  }
 
   if (hasClaimedShareRewardToday(current)) {
     return { ok: false, reason: 'already-claimed', state: current, rewardAmount: 0 }
@@ -206,10 +235,6 @@ export function applyShareReward(state) {
 
 export function applyClaimPassiveCoffee(state) {
   const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
-  }
 
   const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
   const previewDaily = roundGrowth(current.dailyPassiveGrowth)
@@ -240,10 +265,6 @@ export function applyClaimPassiveCoffee(state) {
 export function applyReactivatePassiveCoffee(state) {
   const current = withSettledPassive(state)
 
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current }
-  }
-
   const maxCups = Math.floor(DAILY_PASSIVE_GROWTH_CAP / 100) || 2
   const claimed = Math.max(0, Math.floor(current.passiveCoffeesClaimed ?? 0))
 
@@ -270,49 +291,83 @@ export function applyReactivatePassiveCoffee(state) {
   return { ok: true, state: next }
 }
 
+/** 내린 커피(totalCoffees) 소모량만큼 마신 커피·랭킹 누적 증가 */
+function addDrunkCoffeeFromBrewedSpend(state, brewedAmount) {
+  const amount = Math.max(0, Math.floor(Number(brewedAmount) || 0))
+  return {
+    spentCoffeeCups: state.spentCoffeeCups + amount,
+    lifetimeDrunkCoffees: state.lifetimeDrunkCoffees + amount,
+    lifetimeBrewedSpent: (state.lifetimeBrewedSpent ?? 0) + amount,
+  }
+}
+
+/** 랭킹 점수 — 「내린 커피 마시기」로 소모한 누적 잔 수 */
+export function getRankingBrewedSpend(state) {
+  return Math.max(0, Math.floor(Number(state?.lifetimeBrewedSpent ?? 0)))
+}
+
 export function applyDrink(state) {
   const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
-  }
 
   if (roundGrowth(current.growth) < 100) {
     return { ok: false, reason: 'not-ready', state: current, lastEarned: null }
   }
+
+  const attendanceResult = applyAttendanceFromTreeHarvest(current)
 
   const next = {
     ...current,
     growth: 0,
     totalCoffees: current.totalCoffees + 1,
     growthAccrualSyncedAt: new Date().toISOString(),
+    ...attendanceResult.attendance,
   }
-
-  return { ok: true, state: next, lastEarned: null }
-}
-
-export function applySellBatch(state) {
-  const current = withSettledPassive(state)
-
-  if (current.redeemed) {
-    return { ok: false, reason: 'already-redeemed', state: current, lastEarned: null }
-  }
-
-  if (current.totalCoffees < SELL_BATCH_SIZE) {
-    return { ok: false, reason: 'not-enough-cups', state: current, lastEarned: null }
-  }
-
-  const nextMoney = current.money + SELL_BATCH_REWARD
 
   return {
     ok: true,
-    state: {
+    state: next,
+    lastEarned: null,
+    attendanceGoalJustMet: attendanceResult.goalJustMet,
+  }
+}
+
+export function applySellBatch(state, cupCount = SELL_BATCH_SIZE) {
+  const current = withSettledDailyPoint(state)
+  const batchSize = Math.floor(Number(cupCount) || 0)
+
+  if (!BREWED_COFFEE_DRINK_OPTIONS.includes(batchSize)) {
+    return { ok: false, reason: 'invalid-batch-size', state: current, lastEarned: null }
+  }
+
+  if (current.totalCoffees < batchSize) {
+    return { ok: false, reason: 'not-enough-cups', state: current, lastEarned: null }
+  }
+
+  const room = getDailyPointRoom(current)
+  if (room <= 0) {
+    return { ok: false, reason: 'daily-point-cap-reached', state: current, lastEarned: null }
+  }
+
+  const reward = Math.min(getBrewedCoffeePointReward(batchSize), room)
+  const nextMoney = current.money + reward
+  const dailyCapJustReached = nextMoney >= DAILY_POINT_CAP && current.money < DAILY_POINT_CAP
+
+  return {
+    ok: true,
+    state: normalizeGameState({
       ...current,
-      totalCoffees: current.totalCoffees - SELL_BATCH_SIZE,
+      totalCoffees: current.totalCoffees - batchSize,
+      ...addDrunkCoffeeFromBrewedSpend(current, batchSize),
       money: nextMoney,
-      redeemed: nextMoney >= GOAL_AMOUNT,
-    },
-    lastEarned: SELL_BATCH_REWARD,
+      attendanceDayKey: current.attendanceDayKey,
+      attendanceCupsToday: current.attendanceCupsToday,
+      attendanceStreak: current.attendanceStreak,
+      attendanceLastGoalDayKey: current.attendanceLastGoalDayKey,
+      attendanceDailyClaimDayKey: current.attendanceDailyClaimDayKey,
+      attendanceStreakBonusPending: current.attendanceStreakBonusPending,
+    }),
+    lastEarned: reward,
+    dailyCapJustReached,
   }
 }
 
@@ -334,7 +389,8 @@ export function applyRedeem(state) {
   }
 }
 
-export function applyReset() {
+export function applyReset(state) {
+  const current = normalizeGameState(state ?? {})
   return {
     ok: true,
     state: normalizeGameState({
@@ -342,6 +398,9 @@ export function applyReset() {
       growthAccrualSyncedAt: new Date().toISOString(),
       passiveDayKey: getPassiveDayKey(),
       passiveReactivateDayKey: '',
+      dailyLoginRouletteDayKey: current.dailyLoginRouletteDayKey,
+      dailyLoginRouletteRewardCups: current.dailyLoginRouletteRewardCups,
+      dailyLoginRouletteRespinDayKey: current.dailyLoginRouletteRespinDayKey,
     }),
   }
 }
@@ -376,8 +435,7 @@ export function applyPurchaseCoffeeVariant(state, slug) {
     state: normalizeGameState({
       ...current,
       ownedCoffeeVariants: [...owned, safeSlug],
-      totalCoffees: Math.max(0, current.totalCoffees - COFFEE_VARIANT_PURCHASE_COST),
-      spentCoffeeCups: current.spentCoffeeCups + COFFEE_VARIANT_PURCHASE_COST,
+      spentCoffeeCups: Math.max(0, current.spentCoffeeCups - COFFEE_VARIANT_PURCHASE_COST),
       selectedCoffeeVariant: safeSlug,
     }),
   }
@@ -408,5 +466,33 @@ export function applySelectCoffeeVariant(state, slug) {
       ...current,
       selectedCoffeeVariant: safeSlug,
     }),
+  }
+}
+
+export function applyClaimAttendanceDaily(state) {
+  const result = applyClaimAttendanceDailyReward(state)
+
+  if (!result.ok) {
+    return { ok: false, reason: result.reason, state: normalizeGameState(result.state) }
+  }
+
+  return {
+    ok: true,
+    state: normalizeGameState(result.state),
+    rewardCups: result.rewardCups,
+  }
+}
+
+export function applyClaimAttendanceStreakBonus(state) {
+  const result = claimAttendanceStreakBonusRaw(state)
+
+  if (!result.ok) {
+    return { ok: false, reason: result.reason, state: normalizeGameState(result.state) }
+  }
+
+  return {
+    ok: true,
+    state: normalizeGameState(result.state),
+    rewardCups: result.rewardCups,
   }
 }

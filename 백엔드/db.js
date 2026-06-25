@@ -5,12 +5,52 @@ import { settlePassiveGrowth } from './passiveGrowth.js'
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from './supabase.js'
 import { patchLocalDb, readLocalDb } from './store.js'
 
-const GAME_STATE_COLUMNS_CORE =
+const GAME_STATE_COLUMNS_LEGACY_CORE =
   'growth, money, total_coffees, total_waters, redeemed, water_day_key, waters_today, ad_water_credits, growth_accrual_synced_at, passive_day_key, daily_passive_growth, selected_coffee_variant, owned_coffee_variants, spent_coffee_cups'
+
+const GAME_STATE_COLUMNS_CORE = `${GAME_STATE_COLUMNS_LEGACY_CORE}, lifetime_drunk_coffees, lifetime_brewed_spent`
 
 const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM = `${GAME_STATE_COLUMNS_CORE}, passive_coffees_claimed`
 const GAME_STATE_COLUMNS_WITH_SHARE = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM}, share_reward_day_key`
 const GAME_STATE_COLUMNS_FULL = `${GAME_STATE_COLUMNS_WITH_SHARE}, passive_reactivate_day_key`
+
+const GAME_STATE_COLUMNS_WITH_ATTENDANCE = `${GAME_STATE_COLUMNS_FULL}, attendance_day_key, attendance_cups_today, attendance_streak, attendance_last_goal_day_key, attendance_daily_claim_day_key, attendance_streak_bonus_pending`
+
+const GAME_STATE_COLUMNS_WITH_POINT = `${GAME_STATE_COLUMNS_WITH_ATTENDANCE}, point_day_key`
+
+const GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE = `${GAME_STATE_COLUMNS_WITH_POINT}, daily_login_roulette_day_key, daily_login_roulette_reward_cups, daily_login_roulette_respin_day_key`
+
+const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY = `${GAME_STATE_COLUMNS_LEGACY_CORE}, passive_coffees_claimed`
+const GAME_STATE_COLUMNS_WITH_SHARE_LEGACY = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY}, share_reward_day_key`
+const GAME_STATE_COLUMNS_FULL_LEGACY = `${GAME_STATE_COLUMNS_WITH_SHARE_LEGACY}, passive_reactivate_day_key`
+
+function isMissingLifetimeBrewedSpentColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('lifetime_brewed_spent')
+}
+
+function warnMissingLifetimeBrewedColumnOnce() {
+  console.warn(
+    'game_states.lifetime_brewed_spent 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+function stripLifetimeBrewedSpent(row) {
+  if (!('lifetime_brewed_spent' in row)) return row
+  const { lifetime_brewed_spent: _ignored, ...rest } = row
+  return rest
+}
+
+function isMissingLifetimeDrunkCoffeesColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('lifetime_drunk_coffees')
+}
+
+function warnMissingLifetimeDrunkColumnOnce() {
+  console.warn(
+    'game_states.lifetime_drunk_coffees 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
 
 function isMissingPassiveCoffeesClaimedColumnError(error) {
   const message = String(error?.message ?? '')
@@ -25,6 +65,32 @@ function isMissingShareRewardColumnError(error) {
 function isMissingPassiveReactivateColumnError(error) {
   const message = String(error?.message ?? '')
   return message.includes('passive_reactivate_day_key')
+}
+
+function isMissingAttendanceColumnError(error) {
+  const message = String(error?.message ?? '')
+  return (
+    message.includes('attendance_day_key') ||
+    message.includes('attendance_cups_today') ||
+    message.includes('attendance_streak') ||
+    message.includes('attendance_last_goal_day_key') ||
+    message.includes('attendance_daily_claim_day_key') ||
+    message.includes('attendance_streak_bonus_pending')
+  )
+}
+
+function isMissingPointDayKeyColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('point_day_key')
+}
+
+function isMissingDailyLoginRouletteColumnError(error) {
+  const message = String(error?.message ?? '')
+  return (
+    message.includes('daily_login_roulette_day_key') ||
+    message.includes('daily_login_roulette_reward_cups') ||
+    message.includes('daily_login_roulette_respin_day_key')
+  )
 }
 
 function warnMissingPassiveColumnOnce() {
@@ -45,9 +111,38 @@ function warnMissingReactivateColumnOnce() {
   )
 }
 
+function warnMissingAttendanceColumnOnce() {
+  console.warn(
+    'game_states 출석 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+function warnMissingPointDayKeyColumnOnce() {
+  console.warn(
+    'game_states.point_day_key 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
+function warnMissingDailyLoginRouletteColumnOnce() {
+  console.warn(
+    'game_states 접속 룰렛 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
 let warnedPassiveColumn = false
 let warnedShareColumn = false
 let warnedReactivateColumn = false
+let warnedAttendanceColumn = false
+let warnedPointDayKeyColumn = false
+let warnedDailyLoginRouletteColumn = false
+let warnedLifetimeDrunkColumn = false
+let warnedLifetimeBrewedColumn = false
+
+function stripLifetimeDrunkCoffees(row) {
+  if (!('lifetime_drunk_coffees' in row)) return row
+  const { lifetime_drunk_coffees: _ignored, ...rest } = row
+  return rest
+}
 
 function stripPassiveCoffeesClaimed(row) {
   if (!('passive_coffees_claimed' in row)) return row
@@ -64,6 +159,44 @@ function stripShareRewardDayKey(row) {
 function stripPassiveReactivateDayKey(row) {
   if (!('passive_reactivate_day_key' in row)) return row
   const { passive_reactivate_day_key: _ignored, ...rest } = row
+  return rest
+}
+
+function stripAttendanceColumns(row) {
+  if (!('attendance_day_key' in row)) return row
+  const {
+    attendance_day_key: _dayKey,
+    attendance_cups_today: _cupsToday,
+    attendance_streak: _streak,
+    attendance_last_goal_day_key: _lastGoal,
+    attendance_daily_claim_day_key: _dailyClaim,
+    attendance_streak_bonus_pending: _streakBonus,
+    ...rest
+  } = row
+  return rest
+}
+
+function stripPointDayKey(row) {
+  if (!('point_day_key' in row)) return row
+  const { point_day_key: _ignored, ...rest } = row
+  return rest
+}
+
+function stripDailyLoginRouletteRespinDayKey(row) {
+  if (!('daily_login_roulette_respin_day_key' in row)) return row
+  const { daily_login_roulette_respin_day_key: _ignored, ...rest } = row
+  return rest
+}
+
+function stripDailyLoginRouletteRewardCups(row) {
+  if (!('daily_login_roulette_reward_cups' in row)) return row
+  const { daily_login_roulette_reward_cups: _ignored, ...rest } = row
+  return rest
+}
+
+function stripDailyLoginRouletteDayKey(row) {
+  if (!('daily_login_roulette_day_key' in row)) return row
+  const { daily_login_roulette_day_key: _ignored, ...rest } = row
   return rest
 }
 
@@ -121,7 +254,19 @@ function mapGameRow(row) {
     selectedCoffeeVariant: row.selected_coffee_variant,
     ownedCoffeeVariants: row.owned_coffee_variants,
     spentCoffeeCups: row.spent_coffee_cups,
+    lifetimeDrunkCoffees: Number(row.lifetime_drunk_coffees ?? 0),
+    lifetimeBrewedSpent: Number(row.lifetime_brewed_spent ?? row.lifetime_drunk_coffees ?? 0),
     shareRewardDayKey: row.share_reward_day_key,
+    attendanceDayKey: String(row.attendance_day_key ?? ''),
+    attendanceCupsToday: Number(row.attendance_cups_today ?? 0),
+    attendanceStreak: Number(row.attendance_streak ?? 0),
+    attendanceLastGoalDayKey: String(row.attendance_last_goal_day_key ?? ''),
+    attendanceDailyClaimDayKey: String(row.attendance_daily_claim_day_key ?? ''),
+    attendanceStreakBonusPending: Boolean(row.attendance_streak_bonus_pending),
+    pointDayKey: String(row.point_day_key ?? ''),
+    dailyLoginRouletteDayKey: String(row.daily_login_roulette_day_key ?? ''),
+    dailyLoginRouletteRewardCups: Number(row.daily_login_roulette_reward_cups ?? 0),
+    dailyLoginRouletteRespinDayKey: String(row.daily_login_roulette_respin_day_key ?? ''),
   })
 }
 
@@ -159,6 +304,14 @@ function pickBetterGameState(left, right) {
 
   if (a.totalCoffees !== b.totalCoffees) {
     return a.totalCoffees > b.totalCoffees ? a : b
+  }
+
+  if (a.lifetimeBrewedSpent !== b.lifetimeBrewedSpent) {
+    return a.lifetimeBrewedSpent > b.lifetimeBrewedSpent ? a : b
+  }
+
+  if (a.lifetimeDrunkCoffees !== b.lifetimeDrunkCoffees) {
+    return a.lifetimeDrunkCoffees > b.lifetimeDrunkCoffees ? a : b
   }
 
   if (a.spentCoffeeCups !== b.spentCoffeeCups) {
@@ -613,124 +766,198 @@ function toGameRow(state) {
     selected_coffee_variant: current.selectedCoffeeVariant,
     owned_coffee_variants: current.ownedCoffeeVariants,
     spent_coffee_cups: current.spentCoffeeCups,
+    lifetime_drunk_coffees: current.lifetimeDrunkCoffees,
+    lifetime_brewed_spent: current.lifetimeBrewedSpent,
     share_reward_day_key: current.shareRewardDayKey,
+    attendance_day_key: current.attendanceDayKey,
+    attendance_cups_today: current.attendanceCupsToday,
+    attendance_streak: current.attendanceStreak,
+    attendance_last_goal_day_key: current.attendanceLastGoalDayKey,
+    attendance_daily_claim_day_key: current.attendanceDailyClaimDayKey,
+    attendance_streak_bonus_pending: current.attendanceStreakBonusPending,
+    point_day_key: current.pointDayKey,
+    daily_login_roulette_day_key: current.dailyLoginRouletteDayKey,
+    daily_login_roulette_reward_cups: current.dailyLoginRouletteRewardCups,
+    daily_login_roulette_respin_day_key: current.dailyLoginRouletteRespinDayKey,
   }
 
   return row
 }
 
-async function insertGameRow(supabase, row) {
-  let payload = row
-  let result = await supabase.from('game_states').insert(payload)
+const GAME_STATE_SELECT_VARIANTS = [
+  GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE,
+  GAME_STATE_COLUMNS_WITH_POINT,
+  GAME_STATE_COLUMNS_WITH_ATTENDANCE,
+  GAME_STATE_COLUMNS_FULL,
+  GAME_STATE_COLUMNS_FULL_LEGACY,
+  GAME_STATE_COLUMNS_WITH_SHARE,
+  GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM,
+  GAME_STATE_COLUMNS_LEGACY_CORE,
+]
 
-  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
-    if (!warnedReactivateColumn) {
-      warnedReactivateColumn = true
-      warnMissingReactivateColumnOnce()
-    }
-    payload = stripPassiveReactivateDayKey(row)
-    result = await supabase.from('game_states').insert(payload)
+function isMissingGameStateColumnError(error) {
+  return (
+    isMissingDailyLoginRouletteColumnError(error) ||
+    isMissingPointDayKeyColumnError(error) ||
+    isMissingAttendanceColumnError(error) ||
+    isMissingLifetimeDrunkCoffeesColumnError(error) ||
+    isMissingLifetimeBrewedSpentColumnError(error) ||
+    isMissingPassiveReactivateColumnError(error) ||
+    isMissingShareRewardColumnError(error) ||
+    isMissingPassiveCoffeesClaimedColumnError(error)
+  )
+}
+
+function warnMissingGameStateColumnOnce(error) {
+  if (isMissingDailyLoginRouletteColumnError(error) && !warnedDailyLoginRouletteColumn) {
+    warnedDailyLoginRouletteColumn = true
+    warnMissingDailyLoginRouletteColumnOnce()
+    return
   }
 
-  if (result.error && isMissingShareRewardColumnError(result.error)) {
-    if (!warnedShareColumn) {
-      warnedShareColumn = true
-      warnMissingShareColumnOnce()
-    }
-    payload = stripShareRewardDayKey(payload)
-    result = await supabase.from('game_states').insert(payload)
+  if (isMissingPointDayKeyColumnError(error) && !warnedPointDayKeyColumn) {
+    warnedPointDayKeyColumn = true
+    warnMissingPointDayKeyColumnOnce()
+    return
   }
 
-  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
-    if (!warnedPassiveColumn) {
-      warnedPassiveColumn = true
-      warnMissingPassiveColumnOnce()
+  if (isMissingAttendanceColumnError(error) && !warnedAttendanceColumn) {
+    warnedAttendanceColumn = true
+    warnMissingAttendanceColumnOnce()
+    return
+  }
+
+  if (isMissingLifetimeDrunkCoffeesColumnError(error) && !warnedLifetimeDrunkColumn) {
+    warnedLifetimeDrunkColumn = true
+    warnMissingLifetimeDrunkColumnOnce()
+    return
+  }
+
+  if (isMissingLifetimeBrewedSpentColumnError(error) && !warnedLifetimeBrewedColumn) {
+    warnedLifetimeBrewedColumn = true
+    warnMissingLifetimeBrewedColumnOnce()
+    return
+  }
+
+  if (isMissingPassiveReactivateColumnError(error) && !warnedReactivateColumn) {
+    warnedReactivateColumn = true
+    warnMissingReactivateColumnOnce()
+    return
+  }
+
+  if (isMissingShareRewardColumnError(error) && !warnedShareColumn) {
+    warnedShareColumn = true
+    warnMissingShareColumnOnce()
+    return
+  }
+
+  if (isMissingPassiveCoffeesClaimedColumnError(error) && !warnedPassiveColumn) {
+    warnedPassiveColumn = true
+    warnMissingPassiveColumnOnce()
+  }
+}
+
+function stripMissingGameStateColumns(error, payload) {
+  if (String(error?.message ?? '').includes('daily_login_roulette_respin_day_key')) {
+    return stripDailyLoginRouletteRespinDayKey(payload)
+  }
+
+  if (String(error?.message ?? '').includes('daily_login_roulette_reward_cups')) {
+    return stripDailyLoginRouletteRewardCups(payload)
+  }
+
+  if (isMissingDailyLoginRouletteColumnError(error)) {
+    return stripDailyLoginRouletteDayKey(payload)
+  }
+
+  if (isMissingPointDayKeyColumnError(error)) {
+    return stripPointDayKey(payload)
+  }
+
+  if (isMissingAttendanceColumnError(error)) {
+    return stripAttendanceColumns(payload)
+  }
+
+  if (isMissingLifetimeDrunkCoffeesColumnError(error)) {
+    return stripLifetimeDrunkCoffees(payload)
+  }
+
+  if (isMissingLifetimeBrewedSpentColumnError(error)) {
+    return stripLifetimeBrewedSpent(payload)
+  }
+
+  if (isMissingPassiveReactivateColumnError(error)) {
+    return stripPassiveReactivateDayKey(payload)
+  }
+
+  if (isMissingShareRewardColumnError(error)) {
+    return stripShareRewardDayKey(payload)
+  }
+
+  if (isMissingPassiveCoffeesClaimedColumnError(error)) {
+    return stripPassiveCoffeesClaimed(payload)
+  }
+
+  return null
+}
+
+async function writeGameRowWithFallback(supabase, row, write) {
+  let payload = { ...row }
+  let result = await write(payload)
+  let guard = 0
+
+  while (result.error && isMissingGameStateColumnError(result.error) && guard < 8) {
+    warnMissingGameStateColumnOnce(result.error)
+    const nextPayload = stripMissingGameStateColumns(result.error, payload)
+
+    if (!nextPayload) {
+      break
     }
-    payload = stripPassiveCoffeesClaimed(stripShareRewardDayKey(stripPassiveReactivateDayKey(row)))
-    result = await supabase.from('game_states').insert(payload)
+
+    payload = nextPayload
+    result = await write(payload)
+    guard += 1
   }
 
   return result
+}
+
+async function insertGameRow(supabase, row) {
+  return writeGameRowWithFallback(supabase, row, (payload) =>
+    supabase.from('game_states').insert(payload),
+  )
 }
 
 async function upsertGameRow(supabase, row, options) {
-  let payload = row
-  let result = await supabase.from('game_states').upsert(payload, options)
-
-  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
-    if (!warnedReactivateColumn) {
-      warnedReactivateColumn = true
-      warnMissingReactivateColumnOnce()
-    }
-    payload = stripPassiveReactivateDayKey(row)
-    result = await supabase.from('game_states').upsert(payload, options)
-  }
-
-  if (result.error && isMissingShareRewardColumnError(result.error)) {
-    if (!warnedShareColumn) {
-      warnedShareColumn = true
-      warnMissingShareColumnOnce()
-    }
-    payload = stripShareRewardDayKey(payload)
-    result = await supabase.from('game_states').upsert(payload, options)
-  }
-
-  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
-    if (!warnedPassiveColumn) {
-      warnedPassiveColumn = true
-      warnMissingPassiveColumnOnce()
-    }
-    payload = stripPassiveCoffeesClaimed(stripShareRewardDayKey(stripPassiveReactivateDayKey(row)))
-    result = await supabase.from('game_states').upsert(payload, options)
-  }
-
-  return result
+  return writeGameRowWithFallback(supabase, row, (payload) =>
+    supabase.from('game_states').upsert(payload, options),
+  )
 }
 
 async function selectGameRow(supabase, userId) {
-  let result = await supabase
-    .from('game_states')
-    .select(GAME_STATE_COLUMNS_FULL)
-    .eq('user_id', userId)
-    .maybeSingle()
+  let lastResult = null
 
-  if (result.error && isMissingPassiveReactivateColumnError(result.error)) {
-    if (!warnedReactivateColumn) {
-      warnedReactivateColumn = true
-      warnMissingReactivateColumnOnce()
-    }
-    result = await supabase
+  for (const columns of GAME_STATE_SELECT_VARIANTS) {
+    const result = await supabase
       .from('game_states')
-      .select(GAME_STATE_COLUMNS_WITH_SHARE)
+      .select(columns)
       .eq('user_id', userId)
       .maybeSingle()
-  }
 
-  if (result.error && isMissingShareRewardColumnError(result.error)) {
-    if (!warnedShareColumn) {
-      warnedShareColumn = true
-      warnMissingShareColumnOnce()
+    lastResult = result
+
+    if (!result.error) {
+      return result
     }
-    result = await supabase
-      .from('game_states')
-      .select(GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM)
-      .eq('user_id', userId)
-      .maybeSingle()
-  }
 
-  if (result.error && isMissingPassiveCoffeesClaimedColumnError(result.error)) {
-    if (!warnedPassiveColumn) {
-      warnedPassiveColumn = true
-      warnMissingPassiveColumnOnce()
+    if (!isMissingGameStateColumnError(result.error)) {
+      return result
     }
-    result = await supabase
-      .from('game_states')
-      .select(GAME_STATE_COLUMNS_CORE)
-      .eq('user_id', userId)
-      .maybeSingle()
+
+    warnMissingGameStateColumnOnce(result.error)
   }
 
-  return result
+  return lastResult
 }
 
 function passiveGrowthChanged(before, after) {
@@ -782,17 +1009,40 @@ export async function getGameState(userId) {
   return settleAndPersistPassiveGrowth(userId, mapGameRow(data))
 }
 
-export async function saveGameState(userId, state) {
-  const next = normalizeGameState(state)
+export async function saveGameState(userId, state, options = {}) {
+  let next = normalizeGameState(state)
+  const allowTotalCoffeeDecrease = options.allowTotalCoffeeDecrease === true
 
   if (!isSupabaseAdminConfigured()) {
     patchLocalDb((db) => {
+      if (!allowTotalCoffeeDecrease) {
+        const current = normalizeGameState(db.gameStates[userId] ?? initialGameState)
+        next = {
+          ...next,
+          totalCoffees: Math.max(next.totalCoffees, current.totalCoffees),
+        }
+      }
       db.gameStates[userId] = next
     })
     return next
   }
 
   const supabase = getSupabaseAdmin()
+
+  if (!allowTotalCoffeeDecrease) {
+    const { data, error } = await selectGameRow(supabase, userId)
+    if (error) {
+      throw error
+    }
+    if (data) {
+      const current = mapGameRow(data)
+      next = {
+        ...next,
+        totalCoffees: Math.max(next.totalCoffees, current.totalCoffees),
+      }
+    }
+  }
+
   const { error } = await upsertGameRow(
     supabase,
     {

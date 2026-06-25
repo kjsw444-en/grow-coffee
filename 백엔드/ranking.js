@@ -1,3 +1,4 @@
+import { getRankingBrewedSpend } from './gameLogic.js'
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from './supabase.js'
 import { patchLocalDb, readLocalDb } from './store.js'
 
@@ -72,34 +73,20 @@ export async function submitRanking(userId, spentCoffeeCups, displayName) {
 
   if (!isSupabaseAdminConfigured()) {
     patchLocalDb((db) => {
-      const current = db.rankings[userId]
-      const nextScore = Math.max(Number(current?.spentCoffeeCups ?? 0), safeScore)
-
       db.rankings[userId] = {
         displayName: safeName,
-        spentCoffeeCups: nextScore,
+        spentCoffeeCups: safeScore,
         updatedAt,
       }
     })
   } else {
     const supabase = getSupabaseAdmin()
-    const { data: existing, error: lookupError } = await supabase
-      .from('rankings')
-      .select('spent_coffee_cups')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (lookupError) {
-      throw lookupError
-    }
-
-    const nextScore = Math.max(Number(existing?.spent_coffee_cups ?? 0), safeScore)
 
     const { error: rankingError } = await supabase.from('rankings').upsert(
       {
         user_id: userId,
         display_name: safeName,
-        spent_coffee_cups: nextScore,
+        spent_coffee_cups: safeScore,
         updated_at: updatedAt,
       },
       { onConflict: 'user_id' },
@@ -115,23 +102,24 @@ export async function submitRanking(userId, spentCoffeeCups, displayName) {
   const ranked = await fetchRankedEntries()
   const playerIndex = ranked.findIndex((entry) => entry.user_id === userId)
   const playerRank = playerIndex >= 0 ? playerIndex + 1 : ranked.length + 1
+  const storedScore =
+    playerIndex >= 0 ? Number(ranked[playerIndex].spent_coffee_cups ?? safeScore) : safeScore
 
   return {
     ok: true,
     playerRank,
-    playerSpentCoffeeCups: safeScore,
+    playerSpentCoffeeCups: storedScore,
     inTop50: playerRank <= RANKING_SIZE,
     top50: mapRankingRows(ranked.slice(0, RANKING_SIZE), userId),
     totalPlayers: ranked.length,
   }
 }
 
-/** drink / 상점 구매 후 랭킹 점수 자동 반영 (goldcat submit 패턴) */
+/** 「내린 커피 마시기」 누적 소모량을 랭킹 점수로 동기화 (초기화 시 0 포함) */
 export async function syncRankingFromGameState(userId, state, displayName) {
-  const spentCoffeeCups = Number(state?.spentCoffeeCups ?? 0)
-  if (!userId || spentCoffeeCups <= 0) {
+  if (!userId) {
     return null
   }
 
-  return submitRanking(userId, spentCoffeeCups, displayName)
+  return submitRanking(userId, getRankingBrewedSpend(state), displayName)
 }

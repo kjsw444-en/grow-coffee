@@ -23,6 +23,10 @@ export const DEFAULT_COFFEE_VARIANT_SLUG = 'parttime-latte'
 
 export const COFFEE_VARIANT_PURCHASE_COST = 100
 
+export function formatDrunkCoffeePurchaseCost(amount = COFFEE_VARIANT_PURCHASE_COST) {
+  return `마신 커피 ${Math.max(0, Math.floor(Number(amount) || 0)).toLocaleString('ko-KR')}잔`
+}
+
 export function isCoffeeVariantSlug(value) {
   return COFFEE_VARIANT_SLUGS.includes(String(value || ''))
 }
@@ -53,5 +57,5 @@ export function normalizeOwnedCoffeeVariants(raw) {
 export { normalizeSelectedCoffeeVariant } from './hiddenCoffeeVariants.js'
 
 export function getAvailableCoffeeCups(state) {
-  return Math.max(0, Math.floor(Number(state.totalCoffees) || 0))
+  return Math.max(0, Math.floor(Number(state.spentCoffeeCups) || 0))
 }

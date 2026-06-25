@@ -70,3 +70,22 @@ alter table public.game_states add column if not exists share_reward_day_key tex
 alter table public.game_states add column if not exists passive_coffees_claimed integer not null default 0 check (passive_coffees_claimed >= 0 and passive_coffees_claimed <= 2);
 
 alter table public.game_states add column if not exists passive_reactivate_day_key text not null default '';
+
+alter table public.game_states add column if not exists lifetime_drunk_coffees integer not null default 0 check (lifetime_drunk_coffees >= 0);
+
+alter table public.game_states add column if not exists lifetime_brewed_spent integer not null default 0 check (lifetime_brewed_spent >= 0);
+
+alter table public.game_states add column if not exists attendance_day_key text not null default '';
+alter table public.game_states add column if not exists attendance_cups_today integer not null default 0 check (attendance_cups_today >= 0);
+alter table public.game_states add column if not exists attendance_streak integer not null default 0 check (attendance_streak >= 0);
+alter table public.game_states add column if not exists attendance_last_goal_day_key text not null default '';
+alter table public.game_states add column if not exists attendance_daily_claim_day_key text not null default '';
+alter table public.game_states add column if not exists attendance_streak_bonus_pending boolean not null default false;
+
+-- 오늘 포인트 적립일 (money는 당일 4,700원 상한용)
+alter table public.game_states add column if not exists point_day_key text not null default '';
+
+-- 1일 1접속 룰렛 (KST en-CA)
+alter table public.game_states add column if not exists daily_login_roulette_day_key text not null default '';
+alter table public.game_states add column if not exists daily_login_roulette_reward_cups integer not null default 0 check (daily_login_roulette_reward_cups >= 0);
+alter table public.game_states add column if not exists daily_login_roulette_respin_day_key text not null default '';

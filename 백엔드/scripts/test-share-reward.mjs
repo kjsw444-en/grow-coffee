@@ -12,7 +12,7 @@ function test(name, fn) {
   }
 }
 
-test('공유 리워드 — totalCoffees +50', () => {
+test('공유 리워드 — totalCoffees +25', () => {
   const result = applyShareReward(initialGameState)
 
   assert.equal(result.ok, true)

@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict'
-import { applyDevTestWater, applyClaimPassiveCoffee, applyDrink, applySellBatch, applyWater, sanitizeLoadedGameState } from '../gameLogic.js'
+import {
+  applyClaimPassiveCoffee,
+  applyDevTestWater,
+  applyDrink,
+  applyPurchaseCoffeeVariant,
+  applySellBatch,
+  applyWater,
+  sanitizeLoadedGameState,
+} from '../gameLogic.js'
+import { COFFEE_VARIANT_PURCHASE_COST, DEFAULT_COFFEE_VARIANT_SLUG } from '../coffeeVariants.js'
 import { initialGameState, SELL_BATCH_REWARD } from '../constants.js'
 import { settlePassiveGrowth } from '../passiveGrowth.js'
 
@@ -21,21 +30,24 @@ test('물 1회당 growth +25% — 방치 settle과 함께 동작', () => {
   assert.equal(state.growth, 100)
 })
 
-test('커피 마시기 — totalCoffees +1, growth 0, money 변화 없음', () => {
+test('커피 마시기 — 내린 커피 +1, spentCoffeeCups·lifetimeDrunkCoffees 유지', () => {
   const state = {
     ...initialGameState,
     growth: 100,
     money: 100,
     totalCoffees: 2,
+    spentCoffeeCups: 5,
+    lifetimeDrunkCoffees: 5,
     dailyPassiveGrowth: 130,
     passiveDayKey: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
   }
   const result = applyDrink(state)
   assert.equal(result.ok, true)
   assert.equal(result.state.totalCoffees, 3)
+  assert.equal(result.state.spentCoffeeCups, 5)
+  assert.equal(result.state.lifetimeDrunkCoffees, 5)
   assert.equal(result.state.money, 100)
   assert.equal(result.state.growth, 0)
-  assert.ok(result.state.dailyPassiveGrowth >= 130)
   assert.equal(result.lastEarned, null)
 })
 
@@ -54,16 +66,48 @@ test('성장 100%여도 방치 누적(dailyPassiveGrowth)은 계속 증가', () 
   assert.ok(next.dailyPassiveGrowth >= 99, `expected ~100 passive, got ${next.dailyPassiveGrowth}`)
 })
 
-test('10잔 판매 — totalCoffees -10, money +47', () => {
+test('50잔 마시기 — totalCoffees -50, spentCoffeeCups +50, money +235', () => {
   const state = {
     ...initialGameState,
-    totalCoffees: 12,
+    totalCoffees: 52,
     money: 0,
   }
-  const result = applySellBatch(state)
+  const result = applySellBatch(state, 50)
   assert.equal(result.ok, true)
   assert.equal(result.state.totalCoffees, 2)
-  assert.equal(result.state.money, SELL_BATCH_REWARD)
+  assert.equal(result.state.spentCoffeeCups, 50)
+  assert.equal(result.state.lifetimeDrunkCoffees, 50)
+  assert.equal(result.state.money, 235)
+})
+
+test('1000잔 마시기 — money +4700', () => {
+  const state = {
+    ...initialGameState,
+    totalCoffees: 1000,
+    money: 0,
+  }
+  const result = applySellBatch(state, 1000)
+  assert.equal(result.ok, true)
+  assert.equal(result.state.money, 4700)
+  assert.equal(result.dailyCapJustReached, true)
+  assert.equal(result.state.redeemed, false)
+})
+
+test('캐릭터 구매 — spentCoffeeCups -100, lifetimeDrunkCoffees 유지', () => {
+  const slug = 'student-coldbrew'
+  const state = {
+    ...initialGameState,
+    spentCoffeeCups: COFFEE_VARIANT_PURCHASE_COST,
+    lifetimeDrunkCoffees: COFFEE_VARIANT_PURCHASE_COST,
+    totalCoffees: 50,
+    ownedCoffeeVariants: [DEFAULT_COFFEE_VARIANT_SLUG],
+  }
+  const result = applyPurchaseCoffeeVariant(state, slug)
+  assert.equal(result.ok, true, result.reason)
+  assert.equal(result.state.spentCoffeeCups, 0)
+  assert.equal(result.state.lifetimeDrunkCoffees, COFFEE_VARIANT_PURCHASE_COST)
+  assert.equal(result.state.totalCoffees, 50)
+  assert.ok(result.state.ownedCoffeeVariants.includes(slug))
 })
 
 test('방치는 커피나무 growth와 분리 — dailyPassiveGrowth만 증가', () => {

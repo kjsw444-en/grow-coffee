@@ -1,4 +1,10 @@
-import { DAILY_PASSIVE_GROWTH_CAP, PASSIVE_GROWTH_PER_SECOND } from './constants.js'
+import {
+  BREWED_COFFEE_DRINK_OPTIONS,
+  DAILY_PASSIVE_GROWTH_CAP,
+  PASSIVE_GROWTH_PER_SECOND,
+  SELL_BATCH_REWARD,
+  SELL_BATCH_SIZE,
+} from './constants.js'
 import { getMediaAssetRules } from './mediaAssets.js'
 
 export function getPassiveDayKey(date = new Date()) {
@@ -165,6 +171,8 @@ export const BALANCE_RULES = {
 export function getBalanceRules() {
   return {
     ...BALANCE_RULES,
+    brewedCoffeeDrinkOptions: BREWED_COFFEE_DRINK_OPTIONS,
+    brewedCoffeePointPerCup: SELL_BATCH_REWARD / SELL_BATCH_SIZE,
     mediaAssets: getMediaAssetRules(),
   }
 }

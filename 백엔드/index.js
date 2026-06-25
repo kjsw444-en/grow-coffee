@@ -28,8 +28,30 @@ import {
   requireStorage,
   requireUser,
 } from './middleware.js'
-import { applyClaimPassiveCoffee, applyDrink, applyDevBumpPassive, applyDevTestWater, applyPurchaseCoffeeVariant, applyReactivatePassiveCoffee, applyReset, applySelectCoffeeVariant, applySellBatch, applyShareReward, applyWatchAd, applyWater } from './gameLogic.js'
-import { ACTION_COOLDOWN_MS, SHARE_REWARD_MODULE_ID } from './constants.js'
+import {
+  applyClaimPassiveCoffee,
+  applyClaimAttendanceDaily,
+  applyClaimAttendanceStreakBonus,
+  applyDevBumpPassive,
+  applyDevTestWater,
+  applyDrink,
+  applyPurchaseCoffeeVariant,
+  applyReactivatePassiveCoffee,
+  applyReset,
+  applySelectCoffeeVariant,
+  applySellBatch,
+  applyShareReward,
+  applyWatchAd,
+  applyWater,
+  getRankingBrewedSpend,
+} from './gameLogic.js'
+import { applyMinigameReward } from './minigameReward.js'
+import {
+  applyDailyLoginRouletteClaim,
+  applyDailyLoginRouletteRespinWithClientReward,
+} from './dailyLoginRoulette.js'
+import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
+import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE } from './constants.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
   exchangeTossAuthorizationCode,
@@ -275,7 +297,62 @@ app.post('/api/game/dev/set-coffees', requireUser, async (req, res) => {
 
   try {
     const current = await getGameState(req.userId)
-    const state = await saveGameState(req.userId, { ...current, totalCoffees })
+    const state = await saveGameState(req.userId, { ...current, totalCoffees }, { allowTotalCoffeeDecrease: true })
+    res.json({
+      ok: true,
+      state,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+/** DEV 전용 — 마신 커피(spentCoffeeCups) 잔 수 설정 */
+app.post('/api/game/dev/set-drunk-coffees', requireUser, async (req, res) => {
+  if (!isDevRequest(req)) {
+    res.status(404).json({ ok: false, message: 'Not found' })
+    return
+  }
+
+  const spentCoffeeCups = Math.max(0, Math.floor(Number(req.body?.spentCoffeeCups ?? 0)))
+
+  try {
+    const current = await getGameState(req.userId)
+    const lifetimeDrunkCoffees = Math.max(
+      Number(current.lifetimeDrunkCoffees ?? 0),
+      spentCoffeeCups,
+    )
+    const state = await saveGameState(req.userId, {
+      ...current,
+      spentCoffeeCups,
+      lifetimeDrunkCoffees,
+    })
+    res.json({
+      ok: true,
+      state,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+/** DEV 전용 — 접속 룰렛 수령 상태 초기화 */
+app.post('/api/game/dev/reset-daily-roulette', requireUser, async (req, res) => {
+  if (!isDevRequest(req)) {
+    res.status(404).json({ ok: false, message: 'Not found' })
+    return
+  }
+
+  try {
+    const current = await getGameState(req.userId)
+    const state = await saveGameState(req.userId, {
+      ...current,
+      dailyLoginRouletteDayKey: '',
+      dailyLoginRouletteRewardCups: 0,
+      dailyLoginRouletteRespinDayKey: '',
+    })
     res.json({
       ok: true,
       state,
@@ -342,12 +419,111 @@ app.post('/api/game/share-reward', requireUser, async (req, res) => {
 
     const state = await saveGameState(req.userId, result.state)
     const displayName = await getProfileDisplayName(req.userId)
-    await syncRankingFromGameState(req.userId, state, displayName)
 
     const payload = await attachPlayerRank(req.userId, {
       ok: true,
       state,
       rewardAmount: result.rewardAmount,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/minigame-reward', requireUser, async (req, res) => {
+  try {
+    const missionKey = String(req.body?.missionKey || '').trim()
+    const rewardSlot = req.body?.rewardSlot === 'ad' ? 'ad' : 'free'
+    const current = await getGameState(req.userId)
+    const result = applyMinigameReward(current, missionKey, rewardSlot)
+
+    if (!result.ok) {
+      const messages = {
+        'invalid-mission': '유효하지 않은 미션입니다.',
+        'already-claimed': '오늘 이 난이도 보상은 이미 받았어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '미션 보상을 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/daily-login-roulette', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyDailyLoginRouletteClaim(current)
+
+    if (!result.ok) {
+      res.status(400).json({
+        ok: false,
+        message: '오늘 접속 룰렛은 이미 받았어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/daily-login-roulette/respin', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyDailyLoginRouletteRespinWithClientReward(current, {
+      clientDateKey: req.body?.dateKey,
+      previousRewardCups: req.body?.previousRewardCups,
+    })
+
+    if (!result.ok) {
+      const message =
+        result.reason === 'respin-used'
+          ? '오늘 다시 돌리기는 이미 사용했어요.'
+          : result.reason === 'reward-state-missing'
+            ? '룰렛 보상 정보를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.'
+            : '먼저 오늘의 룰렛을 돌려 주세요.'
+      res.status(400).json({
+        ok: false,
+        message,
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state, { allowTotalCoffeeDecrease: true })
+
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
+      previousRewardCups: result.previousRewardCups,
       passiveGrowthPreview: previewPassiveGrowth(state),
     })
     res.json(payload)
@@ -445,6 +621,68 @@ app.post('/api/game/drink', requireUser, async (req, res) => {
       state,
       lastEarned: result.lastEarned,
       passiveGrowthPreview: previewPassiveGrowth(state),
+      attendanceGoalJustMet: result.attendanceGoalJustMet ?? false,
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/claim-attendance-daily', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyClaimAttendanceDaily(current)
+
+    if (!result.ok) {
+      const messages = {
+        'goal-not-met': '오늘 출석 목표를 먼저 달성해 주세요.',
+        'already-claimed': '오늘 출석 보상은 이미 받았어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '출석 보상을 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/claim-attendance-streak', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyClaimAttendanceStreakBonus(current)
+
+    if (!result.ok) {
+      const messages = {
+        'not-available': '7일 연속 출석 보너스를 받을 수 없어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '연속 출석 보너스를 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
+      passiveGrowthPreview: previewPassiveGrowth(state),
     })
     res.json(payload)
   } catch (error) {
@@ -453,35 +691,35 @@ app.post('/api/game/drink', requireUser, async (req, res) => {
 })
 
 app.post('/api/game/sell-batch', requireUser, async (req, res) => {
+  const cupCount = Math.floor(Number(req.body?.cupCount ?? SELL_BATCH_SIZE))
+
   try {
     const current = await getGameState(req.userId)
-    const result = applySellBatch(current)
+    const result = applySellBatch(current, cupCount)
 
     if (!result.ok) {
       const messages = {
-        'already-redeemed': '이미 목표를 달성했어요.',
-        'not-enough-cups': '판매하려면 내린 커피 10잔이 필요해요.',
+        'daily-point-cap-reached': '오늘은 커피 한 잔 값(4,700원)만큼 받았어요. 내일 다시 도전해 주세요.',
+        'invalid-batch-size': `내린 커피는 ${BREWED_COFFEE_DRINK_OPTIONS.join(', ')}잔 중에서 선택해 주세요.`,
+        'not-enough-cups': `내린 커피 ${cupCount}잔이 필요해요.`,
       }
       res.status(400).json({
         ok: false,
-        message: messages[result.reason] || '커피를 판매할 수 없어요.',
+        message: messages[result.reason] || '내린 커피를 마실 수 없어요.',
         state: result.state,
       })
       return
     }
 
-    const state = await saveGameState(req.userId, result.state)
+    const state = await saveGameState(req.userId, result.state, { allowTotalCoffeeDecrease: true })
     const displayName = await getProfileDisplayName(req.userId)
-    try {
-      await syncRankingFromGameState(req.userId, state, displayName)
-    } catch (rankingError) {
-      console.error('ranking sync after sell-batch failed', rankingError)
-    }
+    await syncRankingFromGameState(req.userId, state, displayName)
 
     const payload = await attachPlayerRank(req.userId, {
       ok: true,
       state,
       lastEarned: result.lastEarned,
+      dailyCapJustReached: result.dailyCapJustReached === true,
       passiveGrowthPreview: previewPassiveGrowth(state),
     })
     res.json(payload)
@@ -502,7 +740,7 @@ app.post('/api/game/purchase-variant', requireUser, async (req, res) => {
         'invalid-variant': '존재하지 않는 캐릭터예요.',
         'already-free': '기본 캐릭터는 구매할 수 없어요.',
         'already-owned': '이미 보유한 캐릭터예요.',
-        'not-enough-cups': '내린 커피 잔이 부족해요. (100잔 필요)',
+        'not-enough-cups': `${formatDrunkCoffeePurchaseCost()}이 필요해요.`,
       }
       res.status(400).json({
         ok: false,
@@ -513,8 +751,6 @@ app.post('/api/game/purchase-variant', requireUser, async (req, res) => {
     }
 
     const state = await saveGameState(req.userId, result.state)
-    const displayName = await getProfileDisplayName(req.userId)
-    await syncRankingFromGameState(req.userId, state, displayName)
 
     const payload = await attachPlayerRank(req.userId, { ok: true, state })
     res.json(payload)
@@ -552,10 +788,14 @@ app.post('/api/game/select-variant', requireUser, async (req, res) => {
 
 app.post('/api/game/reset', requireUser, async (req, res) => {
   try {
-    const result = applyReset()
-    const state = await saveGameState(req.userId, result.state)
+    const current = await getGameState(req.userId)
+    const result = applyReset(current)
+    const state = await saveGameState(req.userId, result.state, { allowTotalCoffeeDecrease: true })
     setLastActionAt(req.userId, 0)
-    res.json({ ok: true, state })
+    const displayName = await getProfileDisplayName(req.userId)
+    await syncRankingFromGameState(req.userId, state, displayName)
+    const payload = await attachPlayerRank(req.userId, { ok: true, state })
+    res.json(payload)
   } catch (error) {
     handleApiError(res, error)
   }
@@ -571,20 +811,11 @@ app.get('/api/ranking/top50', requireStorage, async (req, res) => {
 })
 
 app.post('/api/ranking/submit', requireStorage, requireUser, async (req, res) => {
-  const spentCoffeeCups = Number(req.body?.spentCoffeeCups)
   const displayName = String(req.body?.displayName || '').trim()
-
-  if (!Number.isFinite(spentCoffeeCups) || spentCoffeeCups < 0) {
-    res.status(400).json({ ok: false, message: 'spentCoffeeCups 값이 올바르지 않습니다.' })
-    return
-  }
 
   try {
     const current = await getGameState(req.userId)
-    const safeScore = Math.max(
-      Math.floor(spentCoffeeCups),
-      Math.floor(Number(current.spentCoffeeCups ?? 0)),
-    )
+    const safeScore = getRankingBrewedSpend(current)
     const safeName = displayName || (await getProfileDisplayName(req.userId))
     const payload = await submitRanking(req.userId, safeScore, safeName)
     res.json(payload)
