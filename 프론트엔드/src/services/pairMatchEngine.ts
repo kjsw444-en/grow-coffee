@@ -1,6 +1,6 @@
 export const PAIR_ICONS = ['☕', '🫘', '🌱', '☀️', '🍪', '💎', '🧺', '🥣'];
 
-export type PairMissionKey = 'pairMission1' | 'pairMission2' | 'pairMission3';
+export type PairMissionKey = 'pairMission1' | 'pairMission2' | 'pairMission3' | 'pairMission4';
 
 export type PairCard = {
   id: string;
@@ -38,6 +38,16 @@ export const PAIR_DIFFICULTIES = [
     pairCount: 5,
     timeLimit: 20,
     description: '5쌍 · 20초 · 빠른 기억력',
+  },
+  {
+    id: 'nightmare',
+    label: '극악버전',
+    emoji: '💀',
+    missionKey: 'pairMission4' as PairMissionKey,
+    reward: 0.02,
+    pairCount: 7,
+    timeLimit: 12,
+    description: '7쌍 · 12초 · +3잔',
   },
 ] as const;
 

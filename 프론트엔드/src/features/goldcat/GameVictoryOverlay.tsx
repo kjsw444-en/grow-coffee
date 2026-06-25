@@ -1,5 +1,5 @@
 type VictoryGoldButtonProps = {
-  rewardKg: number;
+  rewardCups?: number;
   alreadyClaimed?: boolean;
   disabled?: boolean;
   onClaim: () => void;
@@ -7,14 +7,12 @@ type VictoryGoldButtonProps = {
 };
 
 export function VictoryGoldButton({
-  rewardKg,
+  rewardCups = 1,
   alreadyClaimed = false,
   disabled = false,
   onClaim,
   className = '',
 }: VictoryGoldButtonProps) {
-  const rewardText = rewardKg >= 0.01 ? rewardKg.toFixed(2) : rewardKg.toFixed(3);
-
   return (
     <button
       className={`onboarding-gold-button quest-victory-gold-button ${className}`.trim()}
@@ -24,7 +22,50 @@ export function VictoryGoldButton({
     >
       <span>☕</span>
       <strong>{alreadyClaimed ? '보상 수령 완료' : '커피 보상 받기'}</strong>
-      <small>+{rewardText}KG</small>
+      <small>내린 커피 +{rewardCups}잔</small>
+    </button>
+  );
+}
+
+type VictoryReplayButtonProps = {
+  onReplay: () => void;
+  needsAd?: boolean;
+  disabled?: boolean;
+  exhausted?: boolean;
+  compact?: boolean;
+  className?: string;
+};
+
+export function VictoryReplayButton({
+  onReplay,
+  needsAd = false,
+  disabled = false,
+  exhausted = false,
+  compact = false,
+  className = '',
+}: VictoryReplayButtonProps) {
+  if (compact) {
+    return (
+      <button
+        className={`victory-replay-button victory-replay-button--inline ${needsAd ? 'feed-ad-button' : ''} ${className}`.trim()}
+        disabled={disabled || exhausted}
+        type="button"
+        onClick={onReplay}
+      >
+        한번 더
+      </button>
+    );
+  }
+
+  return (
+    <button
+      className={`victory-replay-button ${needsAd ? 'feed-ad-button' : ''} ${className}`.trim()}
+      disabled={disabled || exhausted}
+      type="button"
+      onClick={onReplay}
+    >
+      <span>🔁</span>
+      <strong>{exhausted ? '오늘 종료' : '한번 더'}</strong>
     </button>
   );
 }
@@ -32,21 +73,33 @@ export function VictoryGoldButton({
 type GameVictoryOverlayProps = {
   title?: string;
   subtitle?: string;
-  rewardKg: number;
+  rewardCups?: number;
   alreadyClaimed?: boolean;
   onClaim: () => void;
   hideClaimButton?: boolean;
+  canReplay?: boolean;
+  replayNeedsAd?: boolean;
+  replayExhausted?: boolean;
+  onReplay?: () => void;
+  onDismiss?: () => void;
+  dismissLabel?: string;
 };
 
 export function GameVictoryOverlay({
   title = '승리!',
   subtitle,
-  rewardKg,
+  rewardCups = 1,
   alreadyClaimed = false,
   onClaim,
   hideClaimButton = false,
+  canReplay = false,
+  replayNeedsAd = false,
+  replayExhausted = false,
+  onReplay,
+  onDismiss,
+  dismissLabel = '난이도 선택',
 }: GameVictoryOverlayProps) {
-  const rewardText = rewardKg >= 0.01 ? rewardKg.toFixed(2) : rewardKg.toFixed(3);
+  const showReplay = Boolean(onReplay) && canReplay;
 
   return (
     <div className="game-victory-overlay" role="dialog" aria-modal="true">
@@ -61,16 +114,32 @@ export function GameVictoryOverlay({
               ? '옆 커피 보상 버튼으로 받으세요.'
               : '커피 보상 버튼으로 받으세요.'}
         </small>
-        {!hideClaimButton && (
-          <VictoryGoldButton
-            alreadyClaimed={alreadyClaimed}
-            className="game-victory-claim-button"
-            rewardKg={rewardKg}
-            onClaim={onClaim}
-          />
+        {(showReplay || !hideClaimButton || onDismiss) && (
+          <div className="game-victory-actions">
+            {!hideClaimButton && (
+              <VictoryGoldButton
+                alreadyClaimed={alreadyClaimed}
+                className="game-victory-claim-button"
+                rewardCups={rewardCups}
+                onClaim={onClaim}
+              />
+            )}
+            {showReplay && (
+              <VictoryReplayButton
+                className="game-victory-replay-button"
+                needsAd={replayNeedsAd}
+                onReplay={onReplay!}
+              />
+            )}
+            {onDismiss && (alreadyClaimed || replayExhausted || !showReplay) && (
+              <button className="game-victory-dismiss-button" type="button" onClick={onDismiss}>
+                {dismissLabel}
+              </button>
+            )}
+          </div>
         )}
-        {hideClaimButton && !alreadyClaimed && (
-          <p className="game-victory-reward-hint">+{rewardText}KG</p>
+        {hideClaimButton && !alreadyClaimed && !showReplay && !onDismiss && (
+          <p className="game-victory-reward-hint">내린 커피 +{rewardCups}잔</p>
         )}
       </div>
     </div>

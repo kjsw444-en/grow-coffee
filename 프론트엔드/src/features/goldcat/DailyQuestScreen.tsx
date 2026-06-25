@@ -15,8 +15,13 @@ import {
   type OmokDifficulty,
 } from '../../services/omokEngine';
 import type { DailyMissions } from '../../services/dailyGameStorage';
-import type { MissionKey, StatsUpdatePayload } from '../../hooks/useDailyGame';
-import { VictoryGoldButton } from './GameVictoryOverlay';
+import type { MinigameRewardSlot, MissionKey } from '../../services/dailyGamePlayQuota';
+import { countMissionsCompleteFromStatus, OMOK_MISSION_KEYS } from '../../services/dailyGamePlayQuota';
+import type { StatsUpdatePayload } from '../../hooks/useDailyGame';
+import { formatMinigameRewardLabel, getMinigameRewardCups } from '../../services/minigameReward';
+import { MissionSelectRow } from './MissionSelectRow';
+import { VictoryGoldButton, VictoryReplayButton } from './GameVictoryOverlay';
+import { MinigameCoverMissionSelect, MinigameCoverPanel } from './MinigameCoverPanel';
 
 const DIFFICULTIES = [
   {
@@ -57,7 +62,7 @@ const DIFFICULTIES = [
     stage: 4,
     reward: 0.02,
     moveTimeLimit: 8,
-    description: '전설급 AI · 한 수 8초 · +0.02KG',
+    description: '전설급 AI · 한 수 8초 · +3잔',
   },
 ];
 
@@ -73,13 +78,20 @@ const STAR_POINTS: [number, number][] = [
   [11, 11],
 ];
 
-function MissionBadge({ done, reward }: { done: boolean; reward: number }) {
-  if (done) {
+function MissionBadge({
+  rewardClaimed,
+  attempted,
+  missionKey,
+}: {
+  rewardClaimed: boolean;
+  attempted: boolean;
+  missionKey: MissionKey;
+}) {
+  if (rewardClaimed || attempted) {
     return <span className="ai-quest-badge done">완료</span>;
   }
 
-  const rewardLabel = reward >= 0.01 ? `+${reward.toFixed(2)}KG` : `+${reward.toFixed(3)}KG`;
-  return <span className="ai-quest-badge">{rewardLabel}</span>;
+  return <span className="ai-quest-badge">{formatMinigameRewardLabel(getMinigameRewardCups(missionKey))}</span>;
 }
 
 function OmokBoard({
@@ -141,10 +153,15 @@ type DailyQuestScreenProps = {
   daily: DailyMissions;
   farmerName?: string;
   onBack: () => void;
-  onReward: (missionKey: MissionKey, reward: number, successMessage?: string) => void;
+  onReward: (missionKey: MissionKey, successMessage?: string, rewardSlot?: MinigameRewardSlot) => void;
   onMessage?: (message: string) => void;
   onStatsUpdate?: (payload: StatsUpdatePayload) => void;
-  onWatchAd?: () => Promise<boolean> | boolean;
+  getMissionPlayStatus: (missionKey: MissionKey) => import('../../services/dailyGamePlayQuota').MissionPlayStatus;
+  beginMissionAttempt: (missionKey: MissionKey) => Promise<boolean>;
+  canClaimMissionReward: (missionKey: MissionKey, rewardSlot: MinigameRewardSlot) => boolean;
+  getAttemptRewardSlot: (
+    status: import('../../services/dailyGamePlayQuota').MissionPlayStatus,
+  ) => MinigameRewardSlot;
 };
 
 export function DailyQuestScreen({
@@ -154,9 +171,13 @@ export function DailyQuestScreen({
   onReward,
   onMessage,
   onStatsUpdate,
-  onWatchAd,
+  getMissionPlayStatus,
+  beginMissionAttempt,
+  canClaimMissionReward,
+  getAttemptRewardSlot,
 }: DailyQuestScreenProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState<OmokDifficulty | null>(null);
+  const [attemptRewardSlot, setAttemptRewardSlot] = useState<MinigameRewardSlot>('free');
   const [board, setBoard] = useState(createEmptyBoard);
   const [lastMove, setLastMove] = useState<Move | null>(null);
   const [gameStatus, setGameStatus] = useState<'playing' | 'win' | 'lose'>('playing');
@@ -173,7 +194,7 @@ export function DailyQuestScreen({
   const aiTurnLockRef = useRef(false);
   const playMinigameSound = useMinigameSound();
 
-  const completedCount = [daily.mission1, daily.mission2, daily.mission3, daily.mission4].filter(Boolean).length;
+  const completedCount = countMissionsCompleteFromStatus(daily, OMOK_MISSION_KEYS, getMissionPlayStatus);
   const activeDifficulty = DIFFICULTIES.find((item) => item.id === selectedDifficulty);
 
   const statusText = useMemo(() => {
@@ -261,7 +282,7 @@ export function DailyQuestScreen({
     aiTurnLockRef.current = false;
   }
 
-  function startGame(difficultyId: OmokDifficulty) {
+  function startGameInternal(difficultyId: OmokDifficulty) {
     const difficulty = DIFFICULTIES.find((item) => item.id === difficultyId);
     if (!difficulty) return;
 
@@ -283,25 +304,44 @@ export function DailyQuestScreen({
     onMessage?.(`${difficulty.label} AI와 오목 대결 · 한 수 ${difficulty.moveTimeLimit}초`);
   }
 
-  function resetGame() {
-    if (!selectedDifficulty) return;
-    startGame(selectedDifficulty);
+  async function tryStartGame(difficultyId: OmokDifficulty) {
+    const difficulty = DIFFICULTIES.find((item) => item.id === difficultyId);
+    if (!difficulty) return;
+
+    const playStatus = getMissionPlayStatus(difficulty.missionKey);
+    const rewardSlot = getAttemptRewardSlot(playStatus);
+    const allowed = await beginMissionAttempt(difficulty.missionKey);
+    if (!allowed) return;
+
+    setAttemptRewardSlot(rewardSlot);
+    startGameInternal(difficultyId);
+  }
+
+  function handleForfeit() {
+    if (!activeDifficulty) return;
+
+    void playMinigameSound('minigameLose');
+    onMessage?.('기권했어요. 오늘 이 난이도 플레이는 완료 처리됐어요.');
+    resetToDifficultySelect();
   }
 
   function handleBack() {
-    if (selectedDifficulty && gameStatus === 'playing') {
-      void playMinigameSound('minigameLose');
-      onMessage?.('기권 패배… 다시 도전해 보세요.');
-      resetToDifficultySelect();
+    if (!selectedDifficulty) {
+      onBack();
       return;
     }
 
-    if (selectedDifficulty) {
-      resetToDifficultySelect();
+    if (gameStatus === 'win' && victoryPending && !victoryRewardClaimed) {
+      onMessage?.('커피 보상을 먼저 받아 주세요.');
       return;
     }
 
-    onBack();
+    if (gameStatus === 'playing') {
+      handleForfeit();
+      return;
+    }
+
+    resetToDifficultySelect();
   }
 
   function handleCellClick(row: number, col: number) {
@@ -339,9 +379,9 @@ export function DailyQuestScreen({
   }
 
   const victoryRewardClaimed =
-    victoryPending && (rewardClaimedThisSession || daily[victoryPending.missionKey] >= 1);
-
-  const needsAdForReplay = gameStatus === 'win' && victoryPending && Boolean(victoryRewardClaimed);
+    victoryPending &&
+    (rewardClaimedThisSession ||
+      !canClaimMissionReward(victoryPending.missionKey, attemptRewardSlot));
 
   function handleClaimVictory() {
     if (!victoryPending || victoryRewardClaimed) {
@@ -349,21 +389,31 @@ export function DailyQuestScreen({
       return;
     }
 
-    onReward(victoryPending.missionKey, victoryPending.reward, victoryPending.successMessage);
+    onReward(victoryPending.missionKey, victoryPending.successMessage, attemptRewardSlot);
     setRewardClaimedThisSession(true);
   }
 
-  async function handleAdReplay() {
+  function requestDifficultyChange() {
+    if (gameStatus === 'win' && victoryPending && !victoryRewardClaimed) {
+      onMessage?.('커피 보상을 먼저 받아 주세요.');
+      return;
+    }
+
+    resetToDifficultySelect();
+  }
+
+  async function handleReplayAfterResult() {
     if (!selectedDifficulty) return;
-
-    const watched = await onWatchAd?.();
-    if (watched === false) return;
-
-    onMessage?.('같은 난이도로 다시 도전해요.');
     setVictoryPending(null);
     setRewardClaimedThisSession(false);
-    startGame(selectedDifficulty);
+    await tryStartGame(selectedDifficulty);
   }
+
+  const replayPlayStatus = activeDifficulty
+    ? getMissionPlayStatus(activeDifficulty.missionKey)
+    : null;
+  const canReplay = replayPlayStatus?.state === 'ad_required' && gameStatus !== 'playing';
+  const replayNeedsAd = true;
 
   return (
     <main className="goldcat-app">
@@ -378,68 +428,94 @@ export function DailyQuestScreen({
           </div>
         </header>
 
-        <section
-          className={`ai-quest-hero${gameStatus === 'win' && victoryPending ? ' ai-quest-hero--victory' : ''}`}
-        >
-          <div className="ai-quest-cat-stage">
-            <span className="ai-quest-farmer-avatar" aria-hidden="true">
-              {gameStatus === 'win' ? '🎉☕' : '☕🌱'}
-            </span>
-            {gameStatus === 'win' && victoryPending && (
-              <VictoryGoldButton
-                alreadyClaimed={Boolean(victoryRewardClaimed)}
-                rewardKg={victoryPending.reward}
-                onClaim={handleClaimVictory}
-              />
-            )}
-          </div>
-          <div>
-            <strong>{farmerName}와 함께하는 AI 오목</strong>
-            <p>
-              커피 농부 · {BOARD_SIZE}×{BOARD_SIZE} · 5목 승리
-            </p>
-            <small>
-              {gameStatus === 'win' && victoryPending
-                ? `${victoryPending.label} AI 승리! 옆 커피 보상 버튼으로 받으세요.`
-                : '나무 바둑판 · 난이도마다 한 수 시간 제한'}
-            </small>
-          </div>
-          <div className="ai-quest-meta">
-            <span>{completedCount}/4 완료</span>
-            <span>{selectedDifficulty ? activeDifficulty?.label : '난이도 선택'}</span>
-          </div>
-        </section>
+        <MinigameCoverPanel
+          className="ai-quest-hero"
+          compact={Boolean(selectedDifficulty)}
+          controls={
+            !selectedDifficulty ? (
+              <MinigameCoverMissionSelect
+                hint="난이도마다 하루 1회 무료 · 광고 시청 시 1회 추가 · 게임 중 뒤로가기도 횟수 사용"
+                title="AI 난이도 선택"
+              >
+                {DIFFICULTIES.map((difficulty) => {
+                  const rewardClaimed = daily[difficulty.missionKey] >= 1;
+                  const playStatus = getMissionPlayStatus(difficulty.missionKey);
+                  const attempted = playStatus.state !== 'free_available';
 
-        {!selectedDifficulty ? (
-          <section className="ai-mission-select">
-            <div className="ai-mission-select-title">
-              <strong>AI 난이도 선택</strong>
-              <small>승리하면 난이도마다 하루 1번 미션 보상을 받을 수 있어요.</small>
-            </div>
+                  return (
+                    <MissionSelectRow
+                      key={difficulty.id}
+                      description={difficulty.description}
+                      extraClassName={difficulty.id === 'nightmare' ? 'nightmare' : ''}
+                      icon={difficulty.emoji}
+                      playStatus={playStatus}
+                      rewardBadge={
+                        <MissionBadge
+                          attempted={attempted}
+                          missionKey={difficulty.missionKey}
+                          rewardClaimed={rewardClaimed}
+                        />
+                      }
+                      rewardClaimed={rewardClaimed}
+                      title={`${difficulty.label} AI`}
+                      onStart={() => tryStartGame(difficulty.id)}
+                    />
+                  );
+                })}
+              </MinigameCoverMissionSelect>
+            ) : null
+          }
+          gameId="omok"
+          overlay={
+            gameStatus === 'win' && victoryPending ? (
+              <>
+                <VictoryGoldButton
+                  alreadyClaimed={Boolean(victoryRewardClaimed)}
+                  className="ai-quest-victory-claim"
+                  rewardCups={getMinigameRewardCups(victoryPending.missionKey)}
+                  onClaim={handleClaimVictory}
+                />
+                <VictoryReplayButton
+                  className="ai-quest-victory-replay"
+                  exhausted={!canReplay}
+                  needsAd={Boolean(replayNeedsAd)}
+                  onReplay={() => void handleReplayAfterResult()}
+                />
+              </>
+            ) : null
+          }
+          victory={gameStatus === 'win' && Boolean(victoryPending)}
+          withControls={!selectedDifficulty}
+          header={
+            <>
+              <div className="minigame-cover-hero__intro">
+                <strong>{farmerName}와 함께하는 AI 오목</strong>
+                <p>
+                  커피 농부 · {BOARD_SIZE}×{BOARD_SIZE} · 5목 승리
+                </p>
+                <small>
+                  {gameStatus === 'win' && victoryPending
+                    ? `${victoryPending.label} AI 승리! 표지 위 커피 보상 버튼으로 받으세요.`
+                    : '커피나무 바둑판 · 난이도마다 한 수 시간 제한'}
+                </small>
+              </div>
+              <div className="ai-quest-meta">
+                <span>{completedCount}/4 완료</span>
+                <span>{selectedDifficulty ? activeDifficulty?.label : '난이도 선택'}</span>
+              </div>
+            </>
+          }
+          body={
+            <>
+              <div className="ai-quest-meta">
+                <span>{completedCount}/4 완료</span>
+                <span>{activeDifficulty?.label ?? '진행 중'}</span>
+              </div>
+            </>
+          }
+        />
 
-            {DIFFICULTIES.map((difficulty) => {
-              const done = daily[difficulty.missionKey] >= 1;
-
-              return (
-                <button
-                  className={`ai-mission-select-button ${done ? 'done' : ''} ${
-                    difficulty.id === 'nightmare' ? 'nightmare' : ''
-                  }`}
-                  key={difficulty.id}
-                  type="button"
-                  onClick={() => startGame(difficulty.id)}
-                >
-                  <span className="ai-mission-select-icon">{difficulty.emoji}</span>
-                  <div className="ai-mission-select-copy">
-                    <strong>{difficulty.label} AI</strong>
-                    <small>{difficulty.description}</small>
-                  </div>
-                  <MissionBadge done={done} reward={difficulty.reward} />
-                </button>
-              );
-            })}
-          </section>
-        ) : (
+        {selectedDifficulty ? (
           <section className="tab-panel ai-quest-panel omok-panel">
             <div className="omok-status-bar">
               <strong>
@@ -472,23 +548,29 @@ export function DailyQuestScreen({
                 <strong>{victoryPending.label} AI 승리!</strong>
                 <small>
                   {victoryRewardClaimed
-                    ? '오늘 보상은 받았어요. 한 번 더 도전해요.'
-                    : '옆 커피 보상 버튼으로 받으세요.'}
+                    ? '오늘 보상은 받았어요. 옆 한번 더 하기로 다시 도전해요.'
+                    : '커피 보상 받기 · 한번 더 하기'}
                 </small>
               </div>
             )}
 
             <div className="omok-actions">
-              {needsAdForReplay ? (
-                <button className="feed-ad-button omok-ad-replay-button" type="button" onClick={handleAdReplay}>
-                  다시 도전
-                </button>
-              ) : (
-                <button className="ai-primary-button" type="button" onClick={resetGame}>
-                  다시 두기
-                </button>
+              {gameStatus !== 'win' && (
+                canReplay ? (
+                  <button
+                    className={replayNeedsAd ? 'feed-ad-button omok-ad-replay-button' : 'ai-primary-button'}
+                    type="button"
+                    onClick={() => void handleReplayAfterResult()}
+                  >
+                    {replayNeedsAd ? '한번 더' : '다시 두기'}
+                  </button>
+                ) : (
+                  <button className="ai-primary-button" type="button" disabled>
+                    오늘 횟수 소진
+                  </button>
+                )
               )}
-              <button className="omok-secondary-button" type="button" onClick={resetToDifficultySelect}>
+              <button className="omok-secondary-button" type="button" onClick={requestDifficultyChange}>
                 난이도 변경
               </button>
             </div>
@@ -521,7 +603,7 @@ export function DailyQuestScreen({
               </div>
             )}
           </section>
-        )}
+        ) : null}
       </section>
     </main>
   );

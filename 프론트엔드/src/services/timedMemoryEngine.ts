@@ -2,7 +2,11 @@ export const GRID_COLS = 4;
 export const GRID_ROWS = 3;
 export const CELL_COUNT = GRID_COLS * GRID_ROWS;
 
-export type MemoryMissionKey = 'memoryMission1' | 'memoryMission2' | 'memoryMission3';
+export type MemoryMissionKey =
+  | 'memoryMission1'
+  | 'memoryMission2'
+  | 'memoryMission3'
+  | 'memoryMission4';
 
 export const MEMORY_DIFFICULTIES = [
   {
@@ -37,6 +41,17 @@ export const MEMORY_DIFFICULTIES = [
     recallTime: 9,
     flashMs: 550,
     description: '7칸 순서 · 9초 · 강한 집중력',
+  },
+  {
+    id: 'nightmare',
+    label: '극악버전',
+    emoji: '💀',
+    missionKey: 'memoryMission4' as MemoryMissionKey,
+    reward: 0.02,
+    count: 10,
+    recallTime: 6,
+    flashMs: 350,
+    description: '10칸 순서 · 6초 입력 · +3잔',
   },
 ] as const;
 

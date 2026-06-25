@@ -1,3 +1,6 @@
+import type { DailyPlayQuotas } from './dailyGamePlayQuota';
+import { getFreshPlayQuotas } from './dailyGamePlayQuota';
+
 export const DAILY_GAME_STORAGE_KEY = 'grow-coffee-daily-games';
 
 export type DailyMissions = {
@@ -9,9 +12,11 @@ export type DailyMissions = {
   memoryMission1: number;
   memoryMission2: number;
   memoryMission3: number;
+  memoryMission4: number;
   pairMission1: number;
   pairMission2: number;
   pairMission3: number;
+  pairMission4: number;
 };
 
 export type GameMemoryStats = {
@@ -27,6 +32,7 @@ export type GameMemoryStats = {
 export type DailyGameSave = {
   daily: DailyMissions;
   memory: GameMemoryStats;
+  playQuotas: DailyPlayQuotas;
 };
 
 export const DEFAULT_DAILY: DailyMissions = {
@@ -38,9 +44,11 @@ export const DEFAULT_DAILY: DailyMissions = {
   memoryMission1: 0,
   memoryMission2: 0,
   memoryMission3: 0,
+  memoryMission4: 0,
   pairMission1: 0,
   pairMission2: 0,
   pairMission3: 0,
+  pairMission4: 0,
 };
 
 export const DEFAULT_MEMORY: GameMemoryStats = {
@@ -107,6 +115,7 @@ export function loadDailyGameSave(): DailyGameSave {
       return {
         daily: { ...DEFAULT_DAILY, date: today },
         memory: { ...DEFAULT_MEMORY, date: today },
+        playQuotas: getFreshPlayQuotas(),
       };
     }
 
@@ -114,16 +123,37 @@ export function loadDailyGameSave(): DailyGameSave {
     return {
       daily: getFreshDaily(parsed.daily),
       memory: getFreshMemory(parsed.memory),
+      playQuotas: getFreshPlayQuotas(parsed.playQuotas),
     };
   } catch {
     const today = getTodayKey();
     return {
       daily: { ...DEFAULT_DAILY, date: today },
       memory: { ...DEFAULT_MEMORY, date: today },
+      playQuotas: getFreshPlayQuotas(),
     };
   }
 }
 
 export function saveDailyGameSave(save: DailyGameSave) {
   localStorage.setItem(DAILY_GAME_STORAGE_KEY, JSON.stringify(save));
+}
+
+export const DAILY_GAME_RESET_EVENT = 'grow-coffee-daily-games-reset';
+
+export function createFreshDailyGameSave(): DailyGameSave {
+  const today = getTodayKey();
+  return {
+    daily: { ...DEFAULT_DAILY, date: today },
+    memory: { ...DEFAULT_MEMORY, date: today },
+    playQuotas: getFreshPlayQuotas(),
+  };
+}
+
+/** 진행 데이터 초기화 시 1일 1게임 플레이·보상 기록도 함께 리셋 */
+export function resetDailyGameSave(): DailyGameSave {
+  const fresh = createFreshDailyGameSave();
+  saveDailyGameSave(fresh);
+  window.dispatchEvent(new CustomEvent(DAILY_GAME_RESET_EVENT));
+  return fresh;
 }

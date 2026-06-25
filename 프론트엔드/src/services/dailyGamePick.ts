@@ -1,5 +1,12 @@
 import type { DailyMissions, GameMemoryStats } from './dailyGameStorage';
 import { getTodayKey } from './dailyGameStorage';
+import {
+  countMissionsCompleteToday,
+  MEMORY_MISSION_KEYS,
+  OMOK_MISSION_KEYS,
+  PAIR_MISSION_KEYS,
+  type DailyPlayQuotas,
+} from './dailyGamePlayQuota';
 
 export type DailyGameId = 'omok' | 'sequence' | 'pair';
 
@@ -10,7 +17,7 @@ export type DailyGameMeta = {
   title: string;
   subtitle: string;
   reward: string;
-  progress: (daily: DailyMissions) => string;
+  progress: (daily: DailyMissions, quotas: DailyPlayQuotas) => string;
 };
 
 export const DAILY_GAMES: DailyGameMeta[] = [
@@ -20,10 +27,10 @@ export const DAILY_GAMES: DailyGameMeta[] = [
     icon: '⚫',
     title: 'AI 오목 대전',
     subtitle: '2D 바둑판 · 4단계 · 수 제한',
-    reward: '최고 +0.05KG',
-    progress: (daily) => {
-      const done = [daily.mission1, daily.mission2, daily.mission3, daily.mission4].filter((v) => v >= 1).length;
-      return `${done}/4 보상`;
+    reward: '난이도별 +1~3잔',
+    progress: (daily, quotas) => {
+      const done = countMissionsCompleteToday(daily, quotas, OMOK_MISSION_KEYS);
+      return `${done}/4 완료`;
     },
   },
   {
@@ -31,11 +38,11 @@ export const DAILY_GAMES: DailyGameMeta[] = [
     number: 2,
     icon: '🧠',
     title: '순서 기억 챌린지',
-    subtitle: '12칸 격자 · 3단계 · 시간 제한',
-    reward: '최고 +0.015KG',
-    progress: (daily) => {
-      const done = [daily.memoryMission1, daily.memoryMission2, daily.memoryMission3].filter((v) => v >= 1).length;
-      return `${done}/3 보상`;
+    subtitle: '12칸 격자 · 4단계 · 시간 제한',
+    reward: '난이도별 +1~3잔',
+    progress: (daily, quotas) => {
+      const done = countMissionsCompleteToday(daily, quotas, MEMORY_MISSION_KEYS);
+      return `${done}/${MEMORY_MISSION_KEYS.length} 완료`;
     },
   },
   {
@@ -43,11 +50,11 @@ export const DAILY_GAMES: DailyGameMeta[] = [
     number: 3,
     icon: '🃏',
     title: '카드 짝 맞추기',
-    subtitle: '2D 카드 뒤집기 · 3단계 · 시간 제한',
-    reward: '최고 +0.015KG',
-    progress: (daily) => {
-      const done = [daily.pairMission1, daily.pairMission2, daily.pairMission3].filter((v) => v >= 1).length;
-      return `${done}/3 보상`;
+    subtitle: '2D 카드 뒤집기 · 4단계 · 시간 제한',
+    reward: '난이도별 +1~3잔',
+    progress: (daily, quotas) => {
+      const done = countMissionsCompleteToday(daily, quotas, PAIR_MISSION_KEYS);
+      return `${done}/${PAIR_MISSION_KEYS.length} 완료`;
     },
   },
 ];

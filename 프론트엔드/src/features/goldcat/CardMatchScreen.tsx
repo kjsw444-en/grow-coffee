@@ -7,16 +7,28 @@ import {
   type PairCard,
 } from '../../services/pairMatchEngine';
 import type { DailyMissions } from '../../services/dailyGameStorage';
-import type { MissionKey, StatsUpdatePayload } from '../../hooks/useDailyGame';
+import type { MinigameRewardSlot, MissionKey } from '../../services/dailyGamePlayQuota';
+import { countMissionsCompleteFromStatus, isMissionCompleteFromStatus, PAIR_MISSION_KEYS } from '../../services/dailyGamePlayQuota';
+import type { StatsUpdatePayload } from '../../hooks/useDailyGame';
+import { formatMinigameRewardLabel, getMinigameRewardCups } from '../../services/minigameReward';
+import { MissionSelectRow } from './MissionSelectRow';
 import { GameVictoryOverlay } from './GameVictoryOverlay';
+import { MinigameCoverMissionSelect, MinigameCoverPanel } from './MinigameCoverPanel';
 
-function MissionBadge({ done, reward }: { done: boolean; reward: number }) {
-  if (done) {
+function MissionBadge({
+  rewardClaimed,
+  attempted,
+  missionKey,
+}: {
+  rewardClaimed: boolean;
+  attempted: boolean;
+  missionKey: MissionKey;
+}) {
+  if (rewardClaimed || attempted) {
     return <span className="ai-quest-badge done">완료</span>;
   }
 
-  const rewardLabel = reward >= 0.01 ? `+${reward.toFixed(2)}KG` : `+${reward.toFixed(3)}KG`;
-  return <span className="ai-quest-badge">{rewardLabel}</span>;
+  return <span className="ai-quest-badge">{formatMinigameRewardLabel(getMinigameRewardCups(missionKey))}</span>;
 }
 
 type CardMatchScreenProps = {
@@ -24,8 +36,14 @@ type CardMatchScreenProps = {
   pairMatch: { plays: number; wins: number; bestStage: number };
   onBack: () => void;
   onMessage?: (message: string) => void;
-  onReward: (missionKey: MissionKey, reward: number, successMessage?: string) => void;
+  onReward: (missionKey: MissionKey, successMessage?: string, rewardSlot?: MinigameRewardSlot) => void;
   onStatsUpdate?: (payload: StatsUpdatePayload) => void;
+  getMissionPlayStatus: (missionKey: MissionKey) => import('../../services/dailyGamePlayQuota').MissionPlayStatus;
+  beginMissionAttempt: (missionKey: MissionKey) => Promise<boolean>;
+  canClaimMissionReward: (missionKey: MissionKey, rewardSlot: MinigameRewardSlot) => boolean;
+  getAttemptRewardSlot: (
+    status: import('../../services/dailyGamePlayQuota').MissionPlayStatus,
+  ) => MinigameRewardSlot;
 };
 
 export function CardMatchScreen({
@@ -35,8 +53,14 @@ export function CardMatchScreen({
   onMessage,
   onReward,
   onStatsUpdate,
+  getMissionPlayStatus,
+  beginMissionAttempt,
+  canClaimMissionReward,
+  getAttemptRewardSlot,
 }: CardMatchScreenProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null);
+  const [attemptRewardSlot, setAttemptRewardSlot] = useState<MinigameRewardSlot>('free');
+  const [rewardClaimedThisSession, setRewardClaimedThisSession] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'playing' | 'complete' | 'fail'>('idle');
   const [cards, setCards] = useState<PairCard[]>([]);
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
@@ -52,7 +76,7 @@ export function CardMatchScreen({
   const playMinigameSound = useMinigameSound();
 
   const activeDifficulty = getPairDifficulty(selectedDifficulty);
-  const completedCount = PAIR_DIFFICULTIES.filter((item) => daily[item.missionKey] >= 1).length;
+  const completedCount = countMissionsCompleteFromStatus(daily, PAIR_MISSION_KEYS, getMissionPlayStatus);
   const matchedCount = cards.filter((card) => card.matched).length;
   const totalPairs = activeDifficulty.pairCount;
   const boardCols = Math.min(4, Math.ceil(cards.length / 3) || 3);
@@ -77,13 +101,13 @@ export function CardMatchScreen({
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [phase, secondsLeft, onMessage, onStatsUpdate, playMinigameSound]);
+  }, [phase, secondsLeft, onMessage, onStatsUpdate, playMinigameSound, activeDifficulty]);
 
-  function startChallenge(difficultyId: string, options: { fromIdle?: boolean } = {}) {
-    const { fromIdle = false } = options;
+  function startChallengeInternal(difficultyId: string, options: { trackNewRun?: boolean } = {}) {
+    const { trackNewRun = false } = options;
     const difficulty = getPairDifficulty(difficultyId);
 
-    if (fromIdle) {
+    if (trackNewRun) {
       onStatsUpdate?.({
         clearedStage: pairMatch.bestStage ?? 0,
         completedAll: false,
@@ -96,9 +120,32 @@ export function CardMatchScreen({
     setFlippedIds([]);
     setIsLocked(false);
     setMoves(0);
+    setRewardClaimedThisSession(false);
     setSecondsLeft(difficulty.timeLimit);
     setPhase('playing');
     onMessage?.(`${difficulty.label} · ${difficulty.description}`);
+  }
+
+  async function tryStartChallenge(difficultyId: string, options: { trackNewRun?: boolean } = {}) {
+    const difficulty = getPairDifficulty(difficultyId);
+    const playStatus = getMissionPlayStatus(difficulty.missionKey);
+    const rewardSlot = getAttemptRewardSlot(playStatus);
+    const allowed = await beginMissionAttempt(difficulty.missionKey);
+    if (!allowed) return;
+    setAttemptRewardSlot(rewardSlot);
+    startChallengeInternal(difficultyId, options);
+  }
+
+  async function handleReplayAfterVictory() {
+    if (!selectedDifficulty) return;
+    setVictoryPending(null);
+    setRewardClaimedThisSession(false);
+    await tryStartChallenge(selectedDifficulty, { trackNewRun: false });
+  }
+
+  async function handleRetry() {
+    if (!selectedDifficulty) return;
+    await tryStartChallenge(selectedDifficulty, { trackNewRun: false });
   }
 
   function finishChallenge({ success }: { success: boolean }) {
@@ -170,6 +217,8 @@ export function CardMatchScreen({
   }
 
   function quitToMenu() {
+    setVictoryPending(null);
+    setRewardClaimedThisSession(false);
     setSelectedDifficulty(null);
     setPhase('idle');
     setCards([]);
@@ -177,25 +226,60 @@ export function CardMatchScreen({
     setIsLocked(false);
   }
 
+  function handleForfeit() {
+    if (!activeDifficulty) return;
+
+    void playMinigameSound('minigameLose');
+    onMessage?.('기권했어요. 오늘 이 난이도 플레이는 완료 처리됐어요.');
+    quitToMenu();
+  }
+
+  const victoryRewardClaimed =
+    victoryPending &&
+    (rewardClaimedThisSession ||
+      !canClaimMissionReward(victoryPending.missionKey, attemptRewardSlot));
+
+  function handleClaimVictory() {
+    if (!victoryPending || victoryRewardClaimed) {
+      onMessage?.('오늘 이 미션 보상은 이미 받았어요.');
+      return;
+    }
+
+    onReward(victoryPending.missionKey, victoryPending.successMessage, attemptRewardSlot);
+    setRewardClaimedThisSession(true);
+  }
+
+  function requestQuitToMenu() {
+    if (phase === 'complete' && victoryPending && !victoryRewardClaimed) {
+      onMessage?.('커피 보상을 먼저 받아 주세요.');
+      return;
+    }
+
+    quitToMenu();
+  }
+
   function handleBack() {
-    if (selectedDifficulty && phase === 'playing') {
-      onStatsUpdate?.({
-        clearedStage: 0,
-        completedAll: false,
-        startedNewRun: false,
-      });
-      void playMinigameSound('minigameLose');
-      onMessage?.('기권 패배…');
-      quitToMenu();
+    if (!selectedDifficulty) {
+      onBack();
       return;
     }
 
-    if (selectedDifficulty) {
-      quitToMenu();
+    if (phase === 'playing') {
+      handleForfeit();
       return;
     }
 
-    onBack();
+    if (phase === 'complete' && victoryPending && !victoryRewardClaimed) {
+      onMessage?.('커피 보상을 먼저 받아 주세요.');
+      return;
+    }
+
+    if (phase !== 'idle') {
+      requestQuitToMenu();
+      return;
+    }
+
+    quitToMenu();
   }
 
   const statusText = useMemo(() => {
@@ -207,6 +291,10 @@ export function CardMatchScreen({
     if (phase === 'fail') return '실패 · 다시 도전해 보세요.';
     return '';
   }, [selectedDifficulty, phase, matchedCount, totalPairs, moves, secondsLeft]);
+
+  const activePlayStatus = activeDifficulty ? getMissionPlayStatus(activeDifficulty.missionKey) : null;
+  const canRetryAfterResult = activePlayStatus?.state === 'ad_required';
+  const showRetryActions = canRetryAfterResult && (phase === 'fail' || phase === 'complete');
 
   return (
     <main className="goldcat-app">
@@ -221,47 +309,66 @@ export function CardMatchScreen({
           </div>
         </header>
 
-        <section className="card-match-hero">
-          <div className="card-match-avatar">🃏⏱️☕</div>
-          <div>
-            <strong>기억력 카드 매칭</strong>
-            <p>같은 그림 2장을 시간 안에 모두 찾으세요.</p>
-            <small>3단계 난이도 · 최고 +0.015KG</small>
-          </div>
-          <div className="card-match-meta">
-            <span>최고 {pairMatch.bestStage ?? 0}단계</span>
-            <span>{completedCount}/3 보상</span>
-          </div>
-        </section>
+        <MinigameCoverPanel
+          className="card-match-hero"
+          compact={Boolean(selectedDifficulty)}
+          controls={
+            !selectedDifficulty ? (
+              <MinigameCoverMissionSelect
+                hint="난이도마다 하루 1회 무료 · 광고 시청 시 1회 추가 · 게임 중 뒤로가기도 횟수 사용"
+                title="카드 난이도 선택"
+              >
+                {PAIR_DIFFICULTIES.map((difficulty) => {
+                  const rewardClaimed = daily[difficulty.missionKey] >= 1;
+                  const playStatus = getMissionPlayStatus(difficulty.missionKey);
+                  const attempted = playStatus.state !== 'free_available';
 
-        {!selectedDifficulty ? (
-          <section className="ai-mission-select">
-            <div className="ai-mission-select-title">
-              <strong>카드 난이도 선택</strong>
-              <small>클리어하면 난이도마다 하루 1번 미션 보상을 받을 수 있어요.</small>
+                  return (
+                    <MissionSelectRow
+                      key={difficulty.id}
+                      description={difficulty.description}
+                      icon={difficulty.emoji}
+                      playStatus={playStatus}
+                      rewardBadge={
+                        <MissionBadge
+                          attempted={attempted}
+                          missionKey={difficulty.missionKey}
+                          rewardClaimed={rewardClaimed}
+                        />
+                      }
+                      rewardClaimed={rewardClaimed}
+                      title={difficulty.label}
+                      onStart={() => tryStartChallenge(difficulty.id, { trackNewRun: true })}
+                    />
+                  );
+                })}
+              </MinigameCoverMissionSelect>
+            ) : null
+          }
+          gameId="pair"
+          withControls={!selectedDifficulty}
+          header={
+            <>
+              <div className="minigame-cover-hero__intro">
+                <strong>기억력 카드 매칭</strong>
+                <p>같은 그림 2장을 시간 안에 모두 찾으세요.</p>
+                <small>4단계 난이도 · 극악버전 +3잔 · 그 외 +1잔</small>
+              </div>
+              <div className="card-match-meta">
+                <span>최고 {pairMatch.bestStage ?? 0}단계</span>
+                <span>{completedCount}/{PAIR_MISSION_KEYS.length} 완료</span>
+              </div>
+            </>
+          }
+          body={
+            <div className="card-match-meta">
+              <span>최고 {pairMatch.bestStage ?? 0}단계</span>
+              <span>{completedCount}/{PAIR_MISSION_KEYS.length} 완료</span>
             </div>
+          }
+        />
 
-            {PAIR_DIFFICULTIES.map((difficulty) => {
-              const done = daily[difficulty.missionKey] >= 1;
-
-              return (
-                <button
-                  className={`ai-mission-select-button ${done ? 'done' : ''}`}
-                  key={difficulty.id}
-                  type="button"
-                  onClick={() => startChallenge(difficulty.id, { fromIdle: true })}
-                >
-                  <span className="ai-mission-select-icon">{difficulty.emoji}</span>
-                  <div className="ai-mission-select-copy">
-                    <strong>{difficulty.label}</strong>
-                    <small>{difficulty.description}</small>
-                  </div>
-                  <MissionBadge done={done} reward={difficulty.reward} />
-                </button>
-              );
-            })}
-          </section>
-        ) : (
+        {selectedDifficulty ? (
           <section className="card-match-panel">
             <div className="card-match-status">
               <strong>
@@ -306,7 +413,7 @@ export function CardMatchScreen({
               {PAIR_DIFFICULTIES.map((item, index) => (
                 <span
                   className={
-                    daily[item.missionKey] >= 1
+                    isMissionCompleteFromStatus(daily, item.missionKey, getMissionPlayStatus(item.missionKey))
                       ? 'done'
                       : item.id === selectedDifficulty && phase !== 'idle'
                         ? 'active'
@@ -323,57 +430,54 @@ export function CardMatchScreen({
             <div className="card-match-actions">
               {(phase === 'fail' || phase === 'complete') && (
                 <>
-                  <button
-                    className="card-match-primary"
-                    type="button"
-                    onClick={() => startChallenge(selectedDifficulty)}
-                  >
-                    다시 도전
-                  </button>
+                  {phase === 'fail' && (
+                    showRetryActions ? (
+                      <button
+                        className="feed-ad-button card-match-primary"
+                        type="button"
+                        onClick={() => void handleRetry()}
+                      >
+                        한번 더
+                      </button>
+                    ) : (
+                      <button className="card-match-primary" type="button" disabled>
+                        오늘 횟수 소진
+                      </button>
+                    )
+                  )}
                   <button
                     className="card-match-secondary"
                     type="button"
-                    onClick={quitToMenu}
+                    onClick={requestQuitToMenu}
                   >
                     난이도 변경
                   </button>
                 </>
               )}
 
-              {phase === 'playing' && (
-                <button
-                  className="card-match-secondary"
-                  type="button"
-                  onClick={() => startChallenge(selectedDifficulty)}
-                >
-                  이 난이도 다시
-                </button>
-              )}
             </div>
 
             <p className="card-match-tip">
               {`${activeDifficulty.pairCount}쌍 · 제한 ${activeDifficulty.timeLimit}초 · 플레이 ${pairMatch.plays ?? 0}회`}
             </p>
           </section>
-        )}
+        ) : null}
       </section>
 
       {victoryPending && phase === 'complete' && (
         <GameVictoryOverlay
-          alreadyClaimed={daily[victoryPending.missionKey] >= 1}
-          rewardKg={victoryPending.reward}
+          alreadyClaimed={
+            Boolean(victoryRewardClaimed)
+          }
+          canReplay={showRetryActions}
+          replayExhausted={!showRetryActions}
+          replayNeedsAd
+          rewardCups={getMinigameRewardCups(victoryPending.missionKey)}
           subtitle={`${victoryPending.label} 카드 짝 맞추기에 성공했어요!`}
           title="승리!"
-          onClaim={() => {
-            if (daily[victoryPending.missionKey] < 1) {
-              onReward(
-                victoryPending.missionKey,
-                victoryPending.reward,
-                victoryPending.successMessage,
-              );
-            }
-            setVictoryPending(null);
-          }}
+          onClaim={handleClaimVictory}
+          onReplay={() => void handleReplayAfterVictory()}
+          onDismiss={requestQuitToMenu}
         />
       )}
     </main>

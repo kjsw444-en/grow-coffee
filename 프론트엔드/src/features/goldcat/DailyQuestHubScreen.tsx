@@ -1,10 +1,23 @@
-import { DAILY_GAMES, getDailyRecommendedGame, getGameRecordLabel } from '../../services/dailyGamePick';
+import {
+  DAILY_GAMES,
+  getDailyRecommendedGame,
+  getGameRecordLabel,
+  type DailyGameId,
+} from '../../services/dailyGamePick';
 import type { DailyMissions, GameMemoryStats } from '../../services/dailyGameStorage';
-import type { DailyGameId } from '../../services/dailyGamePick';
+import type { DailyPlayQuotas } from '../../services/dailyGamePlayQuota';
+import {
+  countMissionsCompleteToday,
+  MEMORY_MISSION_KEYS,
+  OMOK_MISSION_KEYS,
+  PAIR_MISSION_KEYS,
+} from '../../services/dailyGamePlayQuota';
+import { MinigameCoverImage } from './MinigameCoverImage';
 
 type DailyQuestHubScreenProps = {
   daily: DailyMissions;
   memory: GameMemoryStats;
+  playQuotas: DailyPlayQuotas;
   farmerName?: string;
   onBack: () => void;
   onSelectGame: (gameId: DailyGameId) => void;
@@ -14,21 +27,20 @@ type DailyQuestHubScreenProps = {
 export function DailyQuestHubScreen({
   daily,
   memory,
+  playQuotas,
   farmerName = '커피 농부',
   onBack,
   onSelectGame,
-  onMessage,
 }: DailyQuestHubScreenProps) {
   const recommendedGame = getDailyRecommendedGame();
 
-  const completedRewards = [
-    [daily.mission1, daily.mission2, daily.mission3, daily.mission4].some((value) => value >= 1),
-    [daily.memoryMission1, daily.memoryMission2, daily.memoryMission3].some((value) => value >= 1),
-    [daily.pairMission1, daily.pairMission2, daily.pairMission3].some((value) => value >= 1),
-  ].filter(Boolean).length;
+  const completedMissions =
+    countMissionsCompleteToday(daily, playQuotas, OMOK_MISSION_KEYS) +
+    countMissionsCompleteToday(daily, playQuotas, MEMORY_MISSION_KEYS) +
+    countMissionsCompleteToday(daily, playQuotas, PAIR_MISSION_KEYS);
+  const totalMissions = OMOK_MISSION_KEYS.length + MEMORY_MISSION_KEYS.length + PAIR_MISSION_KEYS.length;
 
   function handleSelect(gameId: DailyGameId) {
-    onMessage?.('미션을 시작합니다.');
     onSelectGame(gameId);
   }
 
@@ -54,10 +66,10 @@ export function DailyQuestHubScreen({
             <p>
               {farmerName} · 커피 농부 · 두뇌 훈련
             </p>
-            <small>추천 게임부터 시작하면 오늘 루틴이 더 쉬워져요.</small>
+            <small>난이도마다 하루 1회 무료 · 광고 1회 추가 · 매일 갱신</small>
           </div>
           <div className="daily-quest-hub-meta">
-            <span>보상 {completedRewards}/3</span>
+            <span>{completedMissions}/{totalMissions} 완료</span>
             <span>매일 갱신</span>
           </div>
         </section>
@@ -80,24 +92,30 @@ export function DailyQuestHubScreen({
         <section className="daily-quest-game-list">
           {DAILY_GAMES.map((game) => (
             <button
-              className={`daily-quest-game-button ${recommendedGame.id === game.id ? 'recommended' : ''}`}
+              className={`daily-quest-game-button daily-quest-game-button--overlay ${recommendedGame.id === game.id ? 'recommended' : ''}`}
               key={game.id}
               type="button"
               onClick={() => handleSelect(game.id)}
             >
-              {recommendedGame.id === game.id && (
-                <span className="daily-quest-recommended-badge">오늘의 추천</span>
-              )}
-              <span className="daily-quest-game-number">{game.number}</span>
-              <span className="daily-quest-game-icon">{game.icon}</span>
-              <div className="daily-quest-game-copy">
-                <strong>
-                  {game.number}번 · {game.title}
-                </strong>
-                <small>{game.subtitle}</small>
-                <small className="daily-quest-game-reward">{game.reward}</small>
+              <div className="daily-quest-game-cover-wrap daily-quest-game-cover-wrap--overlay">
+                <MinigameCoverImage gameId={game.id} variant="thumb" />
+                <div className="daily-quest-game-overlay">
+                  {recommendedGame.id === game.id && (
+                    <span className="daily-quest-recommended-badge">오늘의 추천</span>
+                  )}
+                  <span className="daily-quest-game-number">{game.number}</span>
+                  <div className="daily-quest-game-top">
+                    <div className="daily-quest-game-copy">
+                      <strong>
+                        {game.number}번 · {game.title}
+                      </strong>
+                      <small>{game.subtitle}</small>
+                      <small className="daily-quest-game-reward">{game.reward}</small>
+                    </div>
+                    <span className="daily-quest-game-badge">{game.progress(daily, playQuotas)}</span>
+                  </div>
+                </div>
               </div>
-              <span className="daily-quest-game-badge">{game.progress(daily)}</span>
             </button>
           ))}
         </section>
