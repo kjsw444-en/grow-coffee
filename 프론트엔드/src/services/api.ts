@@ -69,6 +69,12 @@ export function isBackendConfigured() {
   return import.meta.env.DEV
 }
 
+export function getServerUnavailableMessage() {
+  return import.meta.env.DEV
+    ? '백엔드 서버를 실행해 주세요.'
+    : '서버에 연결할 수 없어요. 앱을 다시 열어 주세요.'
+}
+
 export function getDeviceId() {
   const existing = localStorage.getItem(DEVICE_ID_KEY)
 
@@ -285,10 +291,35 @@ export async function devBumpPassiveGame() {
   }>
 }
 
+/** DEV 전용 — 내린 커피(totalCoffees) 잔 수 설정 */
 export async function devSetTotalCoffees(totalCoffees: number) {
   return request('/api/game/dev/set-coffees', {
     method: 'POST',
     body: JSON.stringify({ totalCoffees }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+/** DEV 전용 — 마신 커피(spentCoffeeCups) 잔 수 설정 */
+export async function devSetSpentCoffeeCups(spentCoffeeCups: number) {
+  return request('/api/game/dev/set-drunk-coffees', {
+    method: 'POST',
+    body: JSON.stringify({ spentCoffeeCups }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+/** DEV 전용 — 접속 룰렛 수령 상태 초기화 */
+export async function devResetDailyLoginRouletteGame() {
+  return request('/api/game/dev/reset-daily-roulette', {
+    method: 'POST',
+    body: '{}',
   }) as Promise<{
     ok: true
     state: GameState
@@ -303,28 +334,93 @@ export async function drinkGame() {
     lastEarned: number | null
     passiveGrowthPreview?: PassiveGrowthPreview
     playerRank?: number | null
+    attendanceGoalJustMet?: boolean
   }>
 }
 
-export async function sellCoffeeBatch() {
+export async function claimAttendanceDailyReward() {
+  return request('/api/game/claim-attendance-daily', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    passiveGrowthPreview?: PassiveGrowthPreview
+    playerRank?: number | null
+  }>
+}
+
+export async function claimAttendanceStreakBonus() {
+  return request('/api/game/claim-attendance-streak', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    passiveGrowthPreview?: PassiveGrowthPreview
+    playerRank?: number | null
+  }>
+}
+
+export async function sellCoffeeBatch(cupCount: number) {
   try {
-    return (await request('/api/game/sell-batch', { method: 'POST', body: '{}' })) as Promise<{
+    return (await request('/api/game/sell-batch', {
+      method: 'POST',
+      body: JSON.stringify({ cupCount }),
+    })) as Promise<{
       ok: true
       state: GameState
       lastEarned: number | null
+      dailyCapJustReached?: boolean
       passiveGrowthPreview?: PassiveGrowthPreview
       playerRank?: number | null
     }>
   } catch (err) {
     if (err instanceof ApiRequestError && err.status === 404) {
       throw new ApiRequestError(
-        '판매 API가 서버에 없어요. 백엔드를 최신 버전으로 배포했는지 확인해 주세요.',
+        '내린 커피 마시기 API가 서버에 없어요. 백엔드를 최신 버전으로 배포했는지 확인해 주세요.',
         err.state,
         404,
       )
     }
     throw err
   }
+}
+
+export async function claimDailyLoginRouletteGame() {
+  return request('/api/game/daily-login-roulette', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    playerRank?: number | null
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+export async function respinDailyLoginRouletteGame(previousRewardCups: number, dateKey: string) {
+  return request('/api/game/daily-login-roulette/respin', {
+    method: 'POST',
+    body: JSON.stringify({ previousRewardCups, dateKey }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    previousRewardCups: number
+    playerRank?: number | null
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+export async function claimMinigameReward(missionKey: string, rewardSlot: 'free' | 'ad' = 'free') {
+  return request('/api/game/minigame-reward', {
+    method: 'POST',
+    body: JSON.stringify({ missionKey, rewardSlot }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    playerRank?: number | null
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
 }
 
 export async function watchAdGame() {

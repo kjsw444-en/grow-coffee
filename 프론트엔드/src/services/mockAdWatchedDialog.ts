@@ -9,8 +9,8 @@
 
 import { resolveRewardedAdGroupId } from './adsConfig';
 
-/** true면 항상 「광고 대체창」 확인 창 사용 (토스 앱 실광고 테스트 시 false) */
-export const USE_MOCK_AD_WATCHED_DIALOG = false;
+/** true면 항상 「광고 대체창」 확인 창 사용 — 출시 전 테스트용. 출시 시 false */
+export const USE_MOCK_AD_WATCHED_DIALOG = true;
 
 const OVERLAY_ATTR = 'data-mock-ad-watched-overlay';
 
@@ -27,7 +27,7 @@ function removeExistingOverlay() {
   document.querySelector(`[${OVERLAY_ATTR}]`)?.remove();
 }
 
-export async function showMockAdWatchedDialog(): Promise<boolean> {
+export async function showMockAdWatchedDialog(subtitleText?: string): Promise<boolean> {
   if (typeof document === 'undefined') {
     return true;
   }
@@ -63,7 +63,7 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
 
     const title = document.createElement('p');
     title.id = 'mock-ad-watched-title';
-    title.textContent = '광고 대체창';
+    title.textContent = '리워드 광고 대체창';
     Object.assign(title.style, {
       margin: '0 0 10px',
       fontSize: '18px',
@@ -73,7 +73,8 @@ export async function showMockAdWatchedDialog(): Promise<boolean> {
     });
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = '확인을 누르면 물주기·내리기를 한 번 더 할 수 있어요.';
+    subtitle.textContent =
+      subtitleText ?? '확인을 누르면 리워드를 받을 수 있어요.';
     Object.assign(subtitle.style, {
       margin: '0 0 18px',
       fontSize: '13px',

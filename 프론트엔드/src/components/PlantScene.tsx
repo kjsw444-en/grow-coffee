@@ -42,6 +42,7 @@ type PlantSceneProps = {
   readyToDrink: boolean;
   drinkUiActive: boolean;
   isDrinkCommitting?: boolean;
+  suspendDrinkVideo?: boolean;
   needsAd: boolean;
   showWatchAdButton: boolean;
   growActionSlot: GrowActionSlot;
@@ -79,6 +80,7 @@ function PlantSceneComponent({
   readyToDrink,
   drinkUiActive,
   isDrinkCommitting = false,
+  suspendDrinkVideo = false,
   growActionSlot,
   canUseGrowHold,
   watchingAd,
@@ -112,7 +114,7 @@ function PlantSceneComponent({
   const showAdSlot = growActionSlot === 'ad';
   const growHoldDisabled = disabled || showAdSlot || !canUseGrowHold;
   /** 영상은 state 100% + 마시기 준비 + 홀드 종료 후에만 — API 처리 중에도 유지 */
-  const showDrinkVideo = drinkUiActive && !isHolding;
+  const showDrinkVideo = drinkUiActive && !isHolding && !suspendDrinkVideo;
   const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
   const showCoffeeVariant = isCoffeeStage(plantGrowth) || drinkStage;
   const storedPlayback = useMemo((): CoffeePlayback | null => {
@@ -335,15 +337,7 @@ function PlantSceneComponent({
           <div
             className={`plant-scene__action-slot ${drinkStage ? 'plant-scene__action-slot--drink-finish' : ''} ${showAdSlot ? 'plant-scene__action-slot--ad' : ''}`}
           >
-            {showAdSlot ? (
-              <WatchAdButton
-                growth={plantGrowth}
-                disabled={watchAdDisabled ?? disabled}
-                loading={watchingAd}
-                embedded
-                onWatchAd={onWatchAd}
-              />
-            ) : drinkStage ? (
+            {drinkStage ? (
               <button
                 type="button"
                 className={`plant-scene__drink-btn${isDrinkCommitting ? ' plant-scene__drink-btn--loading' : ''}`}
@@ -360,6 +354,14 @@ function PlantSceneComponent({
               >
                 {isDrinkCommitting ? '마시는 중…' : '커피 마시기'}
               </button>
+            ) : showAdSlot ? (
+              <WatchAdButton
+                growth={plantGrowth}
+                disabled={watchAdDisabled ?? disabled}
+                loading={watchingAd}
+                embedded
+                onWatchAd={onWatchAd}
+              />
             ) : (
               <WaterHoldCircle
                 embedded

@@ -1,7 +1,8 @@
 export const GOAL_AMOUNT = 4700;
 export const SELL_PRICE = 47;
-export const SELL_BATCH_SIZE = 10;
-export const SELL_BATCH_REWARD = 47;
+export const SELL_BATCH_SIZE = 50;
+export const SELL_BATCH_REWARD = 235;
+export { BREWED_COFFEE_DRINK_OPTIONS, getBrewedCoffeePointReward } from './brewedCoffeeDrink';
 export const GROWTH_PER_WATER = 25;
 
 /** 토스 공유 리워드 — contactsViral moduleId */
@@ -9,7 +10,7 @@ export const SHARE_REWARD_MODULE_ID =
   import.meta.env.VITE_TOSS_SHARE_REWARD_MODULE_ID?.trim() ||
   'd2b00c15-3de1-437f-82b6-af3d1d87eb46';
 /** 공유 완료 시 지급 내린 커피 */
-export const SHARE_REWARD_COFFEE_AMOUNT = 50;
+export const SHARE_REWARD_COFFEE_AMOUNT = 25;
 
 /** 햇빛 방치 — 1분당 5%, 20분 = 100%, 하루 최대 2잔(200%) */
 export const PASSIVE_GROWTH_PER_MINUTE = 5;
@@ -27,9 +28,10 @@ export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 
-/** 물 주기 꾹 누르기 시간 (초) — 매번 3~5초 랜덤 */
+/** 물 주기 꾹 누르기 시간 (초) — 매번 3~4초 랜덤 */
 export const HOLD_MIN_SEC = 3;
-export const HOLD_MAX_SEC = 5;
+export const HOLD_MAX_SEC = 4;
+export const HOLD_DURATION_LABEL = `${HOLD_MIN_SEC}~${HOLD_MAX_SEC}초`;
 
 export const PLANT_BG_SRC = '/plant-bg.png';
 /** 커피 완성 단계(75~99%) 배경 — 473×1024 */

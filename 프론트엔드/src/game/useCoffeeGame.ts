@@ -2,9 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiRequestError,
   claimPassiveCoffeeGame,
+  claimMinigameReward as claimMinigameRewardApi,
+  claimDailyLoginRouletteGame,
+  devResetDailyLoginRouletteGame,
+  respinDailyLoginRouletteGame,
+  claimAttendanceDailyReward as claimAttendanceDailyRewardApi,
+  claimAttendanceStreakBonus as claimAttendanceStreakBonusApi,
   devBumpPassiveGame,
+  devSetTotalCoffees,
+  devSetSpentCoffeeCups,
   drinkGame,
+  ensureGuestSession,
   fetchGameState,
+  getServerUnavailableMessage,
+  isBackendConfigured,
   purchaseCoffeeVariant,
   reactivatePassiveCoffeeGame,
   resetGame,
@@ -16,9 +27,17 @@ import {
   waterGame,
   type PlayerSession,
 } from '../services/api';
-import { shouldShowDrinkCycleInterstitial, showInterstitialAd } from '../services/interstitialAd';
+import type { MissionKey } from '../services/dailyGamePlayQuota';
+import { resetDailyGameSave } from '../services/dailyGameStorage';
+import { showInterstitialAd } from '../services/interstitialAd';
+import { scheduleReviewPrompt, previewReviewPrompt, resetReviewPromptStore, REVIEW_TRIGGER_LABELS, isReviewPreviewEnabled, type ReviewTrigger } from '../services/reviewPrompt';
 import { watchRewardedAd } from '../services/rewardedAd';
 import { initPlayerSession, isTossInApp, loginWithTossSession } from '../services/tossBridge';
+import { DEFAULT_DISPLAY_NAME } from './mockData';
+import {
+  BREWED_COFFEE_DRINK_OPTIONS,
+  getBrewedCoffeePointReward,
+} from './brewedCoffeeDrink';
 import {
   type HoldMode,
   COFFEE_STAGE_MIN,
@@ -27,13 +46,16 @@ import {
   GOAL_AMOUNT,
   GROWTH_DISPLAY_DECIMALS,
   randomWaterDurationSec,
-  SELL_BATCH_REWARD,
-  SELL_BATCH_SIZE,
 } from './constants';
 import {
   normalizeOwnedCoffeeVariants,
 } from './coffeeVariants';
-import { normalizeSelectedCoffeeVariant } from './hiddenCoffeeVariants';
+import { normalizeSelectedCoffeeVariant, getFirstNewlyUnlockedHidden } from './hiddenCoffeeVariants';
+import {
+  getDailyPointRoom,
+  hasReachedDailyPointCap,
+  settleDailyPoint,
+} from './dailyPoint';
 import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
@@ -51,6 +73,15 @@ import {
   sceneDialogueForPassiveReady,
   sceneDialogueForPassiveReactivate,
   sceneDialogueForSellBatch,
+  sceneDialogueForDailyPointCap,
+  sceneDialogueForHiddenCharacterUnlock,
+  sceneDialogueForBrewedSpent200,
+  sceneDialogueForShopPurchase2,
+  sceneDialogueForReviewPreviewComplete,
+  sceneDialogueForAttendanceGoal,
+  sceneDialogueForAttendanceDailyClaim,
+  sceneDialogueForAttendanceStreakClaim,
+  sceneDialogueForReviewPriming,
   sceneDialogueForShareReward,
   SCENE_DIALOGUE_IDLE_MS,
 } from './sceneDialogue';
@@ -85,6 +116,29 @@ import {
 import { usePassiveGrowthTick } from './usePassiveGrowthTick';
 import { canClaimShareRewardToday } from './shareRewardQuota';
 import { runShareRewardFlow, shareRewardStatusMessage } from '../services/shareReward';
+import {
+  applyAttendanceFromTreeHarvest,
+  applyClaimAttendanceDailyReward,
+  applyClaimAttendanceStreakBonus,
+  mergeAttendanceFromServer,
+  normalizeAttendance,
+  getTodayKey,
+} from './attendance';
+import {
+  canClaimDailyLoginRouletteToday,
+  canRespinDailyLoginRouletteToday,
+} from './dailyLoginRoulette';
+
+export type DailyLoginRouletteOutcome = {
+  rewardCups: number | null;
+  errorMessage?: string;
+};
+import { markDailyLoginRouletteClaimedLocal, resetDailyLoginRouletteStorage } from '../services/dailyLoginRouletteStorage';
+import {
+  getShopPurchaseCount,
+  hasCrossedBrewedSpentReviewThreshold,
+  hasCrossedShopPurchaseReviewThreshold,
+} from './reviewMilestones';
 
 function readCount(raw: GameState, camel: keyof GameState, snake: string) {
   const record = raw as GameState & Record<string, unknown>;
@@ -105,6 +159,11 @@ function normalizeLoadedState(raw: GameState) {
     totalCoffees: readCount(raw, 'totalCoffees', 'total_coffees'),
     totalWaters,
     spentCoffeeCups: readCount(raw, 'spentCoffeeCups', 'spent_coffee_cups'),
+    lifetimeDrunkCoffees: readCount(raw, 'lifetimeDrunkCoffees', 'lifetime_drunk_coffees'),
+    lifetimeBrewedSpent: Math.max(
+      readCount(raw, 'lifetimeBrewedSpent', 'lifetime_brewed_spent'),
+      readCount(raw, 'lifetimeDrunkCoffees', 'lifetime_drunk_coffees'),
+    ),
     waterDayKey: String(
       raw.waterDayKey ?? (raw as GameState & { water_day_key?: string }).water_day_key ?? '',
     ),
@@ -124,14 +183,67 @@ function normalizeLoadedState(raw: GameState) {
         (raw as GameState & { passive_reactivate_day_key?: string }).passive_reactivate_day_key ??
         '',
     ),
+    attendanceDayKey: String(
+      raw.attendanceDayKey ??
+        (raw as GameState & { attendance_day_key?: string }).attendance_day_key ??
+        '',
+    ),
+    attendanceCupsToday: readCount(raw, 'attendanceCupsToday', 'attendance_cups_today'),
+    attendanceStreak: readCount(raw, 'attendanceStreak', 'attendance_streak'),
+    attendanceLastGoalDayKey: String(
+      raw.attendanceLastGoalDayKey ??
+        (raw as GameState & { attendance_last_goal_day_key?: string }).attendance_last_goal_day_key ??
+        '',
+    ),
+    attendanceDailyClaimDayKey: String(
+      raw.attendanceDailyClaimDayKey ??
+        (raw as GameState & { attendance_daily_claim_day_key?: string }).attendance_daily_claim_day_key ??
+        '',
+    ),
+    attendanceStreakBonusPending:
+      raw.attendanceStreakBonusPending === true ||
+      (raw as GameState & { attendance_streak_bonus_pending?: boolean | number | string })
+        .attendance_streak_bonus_pending === true ||
+      (raw as GameState & { attendance_streak_bonus_pending?: boolean | number | string })
+        .attendance_streak_bonus_pending === 1 ||
+      (raw as GameState & { attendance_streak_bonus_pending?: boolean | number | string })
+        .attendance_streak_bonus_pending === '1',
     ownedCoffeeVariants,
     selectedCoffeeVariant: normalizeSelectedCoffeeVariant(
       raw.selectedCoffeeVariant ??
         (raw as GameState & { selected_coffee_variant?: unknown }).selected_coffee_variant,
       ownedCoffeeVariants,
     ),
+    pointDayKey: String(
+      raw.pointDayKey ?? (raw as GameState & { point_day_key?: string }).point_day_key ?? '',
+    ),
+    dailyLoginRouletteDayKey: String(
+      raw.dailyLoginRouletteDayKey ??
+        (raw as GameState & { daily_login_roulette_day_key?: string }).daily_login_roulette_day_key ??
+        '',
+    ),
+    dailyLoginRouletteRewardCups: Math.max(
+      0,
+      Number(
+        raw.dailyLoginRouletteRewardCups ??
+          (raw as GameState & { daily_login_roulette_reward_cups?: number }).daily_login_roulette_reward_cups ??
+          0,
+      ),
+    ),
+    dailyLoginRouletteRespinDayKey: String(
+      raw.dailyLoginRouletteRespinDayKey ??
+        (raw as GameState & { daily_login_roulette_respin_day_key?: string }).daily_login_roulette_respin_day_key ??
+        '',
+    ),
   };
-  return withNormalizedPassive(withNormalizedQuota(normalized));
+  return settleDailyPoint(
+    withNormalizedPassive(
+      withNormalizedQuota({
+        ...normalized,
+        ...normalizeAttendance(normalized),
+      }),
+    ),
+  );
 }
 
 function isWaterCooldownError(err: unknown): err is ApiRequestError {
@@ -141,7 +253,8 @@ function isWaterCooldownError(err: unknown): err is ApiRequestError {
 const HOLD_UI_COMMIT_MS = 80;
 const DISPLAY_GROWTH_MIN_DELTA = 1 / 10 ** GROWTH_DISPLAY_DECIMALS;
 
-export function useCoffeeGame() {
+export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
+  const { tutorialBypassQuota = false } = options;
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [state, setState] = useState<GameState>(initialState);
   const [displayGrowth, setDisplayGrowth] = useState(0);
@@ -159,6 +272,8 @@ export function useCoffeeGame() {
   const [watchingAd, setWatchingAd] = useState(false);
   const [sharingReward, setSharingReward] = useState(false);
   const [sellingBatch, setSellingBatch] = useState(false);
+  const [claimingAttendanceDaily, setClaimingAttendanceDaily] = useState(false);
+  const [claimingAttendanceStreak, setClaimingAttendanceStreak] = useState(false);
   const [actionSyncing, setActionSyncing] = useState(false);
   const [isDrinkCommitting, setIsDrinkCommitting] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -173,6 +288,7 @@ export function useCoffeeGame() {
   const passiveClaimSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [reactivatingPassiveCoffee, setReactivatingPassiveCoffee] = useState(false);
   const [sceneDialogue, setSceneDialogue] = useState<string | null>(null);
+  const [reviewPreviewStatus, setReviewPreviewStatus] = useState<string | null>(null);
   const [passiveClock, setPassiveClock] = useState(0);
 
   const holdStartRef = useRef<number | null>(null);
@@ -200,7 +316,6 @@ export function useCoffeeGame() {
   const lastCommittedDisplayRef = useRef(0);
   const testQueueRef = useRef(Promise.resolve());
   const balanceRulesRef = useRef(balanceRules);
-  const drinkCycleCountRef = useRef(0);
 
   balanceRulesRef.current = balanceRules;
   stateRef.current = state;
@@ -285,7 +400,15 @@ export function useCoffeeGame() {
             passiveReactivateDayKey: String(raw.passiveReactivateDayKey ?? ''),
           }
         : mergePassiveQuotaFromServer(stateRef.current, raw);
-      const next = normalizeLoadedState({ ...raw, ...mergedQuota, ...mergedPassive });
+      const mergedAttendance = trustServer
+        ? normalizeAttendance(raw)
+        : mergeAttendanceFromServer(stateRef.current, raw);
+      const next = normalizeLoadedState({
+        ...raw,
+        ...mergedQuota,
+        ...mergedPassive,
+        ...mergedAttendance,
+      });
       stateRef.current = next;
       setState(next);
       commitDisplayGrowth(next.growth, true);
@@ -349,7 +472,14 @@ export function useCoffeeGame() {
         holdStartGrowth !== undefined
           ? resolveWaterSyncGrowth(holdStartGrowth, raw.growth)
           : raw.growth;
-      return applyAuthoritativeState({ ...raw, growth }, { epoch });
+      return applyAuthoritativeState(
+        {
+          ...raw,
+          growth,
+          totalCoffees: Math.max(Number(raw.totalCoffees ?? 0), stateRef.current.totalCoffees),
+        },
+        { epoch },
+      );
     },
     [applyAuthoritativeState],
   );
@@ -497,7 +627,6 @@ export function useCoffeeGame() {
 
       if (
         (mode === 'water' || mode === 'brew') &&
-        !before.redeemed &&
         canUseGrowHold(before)
       ) {
         const optimistic = consumeWaterQuota(before);
@@ -632,9 +761,9 @@ export function useCoffeeGame() {
     ) {
       return;
     }
-    if (stateRef.current.redeemed || holdStartRef.current !== null) return;
+    if (holdStartRef.current !== null) return;
     if (isReadyToDrinkGrowth(stateRef.current.growth)) return;
-    if (!canUseGrowHold(stateRef.current)) {
+    if (!canUseGrowHold(stateRef.current) && !tutorialBypassQuota) {
       if (needsAdForWater(stateRef.current)) {
         const refillLabel = getRefillActionLabel(stateRef.current.growth);
         showSceneDialogue(`「${refillLabel}」를 눌러야 물주기·내리기를 다시 할 수 있어요.`);
@@ -648,9 +777,9 @@ export function useCoffeeGame() {
 
       const authoritativeGrowth = roundGrowth(activeState.growth);
       const displayStartGrowth = roundGrowth(displayGrowthRef.current);
-      if (activeState.redeemed || holdStartRef.current !== null || syncingRef.current) return;
+      if (holdStartRef.current !== null || syncingRef.current) return;
       if (isReadyToDrinkGrowth(activeState.growth)) return;
-      if (!canUseGrowHold(activeState)) return;
+      if (!canUseGrowHold(activeState) && !tutorialBypassQuota) return;
 
       const mode: HoldMode =
         authoritativeGrowth >= COFFEE_STAGE_MIN ? 'brew' : 'water';
@@ -682,6 +811,7 @@ export function useCoffeeGame() {
     loading,
     showSceneDialogue,
     tickHold,
+    tutorialBypassQuota,
   ]);
 
   const stopHold = useCallback(() => {
@@ -701,13 +831,12 @@ export function useCoffeeGame() {
       }
       setLastEarned(result.lastEarned);
       setActionError(null);
-      showSceneDialogue(sceneDialogueForDrink());
-      triggerTapBurst();
-
-      drinkCycleCountRef.current += 1;
-      if (shouldShowDrinkCycleInterstitial(drinkCycleCountRef.current)) {
-        void showInterstitialAd();
+      let dialogue = sceneDialogueForDrink();
+      if (result.attendanceGoalJustMet) {
+        dialogue = sceneDialogueForAttendanceGoal(dialogue);
       }
+      showSceneDialogue(dialogue);
+      triggerTapBurst();
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
         applyAuthoritativeState(err.state, { epoch });
@@ -729,13 +858,12 @@ export function useCoffeeGame() {
 
     const currentSession = sessionRef.current;
     if (!currentSession?.userId) {
-      showSceneDialogue('백엔드 서버를 실행해 주세요.');
+      showSceneDialogue(getServerUnavailableMessage());
       return;
     }
     if (loading) return;
 
     const before = stateRef.current;
-    if (before.redeemed) return;
     if (!isReadyToDrinkGrowth(before.growth) && !isReadyToDrinkGrowth(displayGrowthRef.current)) return;
 
     syncingRef.current = true;
@@ -744,7 +872,13 @@ export function useCoffeeGame() {
     setActionError(null);
     resetHoldUi();
 
-    const optimistic = { ...before, growth: 0 };
+    const attendanceResult = applyAttendanceFromTreeHarvest(before);
+    const optimistic = {
+      ...before,
+      growth: 0,
+      totalCoffees: before.totalCoffees + 1,
+      ...attendanceResult.attendance,
+    };
     stateRef.current = optimistic;
     setState(optimistic);
     commitDisplayGrowth(0, true);
@@ -754,10 +888,6 @@ export function useCoffeeGame() {
 
   const runTestBump = useCallback(async () => {
     const prev = stateRef.current;
-    if (prev.redeemed) {
-      showSceneDialogue('이미 목표를 달성했어요.');
-      return;
-    }
 
     if (isReadyToDrinkGrowth(prev.growth)) {
       showSceneDialogue('성장 100%예요. 커피를 마신 뒤 다시 테스트해 주세요.');
@@ -782,7 +912,7 @@ export function useCoffeeGame() {
         applyLocalDevBump();
         return;
       }
-      showSceneDialogue('백엔드 서버를 실행해 주세요.');
+      showSceneDialogue(getServerUnavailableMessage());
       return;
     }
 
@@ -830,11 +960,6 @@ export function useCoffeeGame() {
     if (loading || isHolding || syncingRef.current || claimingPassiveRef.current) return;
 
     const prev = stateRef.current;
-    if (prev.redeemed) {
-      showSceneDialogue('이미 목표를 달성했어요.');
-      return;
-    }
-
     const stats = getPassiveUiStats(prev, balanceRulesRef.current);
     if (stats.complete) {
       showSceneDialogue(
@@ -884,6 +1009,70 @@ export function useCoffeeGame() {
     showSceneDialogue('테스트: 방치 커피 게이지 +100%');
   }, [applyAuthoritativeState, bumpPassiveClock, loading, isHolding, showSceneDialogue]);
 
+  const testSetTotalCoffees = useCallback(async (totalCoffees = 1000) => {
+    if (!import.meta.env.DEV) return;
+    if (loading || isHolding || syncingRef.current) return;
+
+    const prev = stateRef.current;
+
+    const safeTotal = Math.max(0, Math.floor(totalCoffees));
+    const currentSession = sessionRef.current;
+    const epoch = stateEpochRef.current;
+
+    if (currentSession?.userId) {
+      try {
+        const result = await devSetTotalCoffees(safeTotal);
+        applyAuthoritativeState(result.state, { trustServer: true, epoch });
+        showSceneDialogue(`테스트: 내린 커피 ${safeTotal.toLocaleString('ko-KR')}잔`);
+        return;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { trustServer: true, epoch });
+        }
+        const message = err instanceof Error ? err.message : '테스트 잔 수 설정에 실패했습니다.';
+        showSceneDialogue(message);
+        return;
+      }
+    }
+
+    applyAuthoritativeState({ ...prev, totalCoffees: safeTotal });
+    showSceneDialogue(`테스트: 내린 커피 ${safeTotal.toLocaleString('ko-KR')}잔`);
+  }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
+
+  const testSetSpentCoffeeCups = useCallback(async (spentCoffeeCups = 1000) => {
+    if (!import.meta.env.DEV) return;
+    if (loading || isHolding || syncingRef.current) return;
+
+    const prev = stateRef.current;
+
+    const safeTotal = Math.max(0, Math.floor(spentCoffeeCups));
+    const currentSession = sessionRef.current;
+    const epoch = stateEpochRef.current;
+
+    if (currentSession?.userId) {
+      try {
+        const result = await devSetSpentCoffeeCups(safeTotal);
+        applyAuthoritativeState(result.state, { trustServer: true, epoch });
+        showSceneDialogue(`테스트: 마신 커피 ${safeTotal.toLocaleString('ko-KR')}잔`);
+        return;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { trustServer: true, epoch });
+        }
+        const message = err instanceof Error ? err.message : '테스트 잔 수 설정에 실패했습니다.';
+        showSceneDialogue(message);
+        return;
+      }
+    }
+
+    applyAuthoritativeState({
+      ...prev,
+      spentCoffeeCups: safeTotal,
+      lifetimeDrunkCoffees: Math.max(prev.lifetimeDrunkCoffees ?? 0, safeTotal),
+    });
+    showSceneDialogue(`테스트: 마신 커피 ${safeTotal.toLocaleString('ko-KR')}잔`);
+  }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
+
   const reset = useCallback(async () => {
     const currentSession = sessionRef.current;
     if (!currentSession) return;
@@ -896,18 +1085,20 @@ export function useCoffeeGame() {
     hideSceneDialogue();
     setLastEarned(null);
     prevPassiveCanClaimRef.current = false;
-    drinkCycleCountRef.current = 0;
     syncingRef.current = true;
     setActionSyncing(true);
 
-    const resetState = normalizeLoadedState(buildResetState());
+    const resetState = normalizeLoadedState(buildResetState(stateRef.current));
     applyAuthoritativeState(resetState, { trustServer: true, epoch });
+    resetDailyGameSave();
     bumpPassiveClock();
 
     try {
-      const result = await resetGame();
-      applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
-      bumpPassiveClock();
+      if (currentSession.userId && currentSession.source !== 'mock') {
+        const result = await resetGame();
+        applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
+        bumpPassiveClock();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : '초기화에 실패했습니다.';
       setError(message);
@@ -921,6 +1112,7 @@ export function useCoffeeGame() {
     async (slug: string) => {
       if (syncingRef.current) return;
       const epoch = stateEpochRef.current;
+      const beforeOwned = stateRef.current.ownedCoffeeVariants;
       syncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
@@ -930,6 +1122,23 @@ export function useCoffeeGame() {
         applyAuthoritativeState(result.state, { epoch });
         if (result.playerRank != null) {
           updatePlayerRank(result.playerRank);
+        }
+        const newlyUnlocked = getFirstNewlyUnlockedHidden(beforeOwned, result.state.ownedCoffeeVariants);
+        if (newlyUnlocked) {
+          showSceneDialogue(sceneDialogueForHiddenCharacterUnlock(newlyUnlocked.unlockedLabel));
+          void scheduleReviewPrompt({
+            trigger: 'hidden-character-unlock',
+            onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+          });
+        } else if (
+          hasCrossedShopPurchaseReviewThreshold(beforeOwned, result.state.ownedCoffeeVariants)
+        ) {
+          const purchaseCount = getShopPurchaseCount(result.state.ownedCoffeeVariants);
+          showSceneDialogue(sceneDialogueForShopPurchase2(purchaseCount));
+          void scheduleReviewPrompt({
+            trigger: 'shop-purchase-2',
+            onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+          });
         }
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
@@ -942,7 +1151,7 @@ export function useCoffeeGame() {
         setActionSyncing(false);
       }
     },
-    [applyAuthoritativeState, updatePlayerRank],
+    [applyAuthoritativeState, showSceneDialogue, updatePlayerRank],
   );
 
   const selectVariant = useCallback(
@@ -975,10 +1184,10 @@ export function useCoffeeGame() {
     if (watchingAd) return;
 
     const prev = stateRef.current;
-    if (prev.redeemed || !needsAdForWater(prev)) return;
+    if (!needsAdForWater(prev)) return;
 
     if (!currentSession?.userId) {
-      showSceneDialogue('백엔드 서버를 실행해 주세요.');
+      showSceneDialogue(getServerUnavailableMessage());
       return;
     }
 
@@ -999,9 +1208,9 @@ export function useCoffeeGame() {
     const epoch = stateEpochRef.current;
 
     try {
-      const watched = await watchRewardedAd();
+      const watched = await showInterstitialAd();
       if (!watched) {
-        showSceneDialogue('확인을 완료해야 물주기·내리기를 다시 할 수 있어요.');
+        showSceneDialogue('광고 시청을 완료해야 물주기·내리기를 다시 할 수 있어요.');
         return;
       }
 
@@ -1010,11 +1219,23 @@ export function useCoffeeGame() {
       setState(optimistic);
 
       const result = await watchAdGame();
-      applyAuthoritativeState(result.state, { epoch });
+      applyAuthoritativeState(
+        {
+          ...result.state,
+          totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+        },
+        { epoch },
+      );
       showSceneDialogue(sceneDialogueForAdReward());
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(err.state, { epoch });
+        applyAuthoritativeState(
+          {
+            ...err.state,
+            totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+          },
+          { epoch },
+        );
       } else {
         applyAuthoritativeState(prev, { epoch });
       }
@@ -1025,6 +1246,47 @@ export function useCoffeeGame() {
       setWatchingAd(false);
     }
   }, [applyAuthoritativeState, watchingAd, showSceneDialogue]);
+
+  const grantTutorialWaterRefill = useCallback(async () => {
+    const currentSession = sessionRef.current;
+    if (syncingRef.current || watchingAd) return false;
+
+    const prev = stateRef.current;
+    if (!needsAdForWater(prev)) return true;
+    if (!currentSession?.userId) return false;
+
+    const epoch = stateEpochRef.current;
+    setActionError(null);
+
+    try {
+      const optimistic = grantAdWaterCredit(prev);
+      stateRef.current = optimistic;
+      setState(optimistic);
+
+      const result = await watchAdGame();
+      applyAuthoritativeState(
+        {
+          ...result.state,
+          totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+        },
+        { epoch },
+      );
+      return true;
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(
+          {
+            ...err.state,
+            totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+          },
+          { epoch },
+        );
+      } else {
+        applyAuthoritativeState(prev, { epoch });
+      }
+      return false;
+    }
+  }, [applyAuthoritativeState, watchingAd]);
 
   const claimShareReward = useCallback(
     async (onMessage?: (message: string) => void) => {
@@ -1038,12 +1300,12 @@ export function useCoffeeGame() {
       if (!currentSession?.userId) {
         return shareRewardStatusMessage({
           status: 'unsupported',
-          message: '백엔드 서버를 실행해 주세요.',
+          message: getServerUnavailableMessage(),
         });
       }
 
       const before = stateRef.current;
-      if (before.redeemed || !canClaimShareRewardToday(before)) {
+      if (!canClaimShareRewardToday(before)) {
         return '오늘 공유 리워드는 이미 받았어요. 내일 다시 시도해 주세요.';
       }
 
@@ -1065,6 +1327,7 @@ export function useCoffeeGame() {
           showSceneDialogue(sceneDialogueForShareReward(outcome.amount));
         } else if (outcome.status === 'error') {
           setActionError(outcome.message);
+          showSceneDialogue(outcome.message);
         }
 
         return shareRewardStatusMessage(outcome);
@@ -1082,6 +1345,201 @@ export function useCoffeeGame() {
     [applyAuthoritativeState, sharingReward, showSceneDialogue, updatePlayerRank],
   );
 
+  const claimMinigameReward = useCallback(
+    async (missionKey: MissionKey, rewardSlot: 'free' | 'ad' = 'free') => {
+      const currentSession = sessionRef.current;
+      if (!currentSession?.userId) {
+        showSceneDialogue(getServerUnavailableMessage());
+        return false;
+      }
+
+      const epoch = stateEpochRef.current;
+
+      try {
+        const result = await claimMinigameRewardApi(missionKey, rewardSlot);
+        applyAuthoritativeState(result.state, { epoch });
+        if (result.playerRank != null) {
+          updatePlayerRank(result.playerRank);
+        }
+        return true;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(err.state, { epoch });
+        }
+        const message = err instanceof Error ? err.message : '미션 보상을 받지 못했어요.';
+        setActionError(message);
+        showSceneDialogue(message);
+        return false;
+      }
+    },
+    [applyAuthoritativeState, showSceneDialogue, updatePlayerRank],
+  );
+
+  const ensureGameplaySession = useCallback(async (): Promise<PlayerSession | null> => {
+    const current = sessionRef.current;
+    if (current?.userId && current.source !== 'mock') {
+      return current;
+    }
+
+    if (!isBackendConfigured()) {
+      return null;
+    }
+
+    try {
+      const guest = await ensureGuestSession(current?.displayName || DEFAULT_DISPLAY_NAME);
+      applySession(guest);
+      return {
+        userId: guest.userId,
+        displayName: guest.displayName,
+        source: guest.source,
+        playerRank: guest.playerRank ?? null,
+      };
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : getServerUnavailableMessage();
+      setActionError(message);
+      showSceneDialogue(message);
+      return null;
+    }
+  }, [applySession, showSceneDialogue]);
+
+  const claimDailyLoginRoulette = useCallback(async (): Promise<DailyLoginRouletteOutcome> => {
+    const today = getTodayKey();
+    const before = stateRef.current;
+
+    if (!canClaimDailyLoginRouletteToday(before.dailyLoginRouletteDayKey, today)) {
+      const message = '오늘 접속 룰렛은 이미 받았어요.';
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+
+    const gameplaySession = await ensureGameplaySession();
+    if (!gameplaySession?.userId) {
+      const message = isBackendConfigured()
+        ? '로그인 정보를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.'
+        : getServerUnavailableMessage();
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+
+    stateEpochRef.current += 1;
+    const epoch = stateEpochRef.current;
+
+    try {
+      const result = await claimDailyLoginRouletteGame();
+      const rewardTotalCoffees = before.totalCoffees + result.rewardCups;
+      applyAuthoritativeState(
+        {
+          ...result.state,
+          totalCoffees: rewardTotalCoffees,
+          dailyLoginRouletteDayKey: today,
+          dailyLoginRouletteRewardCups: result.rewardCups,
+          dailyLoginRouletteRespinDayKey: '',
+        },
+        { epoch },
+      );
+      if (result.playerRank != null) {
+        updatePlayerRank(result.playerRank);
+      }
+      markDailyLoginRouletteClaimedLocal(result.rewardCups, today);
+      return { rewardCups: result.rewardCups };
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(err.state, { epoch });
+      }
+      const message = err instanceof Error ? err.message : '접속 룰렛 보상을 받지 못했어요.';
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+  }, [applyAuthoritativeState, ensureGameplaySession, showSceneDialogue, updatePlayerRank]);
+
+  const respinDailyLoginRoulette = useCallback(async (): Promise<DailyLoginRouletteOutcome> => {
+    const today = getTodayKey();
+    const before = stateRef.current;
+
+    if (!canRespinDailyLoginRouletteToday(before.dailyLoginRouletteDayKey, before.dailyLoginRouletteRespinDayKey, today)) {
+      const message =
+        before.dailyLoginRouletteDayKey !== today
+          ? '먼저 오늘의 룰렛을 돌려 주세요.'
+          : '오늘 다시 돌리기는 이미 사용했어요.';
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+
+    const gameplaySession = await ensureGameplaySession();
+    if (!gameplaySession?.userId) {
+      const message = isBackendConfigured()
+        ? '로그인 정보를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.'
+        : getServerUnavailableMessage();
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+
+    stateEpochRef.current += 1;
+    const epoch = stateEpochRef.current;
+
+    try {
+      const clientPreviousRewardCups = Math.max(0, Number(before.dailyLoginRouletteRewardCups ?? 0));
+      const result = await respinDailyLoginRouletteGame(clientPreviousRewardCups, today);
+      const previousRewardCups = Math.max(
+        0,
+        Number(result.previousRewardCups ?? clientPreviousRewardCups),
+      );
+      const rewardTotalCoffees = Math.max(0, before.totalCoffees - previousRewardCups + result.rewardCups);
+      applyAuthoritativeState(
+        {
+          ...result.state,
+          totalCoffees: rewardTotalCoffees,
+          dailyLoginRouletteRewardCups: result.rewardCups,
+          dailyLoginRouletteRespinDayKey: today,
+        },
+        { epoch },
+      );
+      if (result.playerRank != null) {
+        updatePlayerRank(result.playerRank);
+      }
+      markDailyLoginRouletteClaimedLocal(result.rewardCups, today);
+      return { rewardCups: result.rewardCups };
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        const clientClaimedToday = before.dailyLoginRouletteDayKey === today;
+        const serverClaimedToday =
+          String(err.state.dailyLoginRouletteDayKey ?? '') === today;
+        if (!clientClaimedToday || serverClaimedToday) {
+          applyAuthoritativeState(err.state, { epoch });
+        }
+      }
+      const message = err instanceof Error ? err.message : '룰렛 다시 돌리기에 실패했어요.';
+      showSceneDialogue(message);
+      return { rewardCups: null, errorMessage: message };
+    }
+  }, [applyAuthoritativeState, ensureGameplaySession, showSceneDialogue, updatePlayerRank]);
+
+  const resetDailyLoginRouletteForTest = useCallback(async () => {
+    resetDailyLoginRouletteStorage();
+
+    const epoch = stateEpochRef.current;
+    applyAuthoritativeState(
+      {
+        ...stateRef.current,
+        dailyLoginRouletteDayKey: '',
+        dailyLoginRouletteRewardCups: 0,
+        dailyLoginRouletteRespinDayKey: '',
+      },
+      { epoch },
+    );
+
+    const currentSession = sessionRef.current;
+    if (import.meta.env.DEV && currentSession?.userId && currentSession.source !== 'mock') {
+      try {
+        const result = await devResetDailyLoginRouletteGame();
+        applyAuthoritativeState(normalizeLoadedState(result.state), { epoch });
+      } catch {
+        // optimistic client reset is enough for UI retry
+      }
+    }
+  }, [applyAuthoritativeState]);
+
   const claimPassiveCoffee = useCallback(async () => {
     if (claimingPassiveRef.current) {
       if (claimingPassiveCoffee) {
@@ -1095,12 +1553,6 @@ export function useCoffeeGame() {
     const epoch = stateEpochRef.current;
     const currentSession = sessionRef.current;
     const before = stateRef.current;
-
-    if (before.redeemed) {
-      setPassiveClaimFeedback({ tone: 'error', text: '이미 목표를 달성했어요.' });
-      showSceneDialogue('이미 목표를 달성했어요.');
-      return false;
-    }
 
     const uiStats = getPassiveUiStats(before, balanceRulesRef.current);
     if (!uiStats.canClaim) {
@@ -1127,7 +1579,7 @@ export function useCoffeeGame() {
       triggerTapBurst();
       setPassiveClaimFeedback({
         tone: 'success',
-        text: '✓ 방치 커피 1잔 · 내린 커피 +1',
+        text: '✓ 방치 커피+1 = 내린 커피+1',
       });
       showSceneDialogue(sceneDialogueForPassiveClaim());
       return true;
@@ -1153,7 +1605,7 @@ export function useCoffeeGame() {
       triggerTapBurst();
       setPassiveClaimFeedback({
         tone: 'success',
-        text: '✓ 방치 커피 1잔 · 내린 커피 +1',
+        text: '✓ 방치 커피+1 = 내린 커피+1',
       });
       showSceneDialogue(sceneDialogueForPassiveClaim());
       return true;
@@ -1225,7 +1677,7 @@ export function useCoffeeGame() {
     setActionError(null);
 
     try {
-      const watched = await watchRewardedAd();
+      const watched = await watchRewardedAd('passive-reactivate');
       if (!watched) {
         showSceneDialogue('광고 시청을 완료해야 재활성할 수 있어요.');
         return false;
@@ -1275,10 +1727,105 @@ export function useCoffeeGame() {
     watchingAd,
   ]);
 
-  const sellBatch = useCallback(async () => {
+  const claimAttendanceDaily = useCallback(async () => {
+    const currentSession = sessionRef.current;
+    if (!currentSession?.userId || syncingRef.current || claimingAttendanceDaily) return false;
+
+    const before = stateRef.current;
+    const preview = applyClaimAttendanceDailyReward(before);
+    if (!preview.ok) {
+      showSceneDialogue(
+        preview.reason === 'already-claimed'
+          ? '오늘 출석 보상은 이미 받았어요.'
+          : '오늘 출석 목표를 먼저 달성해 주세요.',
+      );
+      return false;
+    }
+
+    syncingRef.current = true;
+    setClaimingAttendanceDaily(true);
+    setActionSyncing(true);
+    const epoch = stateEpochRef.current;
+    stateRef.current = preview.state;
+    setState(preview.state);
+
+    try {
+      const result = await claimAttendanceDailyRewardApi();
+      applyAuthoritativeState(result.state, { epoch });
+      showSceneDialogue(sceneDialogueForAttendanceDailyClaim(result.rewardCups ?? preview.rewardCups));
+      return true;
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(err.state, { epoch });
+      } else {
+        stateRef.current = before;
+        setState(before);
+      }
+      showSceneDialogue(err instanceof Error ? err.message : '출석 보상을 받지 못했어요.');
+      return false;
+    } finally {
+      syncingRef.current = false;
+      setClaimingAttendanceDaily(false);
+      setActionSyncing(false);
+    }
+  }, [applyAuthoritativeState, claimingAttendanceDaily, showSceneDialogue]);
+
+  const claimAttendanceStreak = useCallback(async () => {
+    const currentSession = sessionRef.current;
+    if (!currentSession?.userId || syncingRef.current || claimingAttendanceStreak) return false;
+
+    const before = stateRef.current;
+    const preview = applyClaimAttendanceStreakBonus(before);
+    if (!preview.ok) {
+      showSceneDialogue('7일 연속 출석 보너스를 받을 수 없어요.');
+      return false;
+    }
+
+    syncingRef.current = true;
+    setClaimingAttendanceStreak(true);
+    setActionSyncing(true);
+    const epoch = stateEpochRef.current;
+    stateRef.current = preview.state;
+    setState(preview.state);
+
+    try {
+      const result = await claimAttendanceStreakBonusApi();
+      applyAuthoritativeState(result.state, { epoch });
+      showSceneDialogue(sceneDialogueForAttendanceStreakClaim(result.rewardCups ?? preview.rewardCups));
+      void scheduleReviewPrompt({
+        trigger: 'attendance-streak-7',
+        onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+      });
+      return true;
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(err.state, { epoch });
+      } else {
+        stateRef.current = before;
+        setState(before);
+      }
+      showSceneDialogue(err instanceof Error ? err.message : '연속 출석 보너스를 받지 못했어요.');
+      return false;
+    } finally {
+      syncingRef.current = false;
+      setClaimingAttendanceStreak(false);
+      setActionSyncing(false);
+    }
+  }, [applyAuthoritativeState, claimingAttendanceStreak, showSceneDialogue]);
+
+  const sellBatch = useCallback(async (cupCount: number) => {
+    const batchSize = Math.floor(Number(cupCount) || 0);
+    if (!BREWED_COFFEE_DRINK_OPTIONS.includes(batchSize as (typeof BREWED_COFFEE_DRINK_OPTIONS)[number])) {
+      showSceneDialogue('선택한 잔 수를 사용할 수 없어요.');
+      return false;
+    }
+
+    const reward = getBrewedCoffeePointReward(batchSize);
     const currentSession = sessionRef.current;
     if (!currentSession?.userId) {
-      const message = '백엔드 서버를 실행하고 게스트 로그인 후 다시 시도해 주세요.';
+      const message = import.meta.env.DEV
+        ? '백엔드 서버를 실행하고 게스트 로그인 후 다시 시도해 주세요.'
+        : getServerUnavailableMessage();
       setActionError(message);
       showSceneDialogue(message);
       return false;
@@ -1290,16 +1837,23 @@ export function useCoffeeGame() {
       return false;
     }
 
-    const before = stateRef.current;
-    if (before.redeemed) {
-      showSceneDialogue('이미 목표를 달성했어요.');
+    const before = settleDailyPoint(stateRef.current);
+    if (hasReachedDailyPointCap(before)) {
+      showSceneDialogue(sceneDialogueForDailyPointCap());
       return false;
     }
 
-    if (before.totalCoffees < SELL_BATCH_SIZE) {
-      const message = `판매하려면 내린 커피 ${SELL_BATCH_SIZE}잔이 필요해요.`;
+    if (before.totalCoffees < batchSize) {
+      const message = `내린 커피 ${batchSize.toLocaleString('ko-KR')}잔이 필요해요.`;
       setActionError(message);
       showSceneDialogue(message);
+      return false;
+    }
+
+    const room = getDailyPointRoom(before);
+    const actualReward = Math.min(reward, room);
+    if (actualReward <= 0) {
+      showSceneDialogue(sceneDialogueForDailyPointCap());
       return false;
     }
 
@@ -1309,25 +1863,51 @@ export function useCoffeeGame() {
     setActionError(null);
     const epoch = stateEpochRef.current;
 
-    const nextMoney = before.money + SELL_BATCH_REWARD;
+    const nextMoney = before.money + actualReward;
     const optimistic = {
       ...before,
-      totalCoffees: before.totalCoffees - SELL_BATCH_SIZE,
+      totalCoffees: before.totalCoffees - batchSize,
+      spentCoffeeCups: before.spentCoffeeCups + batchSize,
+      lifetimeDrunkCoffees: (before.lifetimeDrunkCoffees ?? 0) + batchSize,
+      lifetimeBrewedSpent: (before.lifetimeBrewedSpent ?? 0) + batchSize,
       money: nextMoney,
-      redeemed: nextMoney >= GOAL_AMOUNT,
     };
     stateRef.current = optimistic;
     setState(optimistic);
-    setLastEarned(SELL_BATCH_REWARD);
+    setLastEarned(actualReward);
 
     try {
-      const result = await sellCoffeeBatch();
+      const result = await sellCoffeeBatch(batchSize);
       applyAuthoritativeState(result.state, { epoch });
       if (result.playerRank != null) {
         updatePlayerRank(result.playerRank);
       }
       setLastEarned(result.lastEarned);
-      showSceneDialogue(sceneDialogueForSellBatch(result.lastEarned ?? SELL_BATCH_REWARD));
+      const capReached =
+        result.dailyCapJustReached === true || hasReachedDailyPointCap(result.state);
+      const brewed200Reached = hasCrossedBrewedSpentReviewThreshold(
+        before.lifetimeBrewedSpent ?? 0,
+        result.state.lifetimeBrewedSpent ?? 0,
+      );
+
+      if (capReached) {
+        showSceneDialogue(sceneDialogueForDailyPointCap());
+        void scheduleReviewPrompt({
+          trigger: 'daily-point-cap',
+          onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+        });
+      } else if (brewed200Reached) {
+        showSceneDialogue(sceneDialogueForBrewedSpent200(result.state.lifetimeBrewedSpent ?? 0));
+      } else {
+        showSceneDialogue(sceneDialogueForSellBatch(batchSize, result.lastEarned ?? actualReward));
+      }
+
+      if (brewed200Reached) {
+        void scheduleReviewPrompt({
+          trigger: 'brewed-spent-200',
+          onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+        });
+      }
       return true;
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
@@ -1337,7 +1917,7 @@ export function useCoffeeGame() {
         setState(before);
         setLastEarned(null);
       }
-      const message = err instanceof Error ? err.message : '커피 판매에 실패했습니다.';
+      const message = err instanceof Error ? err.message : '내린 커피 마시기에 실패했습니다.';
       setActionError(message);
       showSceneDialogue(message);
       return false;
@@ -1353,7 +1933,7 @@ export function useCoffeeGame() {
     balanceRules,
     passiveActive: canAccruePassiveGrowth(
       state.growth,
-      state.redeemed,
+      false,
       state.dailyPassiveGrowth,
       balanceRules.dailyPassiveGrowthCap,
       state.passiveCoffeesClaimed,
@@ -1372,7 +1952,7 @@ export function useCoffeeGame() {
   useEffect(() => {
     const stats = getPassiveUiStats(state, balanceRules);
 
-    if (stats.canClaim && !prevPassiveCanClaimRef.current && !state.redeemed) {
+    if (stats.canClaim && !prevPassiveCanClaimRef.current) {
       showSceneDialogue(sceneDialogueForPassiveReady());
     }
 
@@ -1396,14 +1976,13 @@ export function useCoffeeGame() {
   );
 
   const progress = Math.min(100, (state.money / GOAL_AMOUNT) * 100);
+  const dailyPointCapReached = hasReachedDailyPointCap(settleDailyPoint(state));
   const drinkUiActive =
     ((isReadyToDrinkGrowth(state.growth) || isReadyToDrinkGrowth(displayGrowth)) ||
       isDrinkCommitting) &&
-    !state.redeemed &&
     !isHolding;
   const readyToDrink =
     (isReadyToDrinkGrowth(state.growth) || isReadyToDrinkGrowth(displayGrowth)) &&
-    !state.redeemed &&
     !actionSyncing &&
     !isHolding;
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
@@ -1413,18 +1992,77 @@ export function useCoffeeGame() {
     readyToDrink,
     isDrinkCommitting,
     state,
+    visualGrowth: isHolding ? state.growth : displayGrowth,
   });
   const showWatchAdButton = growActionSlot === 'ad';
   const passiveActive =
     canAccruePassiveGrowth(
       state.growth,
-      state.redeemed,
+      false,
       state.dailyPassiveGrowth,
       balanceRules.dailyPassiveGrowthCap,
       state.passiveCoffeesClaimed,
     ) &&
     !claimingPassiveCoffee &&
     !reactivatingPassiveCoffee;
+
+  const previewReviewTest = useCallback(
+    (trigger: ReviewTrigger) => {
+      if (!isReviewPreviewEnabled()) {
+        return;
+      }
+
+      const label = REVIEW_TRIGGER_LABELS[trigger];
+      setReviewPreviewStatus(`「${label}」 미리보기 시작… (화면 위 대화창을 확인해 주세요)`);
+
+      void previewReviewPrompt({
+        trigger,
+        fastPreview: true,
+        onMilestone: () => {
+          setReviewPreviewStatus(`1/3 축하 대사 · ${label}`);
+          switch (trigger) {
+            case 'daily-point-cap':
+              showSceneDialogue(sceneDialogueForDailyPointCap(), false);
+              break;
+            case 'attendance-streak-7':
+              showSceneDialogue(sceneDialogueForAttendanceStreakClaim(10), false);
+              break;
+            case 'hidden-character-unlock':
+              showSceneDialogue(sceneDialogueForHiddenCharacterUnlock('히든 커플'), false);
+              break;
+            case 'brewed-spent-200':
+              showSceneDialogue(sceneDialogueForBrewedSpent200(200), false);
+              break;
+            case 'shop-purchase-2':
+              showSceneDialogue(sceneDialogueForShopPurchase2(2), false);
+              break;
+          }
+        },
+        onPrime: (copy) => {
+          setReviewPreviewStatus(`2/3 프라이밍 카피 · ${label}`);
+          showSceneDialogue(sceneDialogueForReviewPriming(copy), false);
+        },
+        onComplete: () => {
+          setReviewPreviewStatus(`3/3 완료 · ${label} (토스 앱에서는 여기서 리뷰 팝업)`);
+          showSceneDialogue(sceneDialogueForReviewPreviewComplete());
+        },
+      });
+    },
+    [showSceneDialogue],
+  );
+
+  const resetReviewTestStore = useCallback(() => {
+    if (!isReviewPreviewEnabled()) {
+      return;
+    }
+    resetReviewPromptStore();
+    setReviewPreviewStatus('리뷰 유도 기록을 초기화했어요.');
+    showSceneDialogue('리뷰 유도 기록을 초기화했어요.');
+  }, [showSceneDialogue]);
+
+  const clearActionError = useCallback(() => {
+    setActionError(null);
+  }, []);
 
   return {
     session,
@@ -1435,6 +2073,7 @@ export function useCoffeeGame() {
     loading,
     error,
     actionError,
+    clearActionError,
     loggingIn,
     authMessage,
     loginWithToss,
@@ -1445,13 +2084,19 @@ export function useCoffeeGame() {
     completeDrink,
     testBumpGrowth,
     testBumpPassiveGrowth,
+    testSetTotalCoffees,
+    testSetSpentCoffeeCups,
     purchaseVariant,
     selectVariant,
     reset,
     watchAd,
+    grantTutorialWaterRefill,
     sellBatch,
     sellingBatch,
-    canSellBatch: state.totalCoffees >= SELL_BATCH_SIZE && !state.redeemed,
+    claimAttendanceDaily,
+    claimAttendanceStreak,
+    claimingAttendanceDaily,
+    claimingAttendanceStreak,
     progress,
     readyToDrink,
     drinkUiActive,
@@ -1465,6 +2110,10 @@ export function useCoffeeGame() {
     sharingReward,
     shareRewardAvailable: canClaimShareRewardToday(state),
     claimShareReward,
+    claimMinigameReward,
+    claimDailyLoginRoulette,
+    respinDailyLoginRoulette,
+    resetDailyLoginRouletteForTest,
     claimPassiveCoffee,
     claimingPassiveCoffee,
     passiveClaimFeedback,
@@ -1482,8 +2131,12 @@ export function useCoffeeGame() {
     holdElapsedSec,
     holdRemainingSec,
     remaining: Math.max(0, GOAL_AMOUNT - state.money),
+    dailyPointCapReached,
+    reviewPreviewStatus,
     sceneDialogue,
     showSceneDialogue,
     updatePlayerRank,
+    previewReviewTest,
+    resetReviewTestStore,
   };
 }

@@ -5,12 +5,20 @@ import { showMockInterstitialDialog } from './mockInterstitialDialog';
 
 const LOAD_TIMEOUT_MS = 20000;
 const SHOW_TIMEOUT_MS = 120000;
-const DRINKS_PER_INTERSTITIAL = 4;
 
 let adStatus: 'idle' | 'loading' | 'loaded' | 'showing' = 'idle';
 let requestInFlight = false;
 let loadCleanup: (() => void) | null = null;
 let loadPromise: Promise<boolean> | null = null;
+
+function isTossInApp() {
+  if (typeof window === 'undefined') return false;
+
+  return (
+    window.location.hostname.endsWith('.apps.tossmini.com') ||
+    window.location.hostname.endsWith('.private-apps.tossmini.com')
+  );
+}
 
 function getInterstitialAdGroupId() {
   return resolveInterstitialAdGroupId();
@@ -18,6 +26,10 @@ function getInterstitialAdGroupId() {
 
 export function shouldUseMockInterstitialAd() {
   if (USE_MOCK_AD_WATCHED_DIALOG) {
+    return true;
+  }
+
+  if (!isTossInApp()) {
     return true;
   }
 
@@ -162,7 +174,7 @@ export async function showInterstitialAd(): Promise<boolean> {
   }
 
   if (requestInFlight) {
-    return false;
+    return showMockInterstitialDialog();
   }
 
   requestInFlight = true;
@@ -186,12 +198,4 @@ export async function showInterstitialAd(): Promise<boolean> {
   } finally {
     requestInFlight = false;
   }
-}
-
-export function getDrinksPerInterstitial() {
-  return DRINKS_PER_INTERSTITIAL;
-}
-
-export function shouldShowDrinkCycleInterstitial(drinkCount: number) {
-  return drinkCount > 0 && drinkCount % DRINKS_PER_INTERSTITIAL === 0;
 }

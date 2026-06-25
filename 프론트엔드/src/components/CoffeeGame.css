@@ -81,6 +81,18 @@
   color: var(--pastel-text-soft);
 }
 
+.game__win-review-hint {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 240, 246, 0.92);
+  border: 1px solid #f0c4d4;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #9a5c6e;
+  white-space: pre-line;
+}
+
 .game__win-btn {
   margin-top: 20px;
   padding: 14px 28px;
@@ -124,6 +136,56 @@
 .game__test-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.game__test-review {
+  position: relative;
+  z-index: 20;
+  margin: 12px auto 0;
+  padding: 12px 16px 0;
+  max-width: 420px;
+}
+
+.game__test-review-status {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 252, 244, 0.98);
+  border: 1px solid #e8d4b0;
+  color: #7a4f1f;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
+  white-space: pre-line;
+}
+
+.game__test-review-title {
+  margin: 0 0 8px;
+  text-align: center;
+  color: #8a5a28;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.game__test-row--review {
+  gap: 6px;
+}
+
+.game__test-btn--review {
+  min-width: 96px;
+  max-width: none;
+  padding: 7px 10px;
+  border-color: #d4a5b8;
+  background: rgba(255, 240, 246, 0.95);
+  color: #9a4d6a;
+}
+
+.game__test-btn--review-reset {
+  min-width: 88px;
+  border-style: solid;
+  background: rgba(245, 245, 245, 0.95);
+  color: #666;
 }
 
 .game__text-banner {

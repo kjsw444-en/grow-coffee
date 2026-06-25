@@ -1,13 +1,16 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
 import { resolveRewardedAdGroupId } from './adsConfig';
 import {
-  USE_MOCK_AD_WATCHED_DIALOG,
   shouldUseMockRewardedAd,
   showMockAdWatchedDialog,
 } from './mockAdWatchedDialog';
+import {
+  getRewardedAdPurposeCopy,
+  type RewardedAdPurpose,
+} from './rewardedAdPurpose';
 
-/** 실광고 사용 시 mockAdWatchedDialog.ts 분기·파일 정리 (파일 상단 주석 참고) */
-export { USE_MOCK_AD_WATCHED_DIALOG };
+export { type RewardedAdPurpose } from './rewardedAdPurpose';
+export { USE_MOCK_AD_WATCHED_DIALOG } from './mockAdWatchedDialog';
 
 const LOAD_TIMEOUT_MS = 20000;
 const SHOW_TIMEOUT_MS = 120000;
@@ -153,13 +156,17 @@ export function initRewardedAds() {
   void preloadRewardedAd();
 }
 
-export async function watchRewardedAd(): Promise<boolean> {
-  if (shouldUseMockRewardedAd()) {
-    return showMockAdWatchedDialog();
+export async function watchRewardedAd(purpose: RewardedAdPurpose): Promise<boolean> {
+  const mockCopy = getRewardedAdPurposeCopy(purpose);
+
+  const useMock = shouldUseMockRewardedAd();
+
+  if (useMock) {
+    return showMockAdWatchedDialog(mockCopy);
   }
 
   if (!isRewardedAdSupported()) {
-    return showMockAdWatchedDialog();
+    return false;
   }
 
   if (requestInFlight) {
@@ -172,18 +179,14 @@ export async function watchRewardedAd(): Promise<boolean> {
     if (adStatus !== 'loaded') {
       const loaded = await preloadRewardedAd();
       if (!loaded) {
-        return showMockAdWatchedDialog();
+        return false;
       }
     }
 
     const result = await showLoadedRewardedAd();
-    if (result.failed || !result.rewarded) {
-      return showMockAdWatchedDialog();
-    }
-
-    return true;
+    return !result.failed && result.rewarded;
   } catch {
-    return showMockAdWatchedDialog();
+    return false;
   } finally {
     requestInFlight = false;
   }

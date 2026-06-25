@@ -49,8 +49,26 @@ export async function initPlayerSession(
           passiveGrowthPreview: bootstrap.passiveGrowthPreview,
           playerRank: bootstrap.playerRank ?? null,
         }
-      } catch {
+      } catch (error) {
         signOutPlayer()
+        try {
+          return await ensureGuestSession(displayName)
+        } catch (guestError) {
+          const message =
+            guestError instanceof Error
+              ? guestError.message
+              : error instanceof Error
+                ? error.message
+                : '게스트 세션을 만들지 못했습니다.'
+          console.warn('Stored session bootstrap failed, falling back to mock session', error, guestError)
+          return {
+            userId: '',
+            displayName: storedName || displayName,
+            source: 'mock',
+            balanceRules: DEFAULT_BALANCE_RULES,
+            connectionError: message,
+          }
+        }
       }
     } else {
       return {
