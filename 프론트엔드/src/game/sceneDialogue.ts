@@ -245,6 +245,22 @@ function wrapDialogueLine(text: string, lineWidth: number) {
 
 
 
+export function sceneDialogueForDailyRouletteNudge() {
+  return formatSceneDialogue('나를 눌러라냥~\n1일 1룰렛을 돌려서\n오늘의 보상을 받을수 있다냥~');
+}
+
+export function sceneDialogueForBonusRouletteNudge() {
+  return formatSceneDialogue('선물로 룰렛 +1!\n나를 눌러 한 번 더\n돌려보라냥~');
+}
+
+export function sceneDialogueForDailyRitualFortuneNudge() {
+  return formatSceneDialogue('나를 누르면 오늘의 선물을\n받을 수 있다냥~');
+}
+
+export function sceneDialogueForRevealedFortune(copy: string) {
+  return formatSceneDialogue(copy);
+}
+
 export function randomCatNudgeDialogue(excludeRaw?: string) {
 
   const pool =

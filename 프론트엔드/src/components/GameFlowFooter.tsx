@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { AdBannerSlot } from './AdBannerSlot';
 import { useButtonSound } from '../audio/SoundProvider';
 import { SHARE_REWARD_COFFEE_AMOUNT } from '../game/constants';
+import { requestFeatureNotificationAgreement } from '../services/featureNotification';
 import './GameFlowFooter.css';
 
 const STEPS = [
@@ -19,7 +20,7 @@ type GameFlowFooterProps = {
   disabled?: boolean;
 };
 
-export function GameFlowFooter({
+export const GameFlowFooter = memo(function GameFlowFooter({
   onShareReward,
   sharingReward = false,
   shareRewardAvailable = true,
@@ -27,6 +28,7 @@ export function GameFlowFooter({
 }: GameFlowFooterProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
+  const [requestingNotify, setRequestingNotify] = useState(false);
   const buttonSound = useButtonSound();
 
   const handleShare = async () => {
@@ -48,8 +50,20 @@ export function GameFlowFooter({
     : '오늘 공유 리워드 완료 · 내일 다시 가능';
 
   const handleNotifyOptIn = async () => {
+    if (requestingNotify || disabled) return;
+
     await buttonSound();
-    setNotifyMessage('토스 푸시 알림 연동 검토 중이에요. 곧 만나요!');
+    setRequestingNotify(true);
+    setNotifyMessage('토스 알림 동의창을 여는 중...');
+
+    try {
+      const result = await requestFeatureNotificationAgreement();
+      setNotifyMessage(result.message);
+    } catch {
+      setNotifyMessage('알림 신청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setRequestingNotify(false);
+    }
   };
 
   return (
@@ -80,15 +94,15 @@ export function GameFlowFooter({
       <button
         type="button"
         className="game-flow__notify"
-        disabled={disabled}
+        disabled={disabled || requestingNotify}
         onClick={() => void handleNotifyOptIn()}
       >
         <span className="game-flow__notify-icon" aria-hidden="true">
           🔔
         </span>
         <span className="game-flow__notify-copy">
-          <strong>새로운 커피, 기능 나오면 알람받기</strong>
-          <small>토스 푸시 알림 · 준비 중</small>
+          <strong>{requestingNotify ? '알림 신청 확인 중...' : '새로운 커피, 기능 나오면 알람받기'}</strong>
+          <small>토스 푸시 알림</small>
         </span>
       </button>
 
@@ -118,4 +132,4 @@ export function GameFlowFooter({
       </div>
     </section>
   );
-}
+});

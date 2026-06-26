@@ -11,21 +11,37 @@ import {
   ONBOARDING_RESET_EVENT,
   resetOnboardingStorage,
 } from '../services/onboardingStorage';
+import {
+  hasSeenCatFortuneGuideToday,
+  hasSeenCatRouletteGuideToday,
+  markCatFortuneGuideSeenToday,
+  markCatRouletteGuideSeenToday,
+  primeBonusRouletteNudge,
+  resetCatGuideStorage,
+  resetCatRouletteGuideForToday,
+} from '../services/catGuideStorage';
 import { getAttendanceUiStats, getTodayKey } from '../game/attendance';
-import { formatPassivePanelHint, getPassiveUiStats } from '../game/passiveGrowth';
+import { formatPassivePanelHint, formatPassiveTimeRemainingLabel, getPassiveUiStats } from '../game/passiveGrowth';
 import { formatWaterPanelHint } from '../game/waterQuota';
-import { randomCatNudgeDialogue } from '../game/sceneDialogue';
+import { randomCatNudgeDialogue, sceneDialogueForBonusRouletteNudge, sceneDialogueForDailyRitualFortuneNudge, sceneDialogueForDailyRouletteNudge, sceneDialogueForRevealedFortune, sceneDialogueForReviewPriming } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
-import { REVIEW_TRIGGER_LABELS, REVIEW_TRIGGERS, isReviewPreviewEnabled } from '../services/reviewPrompt';
+import { REVIEW_TRIGGER_LABELS, REVIEW_TRIGGERS, isReviewPreviewEnabled, scheduleReviewPrompt } from '../services/reviewPrompt';
+import {
+  isRankingTop3PromotionMockEnabled,
+  resetRankingTop3PromotionForTest,
+  claimRankingTop3Promotion,
+  getRankingTop3ClaimSuccessMessage,
+} from '../services/rankingTop3Promotion';
 import { initInterstitialAds } from '../services/interstitialAd';
 import { initRewardedAds } from '../services/rewardedAd';
-import { isDrinkStage } from '../game/utils';
+import { formatWon, isDrinkStage } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import type { DailyGameId } from '../services/dailyGamePick';
 import type { BonusFeatureView } from '../features/goldcat/BonusFeatureHost';
 import type { ComicInitialTarget } from '../features/goldcat/StoryComicScreen';
 import { getCoffeeRanking, syncCoffeeRanking, type CoffeeRankingView } from '../services/coffeeRanking';
-import { getRankingBrewedSpend } from '../game/rankingScore';
+import { devFinalizeRankingNow, fetchRankingTop3PromotionStatus, type RankingTop3RewardStatus, claimRitualFortuneRewardGame, claimRitualMissionRewardGame, openRitualGiftGame, revealRitualFortuneGame, ApiRequestError, devResetDailyRitualGame, devSetDailyRitualFortuneGame, devCompleteDailyRitualMissionGame, devAdvanceDailyRitualGame } from '../services/api';
+import { getDailyRankingBrewedSpend } from '../game/rankingScore';
 import { AdBannerSlot } from './AdBannerSlot';
 import { BottomNav } from './BottomNav';
 import { CharacterShopSheet } from './CharacterShopSheet';
@@ -38,15 +54,27 @@ import {
   type TutorialStep,
 } from './InteractiveTutorialOverlay';
 import { PlantScene } from './PlantScene';
+import { DailyMissionPanel } from './DailyMissionPanel';
 import { RankingSheet } from './RankingSheet';
+import { RankingRewardAlertModal } from './RankingRewardAlertModal';
 import { RecommendButtons } from './RecommendButtons';
 import { SettingsSheet } from './SettingsSheet';
 import { UserBar } from './UserBar';
 import { DailyLoginRouletteModal } from './DailyLoginRouletteModal';
-import { canClaimDailyLoginRouletteToday, canRespinDailyLoginRouletteToday, pickDailyLoginRouletteCups } from '../game/dailyLoginRoulette';
+import { canRespinDailyLoginRouletteToday, canSpinDailyLoginRouletteToday, hasPendingBonusRouletteSpin, pickDailyLoginRouletteCups } from '../game/dailyLoginRoulette';
+import {
+  buildLocalMissionPreview,
+  canClaimLocalMissionReward,
+  getOpenedRitualGiftLabel,
+  getOpenedRitualGiftDescription,
+  getRitualEffectiveGrowth,
+  isRitualFortunePending,
+  isRitualGiftPending,
+  RITUAL_GIFT_TEST_OPTIONS,
+} from '../services/dailyRitual';
 import {
   dismissDailyLoginRouletteForSession,
-  hasSeenDailyLoginRouletteLocal,
+  clearDailyLoginRouletteSessionDismiss,
   isDailyLoginRouletteDismissedForSession,
   markDailyLoginRouletteShownLocal,
   syncDailyLoginRouletteLocalWithServer,
@@ -155,6 +183,7 @@ export function CoffeeGame() {
     isTossInApp,
     sceneDialogue,
     showSceneDialogue,
+    applyServerState,
     updatePlayerRank,
     dailyPointCapReached,
     previewReviewTest,
@@ -169,16 +198,24 @@ export function CoffeeGame() {
   const [coffeeRanking, setCoffeeRanking] = useState<CoffeeRankingView | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
+  const [rankingRewardClaiming, setRankingRewardClaiming] = useState(false);
+  const [rankingRewardStatus, setRankingRewardStatus] = useState<RankingTop3RewardStatus | null>(null);
+  const [showRankingRewardAlert, setShowRankingRewardAlert] = useState(false);
   const [bonusView, setBonusView] = useState<BonusFeatureView>(null);
   const [comicTarget, setComicTarget] = useState<ComicInitialTarget | null>(null);
   const [comicInlineEntry, setComicInlineEntry] = useState(false);
   const [showDailyRoulette, setShowDailyRoulette] = useState(false);
+  const [catFortuneGuideSeen, setCatFortuneGuideSeen] = useState(() => hasSeenCatFortuneGuideToday());
+  const [catRouletteGuideSeen, setCatRouletteGuideSeen] = useState(() => hasSeenCatRouletteGuideToday());
+  const [ritualBusy, setRitualBusy] = useState(false);
+  const ritualNudgeOpeningRef = useRef(false);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
   const [rouletteResult, setRouletteResult] = useState<number | null>(null);
   const [rouletteSpinGeneration, setRouletteSpinGeneration] = useState(0);
   const [rouletteSnapRevealKey, setRouletteSnapRevealKey] = useState(0);
   const [rouletteActionError, setRouletteActionError] = useState<string | null>(null);
-  const pendingRouletteAfterOnboardingRef = useRef(false);
+  const rankingRewardAlertDismissedRef = useRef(false);
+  const rouletteNudgeOpeningRef = useRef(false);
   const rouletteSyncedOnOpenRef = useRef(false);
   const rouletteResultBeforeRespinRef = useRef<number | null>(null);
   const rouletteRespinModeRef = useRef(false);
@@ -189,7 +226,10 @@ export function CoffeeGame() {
   }, [rouletteRespinMode]);
   const { play, unlock, startAmbient } = useSound();
   const buttonSound = useButtonSound();
-  const user = toAuthUser(session);
+  const user = useMemo(
+    () => toAuthUser(session),
+    [session?.userId, session?.displayName, session?.source, session?.playerRank],
+  );
   const catDialogueCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const catDialogueRawRef = useRef<string | null>(null);
   const harvestRewardStopSoundKeyRef = useRef<number | null>(null);
@@ -220,6 +260,15 @@ export function CoffeeGame() {
     showSceneDialogue(next.text, true);
   }, [showSceneDialogue, stopCatDialogueCycle]);
 
+  const handleCatPressEndWithRoulette = useCallback(() => {
+    if (rouletteNudgeOpeningRef.current || ritualNudgeOpeningRef.current) {
+      rouletteNudgeOpeningRef.current = false;
+      ritualNudgeOpeningRef.current = false;
+      return;
+    }
+    handleCatPressEnd();
+  }, [handleCatPressEnd]);
+
   useEffect(() => () => stopCatDialogueCycle(), [stopCatDialogueCycle]);
 
   useEffect(() => {
@@ -248,8 +297,94 @@ export function CoffeeGame() {
 
   const onboardingBlocking = showWelcome || tutorialActive;
 
-  const openDailyRouletteIfEligible = useCallback((options?: { afterOnboarding?: boolean; forceOpen?: boolean }) => {
-    if (loading) return false;
+  const tryOpenRankingRewardAlert = useCallback(
+    (status: RankingTop3RewardStatus | null | undefined) => {
+      if (!status?.canClaim || rankingRewardAlertDismissedRef.current) {
+        return false;
+      }
+
+      const onboarding = getOnboardingUiState();
+      if (onboarding.showWelcome || onboarding.tutorialActive) {
+        return false;
+      }
+
+      if (showDailyRoulette) {
+        return false;
+      }
+
+      setShowRankingRewardAlert(true);
+      play('modalOpen');
+      return true;
+    },
+    [play, showDailyRoulette],
+  );
+
+  useEffect(() => {
+    rankingRewardAlertDismissedRef.current = false;
+  }, [session?.userId]);
+
+  useEffect(() => {
+    if (loading || !session?.userId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetchRankingTop3PromotionStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setRankingRewardStatus(status);
+        tryOpenRankingRewardAlert(status);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, session?.userId, tryOpenRankingRewardAlert]);
+
+  useEffect(() => {
+    if (onboardingBlocking || showDailyRoulette) return;
+    if (!rankingRewardStatus?.canClaim || showRankingRewardAlert) return;
+    tryOpenRankingRewardAlert(rankingRewardStatus);
+  }, [
+    onboardingBlocking,
+    rankingRewardStatus,
+    showDailyRoulette,
+    showRankingRewardAlert,
+    tryOpenRankingRewardAlert,
+  ]);
+
+  const dismissCatFortuneGuide = useCallback(() => {
+    markCatFortuneGuideSeenToday();
+    setCatFortuneGuideSeen(true);
+  }, []);
+
+  const dismissCatRouletteGuide = useCallback(() => {
+    markCatRouletteGuideSeenToday();
+    setCatRouletteGuideSeen(true);
+  }, []);
+
+  useEffect(() => {
+    const today = getTodayKey();
+    setCatFortuneGuideSeen(hasSeenCatFortuneGuideToday(today));
+    setCatRouletteGuideSeen(hasSeenCatRouletteGuideToday(today));
+  }, [state.ritualDayKey, state.dailyLoginRouletteDayKey]);
+
+  const pendingBonusRouletteSpin = useMemo(
+    () => hasPendingBonusRouletteSpin(state),
+    [state.dailyLoginRouletteDayKey, state.ritualBonusRouletteSpins],
+  );
+
+  useEffect(() => {
+    if (!pendingBonusRouletteSpin) return;
+    clearDailyLoginRouletteSessionDismiss();
+    primeBonusRouletteNudge();
+    setCatRouletteGuideSeen(false);
+  }, [pendingBonusRouletteSpin]);
+
+  const openDailyRouletteModal = useCallback((options?: { forceOpen?: boolean }) => {
+    if (loading && !options?.forceOpen) return false;
 
     const onboarding = getOnboardingUiState();
     if (!options?.forceOpen && (onboarding.showWelcome || onboarding.tutorialActive)) return false;
@@ -257,47 +392,296 @@ export function CoffeeGame() {
     const forcePreview =
       import.meta.env.DEV && new URLSearchParams(window.location.search).get('roulette') === '1';
 
-    if (forcePreview) {
+    if (forcePreview || options?.forceOpen) {
+      setRouletteActionError(null);
       setShowDailyRoulette(true);
       return true;
     }
 
-    if (hasSeenDailyLoginRouletteLocal()) return false;
-    if (!canClaimDailyLoginRouletteToday(state.dailyLoginRouletteDayKey)) {
-      if (import.meta.env.DEV && options?.afterOnboarding) {
-        console.warn('[daily-roulette] post-onboarding blocked: server already claimed today');
-      }
+    if (!canSpinDailyLoginRouletteToday(state)) {
       return false;
     }
-    syncDailyLoginRouletteLocalWithServer(state.dailyLoginRouletteDayKey);
-    if (isDailyLoginRouletteDismissedForSession()) return false;
 
     setRouletteActionError(null);
+    if (pendingBonusRouletteSpin && !options?.forceOpen) {
+      setRouletteResult(null);
+      setRouletteSpinGeneration(0);
+      setRouletteSnapRevealKey(0);
+      rouletteSyncedOnOpenRef.current = false;
+    }
     markDailyLoginRouletteShownLocal();
     setShowDailyRoulette(true);
     return true;
-  }, [loading, state.dailyLoginRouletteDayKey]);
+  }, [loading, pendingBonusRouletteSpin, state]);
 
-  const requestDailyRouletteAfterOnboarding = useCallback(() => {
-    pendingRouletteAfterOnboardingRef.current = true;
-  }, []);
+  const showDailyRouletteNudge = useMemo(() => {
+    if (loading || onboardingBlocking) return false;
+    const onboarding = getOnboardingUiState();
+    if (onboarding.showWelcome || onboarding.tutorialActive) return false;
+    if (!canSpinDailyLoginRouletteToday(state)) return false;
+    if (pendingBonusRouletteSpin) return true;
+    return !catRouletteGuideSeen && !isDailyLoginRouletteDismissedForSession();
+  }, [catRouletteGuideSeen, loading, onboardingBlocking, pendingBonusRouletteSpin, state]);
 
   useEffect(() => {
-    if (loading) return;
+    syncDailyLoginRouletteLocalWithServer(state.dailyLoginRouletteDayKey);
+  }, [state.dailyLoginRouletteDayKey]);
 
-    const onboarding = getOnboardingUiState();
-    if (onboarding.showWelcome || onboarding.tutorialActive) return;
+  const showFortuneNudge = useMemo(() => {
+    if (loading || onboardingBlocking || showDailyRoulette) return false;
+    if (showDailyRouletteNudge) return false;
+    if (catFortuneGuideSeen) return false;
+    return isRitualFortunePending(state);
+  }, [catFortuneGuideSeen, loading, onboardingBlocking, showDailyRoulette, showDailyRouletteNudge, state]);
 
-    if (pendingRouletteAfterOnboardingRef.current) {
-      const opened = openDailyRouletteIfEligible({ afterOnboarding: true });
-      if (opened || hasSeenDailyLoginRouletteLocal()) {
-        pendingRouletteAfterOnboardingRef.current = false;
+  const showRitualGiftBox = useMemo(() => {
+    if (loading || onboardingBlocking || showDailyRoulette) return false;
+    return isRitualGiftPending(state);
+  }, [loading, onboardingBlocking, showDailyRoulette, state]);
+
+  const showMissionPanel = useMemo(() => {
+    if (loading || onboardingBlocking) return false;
+    return Boolean(state.ritualFortuneRevealed && !state.ritualMissionClaimed);
+  }, [loading, onboardingBlocking, state.ritualFortuneRevealed, state.ritualMissionClaimed]);
+
+  const ritualMissions = useMemo(() => buildLocalMissionPreview(state), [state]);
+
+  const openedRitualGiftLabel = useMemo(() => getOpenedRitualGiftLabel(state), [state]);
+  const openedRitualGiftDescription = useMemo(() => getOpenedRitualGiftDescription(state), [state]);
+
+  const canClaimFortuneHarvestBonus = useMemo(() => {
+    return (
+      state.ritualFortuneId === 'HARVEST_GOAL_2' &&
+      state.ritualFortuneRevealed &&
+      !state.ritualFortuneClaimed &&
+      state.ritualFortuneProgress >= 2
+    );
+  }, [state]);
+
+  const handleDailyRitualFortuneReveal = useCallback(async () => {
+    if (ritualBusy || !isRitualFortunePending(state)) return;
+
+    setRitualBusy(true);
+    try {
+      const result = await revealRitualFortuneGame();
+      dismissCatFortuneGuide();
+      applyServerState(result.state, { trustServer: true });
+      const copy = sceneDialogueForRevealedFortune(result.copy);
+      showSceneDialogue(copy);
+      play('modalOpen');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '운세를 확인하지 못했어요.';
+      if (err instanceof ApiRequestError && err.state) {
+        applyServerState(err.state, { trustServer: true });
       }
+      showSceneDialogue(message);
+    } finally {
+      setRitualBusy(false);
+    }
+  }, [applyServerState, dismissCatFortuneGuide, play, ritualBusy, showSceneDialogue, state]);
+
+  const handleDailyRitualGiftOpen = useCallback(async () => {
+    if (ritualBusy || !isRitualGiftPending(state)) return;
+
+    setRitualBusy(true);
+    try {
+      const result = await openRitualGiftGame();
+      applyServerState(result.state, { trustServer: true });
+      if (result.playerRank != null) {
+        updatePlayerRank(result.playerRank);
+      }
+      showSceneDialogue(result.copy);
+      play('slotStop');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '선물을 열지 못했어요.';
+      if (err instanceof ApiRequestError && err.state) {
+        applyServerState(err.state, { trustServer: true });
+      }
+      showSceneDialogue(message);
+    } finally {
+      setRitualBusy(false);
+    }
+  }, [applyServerState, play, ritualBusy, showSceneDialogue, state, updatePlayerRank]);
+
+  const handleClaimRitualMissionReward = useCallback(async () => {
+    if (ritualBusy || !canClaimLocalMissionReward(state)) return;
+
+    setRitualBusy(true);
+    try {
+      const result = await claimRitualMissionRewardGame();
+      applyServerState(result.state, { trustServer: true });
+      showSceneDialogue(`미션 완료! 커피 ${result.rewardCups}잔을 받았어요.`);
+      play('slotStop');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '미션 보상을 받지 못했어요.';
+      if (err instanceof ApiRequestError && err.state) {
+        applyServerState(err.state, { trustServer: true });
+      }
+      showSceneDialogue(message);
+    } finally {
+      setRitualBusy(false);
+    }
+  }, [applyServerState, play, ritualBusy, showSceneDialogue, state]);
+
+  const handleClaimRitualFortuneReward = useCallback(async () => {
+    if (ritualBusy || !canClaimFortuneHarvestBonus) return;
+
+    setRitualBusy(true);
+    try {
+      const result = await claimRitualFortuneRewardGame();
+      applyServerState(result.state, { trustServer: true });
+      showSceneDialogue(`수확 보너스! 커피 ${result.rewardCups}잔을 받았어요.`);
+      play('slotStop');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '수확 보너스를 받지 못했어요.';
+      if (err instanceof ApiRequestError && err.state) {
+        applyServerState(err.state, { trustServer: true });
+      }
+      showSceneDialogue(message);
+    } finally {
+      setRitualBusy(false);
+    }
+  }, [applyServerState, canClaimFortuneHarvestBonus, play, ritualBusy, showSceneDialogue]);
+
+  const ritualDevStatus = useMemo(() => {
+    if (!import.meta.env.DEV) return '';
+    const doneCount = ritualMissions.filter((mission) => mission.done).length;
+    return [
+      state.ritualFortuneId || '운세미정',
+      state.ritualFortuneRevealed ? '확인완료' : '확인전',
+      state.ritualGiftOpened ? '선물완료' : '선물전',
+      `미션 ${doneCount}/3`,
+      state.ritualMissionClaimed ? '미션보상수령' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }, [ritualMissions, state]);
+
+  const applyRitualDevState = useCallback(
+    (nextState: Parameters<typeof applyServerState>[0], message: string) => {
+      applyServerState(nextState, { trustServer: true });
+      showSceneDialogue(message);
+    },
+    [applyServerState, showSceneDialogue],
+  );
+
+  const handleDevResetDailyRitual = useCallback(async () => {
+    if (ritualBusy) return;
+    setRitualBusy(true);
+    try {
+      const result = await devResetDailyRitualGame();
+      resetCatGuideStorage();
+      setCatFortuneGuideSeen(false);
+      setCatRouletteGuideSeen(hasSeenCatRouletteGuideToday());
+      applyRitualDevState(result.state, '오늘의 커피 운세를 초기화했어요. (테스트용)');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '운세 초기화에 실패했어요.';
+      if (err instanceof ApiRequestError && err.state) {
+        applyServerState(err.state, { trustServer: true });
+      }
+      showSceneDialogue(message);
+    } finally {
+      setRitualBusy(false);
+    }
+  }, [applyRitualDevState, applyServerState, ritualBusy, showSceneDialogue]);
+
+  const handleDevSetDailyRitualFortune = useCallback(
+    async (fortuneId: string, label: string) => {
+      if (ritualBusy) return;
+      setRitualBusy(true);
+      try {
+        const result = await devSetDailyRitualFortuneGame(fortuneId);
+        applyRitualDevState(result.state, `운세를 「${label}」로 바꿨어요. (테스트용)`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '운세 변경에 실패했어요.';
+        if (err instanceof ApiRequestError && err.state) {
+          applyServerState(err.state, { trustServer: true });
+        }
+        showSceneDialogue(message);
+      } finally {
+        setRitualBusy(false);
+      }
+    },
+    [applyRitualDevState, applyServerState, ritualBusy, showSceneDialogue],
+  );
+
+  const handleDevCompleteDailyRitualMission = useCallback(
+    async (mission: 'harvest' | 'minigame' | 'roulette', label: string) => {
+      if (ritualBusy) return;
+      setRitualBusy(true);
+      try {
+        const result = await devCompleteDailyRitualMissionGame(mission);
+        applyRitualDevState(result.state, `「${label}」 미션을 완료 처리했어요. (테스트용)`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '미션 완료 처리에 실패했어요.';
+        if (err instanceof ApiRequestError && err.state) {
+          applyServerState(err.state, { trustServer: true });
+        }
+        showSceneDialogue(message);
+      } finally {
+        setRitualBusy(false);
+      }
+    },
+    [applyRitualDevState, applyServerState, ritualBusy, showSceneDialogue],
+  );
+
+  const handleDevAdvanceDailyRitual = useCallback(
+    async (step: 'reveal' | 'gift', label: string) => {
+      if (ritualBusy) return;
+      setRitualBusy(true);
+      try {
+        const result = await devAdvanceDailyRitualGame(step);
+        applyRitualDevState(
+          result.state,
+          step === 'gift' ? '선물까지 열었어요. (테스트용)' : `「${label}」 완료. (테스트용)`,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '진행에 실패했어요.';
+        if (err instanceof ApiRequestError && err.state) {
+          applyServerState(err.state, { trustServer: true });
+        }
+        showSceneDialogue(message);
+      } finally {
+        setRitualBusy(false);
+      }
+    },
+    [applyRitualDevState, applyServerState, ritualBusy, showSceneDialogue],
+  );
+
+  const handleDailyRitualFortuneNudgeClick = useCallback(async () => {
+    await buttonSound();
+    dismissCatFortuneGuide();
+    ritualNudgeOpeningRef.current = true;
+    await handleDailyRitualFortuneReveal();
+  }, [buttonSound, dismissCatFortuneGuide, handleDailyRitualFortuneReveal]);
+
+  const dailyFortuneNudgeText = useMemo(() => sceneDialogueForDailyRitualFortuneNudge(), []);
+
+  const dailyRouletteNudgeText = useMemo(
+    () =>
+      pendingBonusRouletteSpin
+        ? sceneDialogueForBonusRouletteNudge()
+        : sceneDialogueForDailyRouletteNudge(),
+    [pendingBonusRouletteSpin],
+  );
+
+  const handleDailyRouletteNudgeClick = useCallback(async () => {
+    await buttonSound();
+    rouletteNudgeOpeningRef.current = true;
+    openDailyRouletteModal();
+  }, [buttonSound, openDailyRouletteModal]);
+
+  const handleCatPressStartWithRoulette = useCallback(() => {
+    if (showDailyRouletteNudge) {
+      void handleDailyRouletteNudgeClick();
       return;
     }
-
-    openDailyRouletteIfEligible();
-  }, [loading, openDailyRouletteIfEligible, showWelcome, state.dailyLoginRouletteDayKey, tutorialActive]);
+    if (showFortuneNudge) {
+      void handleDailyRitualFortuneNudgeClick();
+      return;
+    }
+    handleCatPressStart();
+  }, [handleCatPressStart, handleDailyRitualFortuneNudgeClick, handleDailyRouletteNudgeClick, showDailyRouletteNudge, showFortuneNudge]);
 
   useEffect(() => {
     if (showDailyRoulette) return;
@@ -325,7 +709,8 @@ export function CoffeeGame() {
     if (
       rouletteResult === null &&
       state.dailyLoginRouletteDayKey === today &&
-      state.dailyLoginRouletteRewardCups > 0
+      state.dailyLoginRouletteRewardCups > 0 &&
+      !hasPendingBonusRouletteSpin(state)
     ) {
       setRouletteResult(state.dailyLoginRouletteRewardCups);
       setRouletteSnapRevealKey((key) => key + 1);
@@ -335,6 +720,7 @@ export function CoffeeGame() {
     showDailyRoulette,
     state.dailyLoginRouletteDayKey,
     state.dailyLoginRouletteRewardCups,
+    state.ritualBonusRouletteSpins,
   ]);
 
   useEffect(() => {
@@ -342,18 +728,16 @@ export function CoffeeGame() {
 
     window.resetGrowCoffeeDailyRoulette = () => {
       void resetDailyLoginRouletteForTest().then(() => {
-        openDailyRouletteIfEligible({ forceOpen: true });
+        openDailyRouletteModal({ forceOpen: true });
       });
     };
 
     window.resetGrowCoffeeOnboarding = () => {
       resetOnboardingStorage();
       syncOnboardingUi();
-      void resetDailyLoginRouletteForTest().then(() => {
-        requestDailyRouletteAfterOnboarding();
-      });
+      void resetDailyLoginRouletteForTest();
     };
-  }, [openDailyRouletteIfEligible, requestDailyRouletteAfterOnboarding, resetDailyLoginRouletteForTest, syncOnboardingUi]);
+  }, [openDailyRouletteModal, resetDailyLoginRouletteForTest, syncOnboardingUi]);
 
   const restoreRouletteResultBeforeRespin = useCallback(() => {
     if (rouletteResultBeforeRespinRef.current == null) return;
@@ -399,6 +783,7 @@ export function CoffeeGame() {
         : await claimDailyLoginRoulette();
 
       if (outcome.rewardCups != null) {
+        dismissCatRouletteGuide();
         if (isRespin) {
           setRouletteRespinMode(false);
           rouletteRespinModeRef.current = false;
@@ -422,7 +807,7 @@ export function CoffeeGame() {
     } finally {
       setRouletteSpinning(false);
     }
-  }, [claimDailyLoginRoulette, play, respinDailyLoginRoulette, restoreRouletteResultBeforeRespin]);
+  }, [claimDailyLoginRoulette, dismissCatRouletteGuide, play, respinDailyLoginRoulette, restoreRouletteResultBeforeRespin]);
 
   const handleDailyRouletteRespinReset = useCallback(async () => {
     const today = getTodayKey();
@@ -462,11 +847,12 @@ export function CoffeeGame() {
 
   const handleDailyRouletteReceive = useCallback(async () => {
     await buttonSound();
+    dismissCatRouletteGuide();
     dismissDailyLoginRouletteForSession();
     setShowDailyRoulette(false);
     setRouletteResult(null);
     play('modalClose');
-  }, [buttonSound, play]);
+  }, [buttonSound, dismissCatRouletteGuide, play]);
 
   const handleDevRouletteSpinOnly = useCallback(async () => {
     if (!import.meta.env.DEV) return;
@@ -501,6 +887,7 @@ export function CoffeeGame() {
     }
 
     if (rouletteResult !== null) {
+      dismissCatRouletteGuide();
       dismissDailyLoginRouletteForSession();
       setShowDailyRoulette(false);
       setRouletteResult(null);
@@ -508,10 +895,22 @@ export function CoffeeGame() {
       return;
     }
 
-    dismissDailyLoginRouletteForSession();
+    clearDailyLoginRouletteSessionDismiss();
+    resetCatRouletteGuideForToday();
+    setCatRouletteGuideSeen(false);
     setShowDailyRoulette(false);
+    showSceneDialogue(dailyRouletteNudgeText, true);
     play('modalClose');
-  }, [buttonSound, play, restoreRouletteResultBeforeRespin, rouletteRespinMode, rouletteResult]);
+  }, [
+    buttonSound,
+    dailyRouletteNudgeText,
+    dismissCatRouletteGuide,
+    play,
+    restoreRouletteResultBeforeRespin,
+    rouletteRespinMode,
+    rouletteResult,
+    showSceneDialogue,
+  ]);
 
   useGameAudio({
     state,
@@ -541,7 +940,6 @@ export function CoffeeGame() {
     } else {
       await unlock();
       await startAmbient();
-      requestDailyRouletteAfterOnboarding();
     }
   };
 
@@ -561,7 +959,6 @@ export function CoffeeGame() {
     tutorialCoffeesBaselineRef.current = null;
     tutorialRefillingRef.current = false;
     play('modalClose');
-    requestDailyRouletteAfterOnboarding();
     await unlock();
     await startAmbient();
   };
@@ -621,59 +1018,64 @@ export function CoffeeGame() {
     tutorialStep,
   ]);
 
-  const openSettings = async () => {
+  const openSettings = useCallback(async () => {
     await buttonSound();
     play('modalOpen');
     setShowSettings(true);
-  };
+  }, [buttonSound, play]);
 
-  const closeSettings = async () => {
+  const closeSettings = useCallback(async () => {
     await buttonSound();
     play('modalClose');
     setShowSettings(false);
-  };
+  }, [buttonSound, play]);
 
-  const openShop = async () => {
+  const openShop = useCallback(async () => {
     await buttonSound();
     play('modalOpen');
     setShowShop(true);
-  };
+  }, [buttonSound, play]);
 
-  const closeShop = async () => {
+  const closeShop = useCallback(async () => {
     await buttonSound();
     play('modalClose');
     setShowShop(false);
-  };
+  }, [buttonSound, play]);
 
-  const openMyCoffee = async () => {
+  const openMyCoffee = useCallback(async () => {
     await buttonSound();
     play('modalOpen');
     setShowMyCoffee(true);
-  };
+  }, [buttonSound, play]);
 
-  const closeMyCoffee = async () => {
+  const closeMyCoffee = useCallback(async () => {
     await buttonSound();
     play('modalClose');
     setShowMyCoffee(false);
-  };
+  }, [buttonSound, play]);
 
-  const openRanking = async () => {
+  const openRanking = useCallback(async () => {
     await buttonSound();
     play('modalOpen');
     setShowRanking(true);
     setRankingLoading(true);
     setRankingError(null);
+    setRankingRewardStatus(null);
     setCoffeeRanking(
-      getCoffeeRanking(getRankingBrewedSpend(state), session?.displayName ?? MOCK_USER.name),
+      getCoffeeRanking(getDailyRankingBrewedSpend(state), session?.displayName ?? MOCK_USER.name),
     );
 
     try {
-      const ranking = await syncCoffeeRanking({
-        userId: session?.userId ?? '',
-        spentCoffeeCups: getRankingBrewedSpend(state),
-        displayName: session?.displayName ?? MOCK_USER.name,
-      });
+      const [ranking, rewardStatus] = await Promise.all([
+        syncCoffeeRanking({
+          userId: session?.userId ?? '',
+          spentCoffeeCups: getDailyRankingBrewedSpend(state),
+          displayName: session?.displayName ?? MOCK_USER.name,
+        }),
+        session?.userId ? fetchRankingTop3PromotionStatus().catch(() => null) : Promise.resolve(null),
+      ]);
       setCoffeeRanking(ranking);
+      setRankingRewardStatus(rewardStatus);
       if (ranking.live) {
         updatePlayerRank(ranking.playerRank);
       } else if (session?.userId) {
@@ -684,13 +1086,104 @@ export function CoffeeGame() {
     } finally {
       setRankingLoading(false);
     }
-  };
+  }, [buttonSound, play, session?.displayName, session?.userId, state, updatePlayerRank]);
 
-  const closeRanking = async () => {
+  const closeRanking = useCallback(async () => {
     await buttonSound();
     play('modalClose');
     setShowRanking(false);
-  };
+  }, [buttonSound, play]);
+
+  const handleNavRank = useCallback(() => {
+    void openRanking();
+  }, [openRanking]);
+
+  const handleClaimRankingTop3Reward = useCallback(async () => {
+    if (rankingRewardClaiming) return;
+
+    setRankingRewardClaiming(true);
+    setRankingError(null);
+    try {
+      const result = await claimRankingTop3Promotion(session?.userId ?? '');
+
+      if (!result.ok) {
+        showSceneDialogue(result.message);
+        return;
+      }
+
+      if (result.state) {
+        applyServerState(result.state, { trustServer: true });
+      }
+
+      setRankingRewardStatus({
+        rewardDayKey: result.rewardDayKey,
+        playerRank: result.playerRank,
+        eligible: true,
+        claimed: true,
+        canClaim: false,
+      });
+      setShowRankingRewardAlert(false);
+      play('modalClose');
+      showSceneDialogue(getRankingTop3ClaimSuccessMessage(result.mocked));
+      if (!result.alreadyClaimed) {
+        void scheduleReviewPrompt({
+          trigger: 'daily-ranking-top3',
+          onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '랭킹 보상을 받을 수 없어요.';
+      setRankingError(message);
+      showSceneDialogue(message);
+    } finally {
+      setRankingRewardClaiming(false);
+    }
+  }, [applyServerState, play, rankingRewardClaiming, session?.userId, showSceneDialogue]);
+
+  const dismissRankingRewardAlert = useCallback(async () => {
+    await buttonSound();
+    rankingRewardAlertDismissedRef.current = true;
+    setShowRankingRewardAlert(false);
+    play('modalClose');
+  }, [buttonSound, play]);
+
+  const openRankingFromRewardAlert = useCallback(async () => {
+    rankingRewardAlertDismissedRef.current = true;
+    setShowRankingRewardAlert(false);
+    play('modalClose');
+    await openRanking();
+  }, [play]);
+
+  const handleCoffeeValuePress = useCallback(async () => {
+    await buttonSound();
+    showSceneDialogue(`지금까지 지급받은 실제 커피값 수치는 ${formatWon(state.money)}이에요.`);
+  }, [buttonSound, showSceneDialogue, state.money]);
+
+  const handleDevFinalizeRanking = useCallback(async () => {
+    if (!import.meta.env.DEV || !session?.userId) return;
+
+    await buttonSound();
+    try {
+      const result = await devFinalizeRankingNow();
+      setRankingRewardStatus(result.rewardStatus);
+      rankingRewardAlertDismissedRef.current = false;
+
+      if (result.rewardStatus.canClaim) {
+        tryOpenRankingRewardAlert(result.rewardStatus);
+      } else if (result.rewardStatus.claimed) {
+        setShowRankingRewardAlert(false);
+      }
+
+      const rankLabel =
+        result.rewardStatus.playerRank != null ? `${result.rewardStatus.playerRank}위` : '순위 없음';
+      showSceneDialogue(
+        `랭킹 즉시 확정! ${result.finalizedDayKey} 마감 · ${rankLabel} · ${result.entryCount}명 (테스트용)`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '랭킹 즉시 확정에 실패했어요.';
+      showSceneDialogue(message);
+    }
+  }, [buttonSound, session?.userId, showSceneDialogue, tryOpenRankingRewardAlert]);
 
   const handleStartHold = useCallback(async () => {
     await unlock();
@@ -706,13 +1199,12 @@ export function CoffeeGame() {
     await buttonSound();
     resetOnboardingStorage();
     syncOnboardingUi();
-    requestDailyRouletteAfterOnboarding();
     await reset();
     if (import.meta.env.DEV) {
       await resetDailyLoginRouletteForTest();
     }
     setShowSettings(false);
-  }, [buttonSound, requestDailyRouletteAfterOnboarding, reset, resetDailyLoginRouletteForTest, syncOnboardingUi]);
+  }, [buttonSound, reset, resetDailyLoginRouletteForTest, syncOnboardingUi]);
 
   const handleDrinkTap = useCallback(() => {
     completeDrink();
@@ -768,12 +1260,28 @@ export function CoffeeGame() {
         growActionSlot,
         waterStatus,
       }),
-    [growActionSlot, readyToDrink, state.growth, waterStatus],
+    [
+      growActionSlot,
+      readyToDrink,
+      state.growth,
+      waterStatus.canWater,
+      waterStatus.needsAd,
+      waterStatus.watersToday,
+      waterStatus.adWaterCredits,
+    ],
   );
 
   const passiveCupStats = useMemo(
     () => getPassiveUiStats(state, balanceRules),
-    [state, balanceRules],
+    [
+      balanceRules,
+      state.dailyPassiveGrowth,
+      state.growth,
+      state.growthAccrualSyncedAt,
+      state.passiveCoffeesClaimed,
+      state.passiveDayKey,
+      state.passiveReactivateDayKey,
+    ],
   );
 
   const passiveHint = useMemo(
@@ -791,8 +1299,13 @@ export function CoffeeGame() {
       canClaim: passiveCupStats.canClaim,
       canReactivate: passiveCupStats.canReactivate,
       reactivateUsedToday: passiveCupStats.reactivateUsedToday,
+      timeRemainingLabel: formatPassiveTimeRemainingLabel(
+        passiveCupStats,
+        balanceRules.passiveGrowthPerSecond,
+      ),
     }),
     [
+      balanceRules.passiveGrowthPerSecond,
       passiveCupStats.canClaim,
       passiveCupStats.canReactivate,
       passiveCupStats.complete,
@@ -820,7 +1333,16 @@ export function CoffeeGame() {
     void claimAttendanceStreak();
   }, [claimAttendanceStreak]);
 
-  const attendanceStats = useMemo(() => getAttendanceUiStats(state), [state]);
+  const attendanceStats = useMemo(
+    () => getAttendanceUiStats(state),
+    [
+      state.attendanceCupsToday,
+      state.attendanceDailyClaimDayKey,
+      state.attendanceDayKey,
+      state.attendanceStreak,
+      state.attendanceStreakBonusPending,
+    ],
+  );
 
   const drinkStage = useMemo(
     () => isDrinkStage(isHolding ? state.growth : displayGrowth),
@@ -855,7 +1377,12 @@ export function CoffeeGame() {
 
   return (
     <div className="game">
-      <UserBar money={state.money} user={user} onOpenSettings={openSettings} />
+      <UserBar
+        money={state.money}
+        user={user}
+        onOpenSettings={openSettings}
+        onCoffeeValuePress={handleCoffeeValuePress}
+      />
 
       {loading ? (
         <main className="game__main">
@@ -876,7 +1403,7 @@ export function CoffeeGame() {
             )}
             <PlantScene
               growth={displayGrowth}
-              plantGrowth={isHolding ? state.growth : displayGrowth}
+              plantGrowth={getRitualEffectiveGrowth(state, isHolding ? state.growth : displayGrowth)}
               selectedCoffeeVariant={state.selectedCoffeeVariant}
               ownedCoffeeVariants={state.ownedCoffeeVariants}
               isWatering={isHolding}
@@ -904,13 +1431,41 @@ export function CoffeeGame() {
               onPointerUp={handleStopHold}
               onDrinkTap={handleDrinkTap}
               onWatchAd={handleWatchAd}
-              onCatPressStart={handleCatPressStart}
-              onCatPressEnd={handleCatPressEnd}
+              onCatPressStart={handleCatPressStartWithRoulette}
+              onCatPressEnd={handleCatPressEndWithRoulette}
               onOpenComicSeries={openComicSeries}
               onOpenDailyGame={openDailyGame}
               onOpenShop={openShop}
+              fortuneNudgeVisible={showFortuneNudge && !showDailyRoulette}
+              fortuneNudgeText={dailyFortuneNudgeText}
+              onFortuneNudgeClick={handleDailyRitualFortuneNudgeClick}
+              rouletteNudgeVisible={showDailyRouletteNudge && !showDailyRoulette}
+              rouletteNudgeText={dailyRouletteNudgeText}
+              onRouletteNudgeClick={handleDailyRouletteNudgeClick}
+              ritualGiftVisible={showRitualGiftBox}
+              ritualGiftDisabled={ritualBusy}
+              onRitualGiftOpen={handleDailyRitualGiftOpen}
               sceneDialogue={sceneDialogue}
               harvestReward={harvestReward}
+              money={state.money}
+              onCoffeeValuePress={handleCoffeeValuePress}
+              slotBelowShop={
+                <DailyMissionPanel
+                  visible={showMissionPanel}
+                  variant="dock"
+                  missions={ritualMissions}
+                  rewardCups={10}
+                  canClaim={canClaimLocalMissionReward(state)}
+                  claimed={Boolean(state.ritualMissionClaimed)}
+                  disabled={ritualBusy}
+                  onClaim={handleClaimRitualMissionReward}
+                  onClaimFortune={handleClaimRitualFortuneReward}
+                  canClaimFortune={canClaimFortuneHarvestBonus}
+                  fortuneProgress={state.ritualFortuneProgress}
+                  fortuneGoal={2}
+                  fortuneRewardCups={3}
+                />
+              }
             />
 
             {drinkStage && (
@@ -945,6 +1500,12 @@ export function CoffeeGame() {
               isPassivelyAccruing={
                 passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
               }
+              ritualGiftLabel={openedRitualGiftLabel}
+              ritualGiftDescription={openedRitualGiftDescription}
+              treeStageGrowth={getRitualEffectiveGrowth(
+                state,
+                isHolding && (holdMode === 'water' || holdMode === 'brew') ? displayGrowth : state.growth,
+              )}
               sellBatchLabel="내린 커피 마시기"
               onSellBatch={handleSellBatch}
               onClaimFinishBonus={handleClaimFinishBonus}
@@ -994,8 +1555,149 @@ export function CoffeeGame() {
                   >
                     룰렛만 돌리기
                   </button>
+                  {import.meta.env.DEV && (
+                    <button
+                      type="button"
+                      className="game__test-btn"
+                      disabled={loading || actionSyncing || !session?.userId}
+                      onClick={() => void handleDevFinalizeRanking()}
+                    >
+                      랭킹 즉시 매기기
+                    </button>
+                  )}
+                  {isRankingTop3PromotionMockEnabled() && (
+                    <button
+                      type="button"
+                      className="game__test-btn"
+                      disabled={loading || actionSyncing || !session?.userId}
+                      onClick={() => {
+                        void resetRankingTop3PromotionForTest(session?.userId ?? '').then(() => {
+                          setRankingRewardStatus(null);
+                          showSceneDialogue('어제 랭킹 보상 지급 기록을 초기화했어요. (테스트용)');
+                        });
+                      }}
+                    >
+                      랭킹 보상 지급 초기화
+                    </button>
+                  )}
                 </div>
                 )}
+
+                <section className="game__test-review game__test-review--ritual" aria-label="오늘의 커피 운세 테스트">
+                  <p className="game__test-review-title">오늘의 커피 운세 테스트</p>
+                  {ritualDevStatus && (
+                    <p className="game__test-review-status" role="status">
+                      {ritualDevStatus}
+                    </p>
+                  )}
+                  <div className="game__test-row game__test-row--review">
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevResetDailyRitual()}
+                    >
+                      운세 초기화
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDailyRitualFortuneReveal()}
+                    >
+                      운세 확인
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDailyRitualGiftOpen()}
+                    >
+                      선물 열기
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevAdvanceDailyRitual('reveal', '운세 확인')}
+                    >
+                      운세 건너뛰기
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevAdvanceDailyRitual('gift', '선물 열기')}
+                    >
+                      선물까지 건너뛰기
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevCompleteDailyRitualMission('harvest', '수확 2번')}
+                    >
+                      수확 미션 완료
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevCompleteDailyRitualMission('minigame', '미니게임')}
+                    >
+                      미니게임 미션
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => void handleDevCompleteDailyRitualMission('roulette', '룰렛')}
+                    >
+                      룰렛 미션
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy || !canClaimFortuneHarvestBonus}
+                      onClick={() => void handleClaimRitualFortuneReward()}
+                    >
+                      수확 보너스 받기
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy || !canClaimLocalMissionReward(state)}
+                      onClick={() => void handleClaimRitualMissionReward()}
+                    >
+                      미션 10잔 받기
+                    </button>
+                    <button
+                      type="button"
+                      className="game__test-btn game__test-btn--ritual"
+                      disabled={loading || actionSyncing || ritualBusy}
+                      onClick={() => {
+                        void resetDailyLoginRouletteForTest().then(() => {
+                          showSceneDialogue('룰렛 수령 상태를 초기화했어요. (테스트용)');
+                        });
+                      }}
+                    >
+                      룰렛 초기화
+                    </button>
+                  </div>
+                  <div className="game__test-row game__test-row--review">
+                    {RITUAL_GIFT_TEST_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="game__test-btn game__test-btn--ritual-fortune"
+                        disabled={loading || actionSyncing || ritualBusy}
+                        onClick={() => void handleDevSetDailyRitualFortune(option.id, option.label)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
 
                 <section className="game__test-review" aria-label="리뷰 유도 미리보기">
                   <p className="game__test-review-title">리뷰 미리보기</p>
@@ -1044,7 +1746,7 @@ export function CoffeeGame() {
       </div>
 
       <BottomNav
-        onRank={() => void openRanking()}
+        onRank={handleNavRank}
         onShop={openShop}
         onMyCoffee={openMyCoffee}
         onSettings={openSettings}
@@ -1055,6 +1757,9 @@ export function CoffeeGame() {
           ranking={coffeeRanking}
           loading={rankingLoading}
           error={rankingError}
+          rewardStatus={rankingRewardStatus}
+          claimingReward={rankingRewardClaiming}
+          onClaimTop3Reward={handleClaimRankingTop3Reward}
           onClose={() => void closeRanking()}
         />
       )}
@@ -1094,6 +1799,15 @@ export function CoffeeGame() {
           onReceive={() => void handleDailyRouletteReceive()}
           onRespin={handleDailyRouletteRespinReset}
           onSpin={() => void handleDailyRouletteSpin()}
+        />
+      )}
+      {showRankingRewardAlert && rankingRewardStatus?.canClaim && (
+        <RankingRewardAlertModal
+          status={rankingRewardStatus}
+          claiming={rankingRewardClaiming}
+          onClaim={() => void handleClaimRankingTop3Reward()}
+          onOpenRanking={() => void openRankingFromRewardAlert()}
+          onDismiss={() => void dismissRankingRewardAlert()}
         />
       )}
       {tutorialActive && !showWelcome && (

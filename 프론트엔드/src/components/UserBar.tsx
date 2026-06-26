@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { formatWon } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import { SoundMuteButton } from './SoundMuteButton';
@@ -7,6 +8,7 @@ type UserBarProps = {
   money: number;
   user: AuthUser;
   onOpenSettings: () => void;
+  onCoffeeValuePress?: () => void;
 };
 
 function sessionLabel(source: AuthUser['source']) {
@@ -16,7 +18,7 @@ function sessionLabel(source: AuthUser['source']) {
   return '오프라인';
 }
 
-export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
+export const UserBar = memo(function UserBar({ money, user, onOpenSettings, onCoffeeValuePress }: UserBarProps) {
   const meta =
     user.rank !== null ? `랭킹 ${user.rank}위 · ${sessionLabel(user.source)}` : sessionLabel(user.source);
 
@@ -34,7 +36,12 @@ export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
 
       <div className="user-bar__right">
         <SoundMuteButton className="user-bar__mute" />
-        <div className="user-bar__balance-box">
+        <button
+          type="button"
+          className="user-bar__balance-box"
+          onClick={onCoffeeValuePress}
+          aria-label={`커피값 ${formatWon(money)} · 지금까지 지급받은 실제 커피값 수치`}
+        >
           <span className="user-bar__coin" aria-hidden="true">
             🪙
           </span>
@@ -42,7 +49,7 @@ export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
             <p className="user-bar__balance-label">커피값</p>
             <p className="user-bar__balance">{formatWon(money)}</p>
           </div>
-        </div>
+        </button>
         <button
           type="button"
           className="user-bar__settings"
@@ -54,5 +61,4 @@ export function UserBar({ money, user, onOpenSettings }: UserBarProps) {
       </div>
     </header>
   );
-}
-
+});

@@ -62,10 +62,28 @@
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
+  min-height: 34px;
   border-radius: 12px;
   background: rgba(255, 252, 247, 0.92);
   border: 1px solid #e8ddd2;
   box-shadow: 0 1px 4px rgba(180, 150, 120, 0.1);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.user-bar__balance-box:hover,
+.user-bar__balance-box:focus-visible {
+  border-color: #d9b98c;
+  box-shadow: 0 2px 8px rgba(180, 130, 70, 0.16);
+}
+
+.user-bar__balance-box:active {
+  transform: translateY(1px);
 }
 
 .user-bar__coin {

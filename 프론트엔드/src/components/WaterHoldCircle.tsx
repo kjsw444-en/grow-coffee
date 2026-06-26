@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { memo, useId, useRef } from 'react';
 import { HOLD_DURATION_LABEL, type HoldMode } from '../game/constants';
 import { isCoffeeStage, isDrinkStage } from '../game/utils';
 import './WaterHoldCircle.css';
@@ -24,7 +24,7 @@ function useRingSize(embedded: boolean) {
   return { radius, btnSize, circumference };
 }
 
-export function WaterHoldCircle({
+export const WaterHoldCircle = memo(function WaterHoldCircle({
   disabled,
   embedded = false,
   growth = 0,
@@ -202,4 +202,4 @@ export function WaterHoldCircle({
       )}
     </section>
   );
-}
+});

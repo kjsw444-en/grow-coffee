@@ -27,6 +27,10 @@ create table if not exists public.game_states (
   selected_coffee_variant text not null default 'parttime-latte',
   owned_coffee_variants text[] not null default array['parttime-latte']::text[],
   spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0),
+  daily_brewed_spent_day_key text not null default '',
+  daily_brewed_spent integer not null default 0 check (daily_brewed_spent >= 0),
+  daily_brewed_received_day_key text not null default '',
+  daily_brewed_received integer not null default 0 check (daily_brewed_received >= 0),
   share_reward_day_key text not null default '',
   updated_at timestamptz not null default now()
 );
@@ -37,14 +41,37 @@ create table if not exists public.rankings (
   user_id uuid primary key references public.profiles (id) on delete cascade,
   display_name text not null,
   spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0),
+  day_key text not null default '',
   updated_at timestamptz not null default now()
 );
 
 create index if not exists rankings_spent_coffee_cups_idx on public.rankings (spent_coffee_cups desc);
+create index if not exists rankings_day_score_idx on public.rankings (day_key, spent_coffee_cups desc);
+
+create table if not exists public.ranking_daily_entries (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day_key text not null,
+  display_name text not null,
+  spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day_key)
+);
+
+create index if not exists ranking_daily_entries_day_score_idx on public.ranking_daily_entries (day_key, spent_coffee_cups desc);
+
+create table if not exists public.promotion_claims (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  claim_type text not null,
+  day_key text not null,
+  reward_key text not null,
+  claimed_at timestamptz not null default now(),
+  primary key (user_id, claim_type, day_key)
+);
 
 alter table public.profiles enable row level security;
 alter table public.game_states enable row level security;
 alter table public.rankings enable row level security;
+alter table public.promotion_claims enable row level security;
 
 -- 기존 total_taps 컬럼이 있다면:
 -- alter table public.game_states rename column total_taps to total_waters;
@@ -60,6 +87,10 @@ alter table public.rankings enable row level security;
 -- alter table public.game_states add column if not exists selected_coffee_variant text not null default 'parttime-latte';
 -- alter table public.game_states add column if not exists owned_coffee_variants text[] not null default array['parttime-latte']::text[];
 -- alter table public.game_states add column if not exists spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0);
+-- alter table public.game_states add column if not exists daily_brewed_spent_day_key text not null default '';
+-- alter table public.game_states add column if not exists daily_brewed_spent integer not null default 0 check (daily_brewed_spent >= 0);
+-- alter table public.rankings add column if not exists day_key text not null default '';
+-- create index if not exists rankings_day_score_idx on public.rankings (day_key, spent_coffee_cups desc);
 -- create index if not exists game_states_emptied_cups_idx on public.game_states (spent_coffee_cups desc);
 -- alter table public.game_states alter column growth type numeric using growth::numeric;
 -- alter table public.game_states add column if not exists share_reward_day_key text not null default '';
@@ -75,6 +106,36 @@ alter table public.game_states add column if not exists lifetime_drunk_coffees i
 
 alter table public.game_states add column if not exists lifetime_brewed_spent integer not null default 0 check (lifetime_brewed_spent >= 0);
 
+-- 일일 랭킹 (KST en-CA)
+alter table public.game_states add column if not exists daily_brewed_spent_day_key text not null default '';
+alter table public.game_states add column if not exists daily_brewed_spent integer not null default 0 check (daily_brewed_spent >= 0);
+alter table public.game_states add column if not exists daily_brewed_received_day_key text not null default '';
+alter table public.game_states add column if not exists daily_brewed_received integer not null default 0 check (daily_brewed_received >= 0);
+alter table public.rankings add column if not exists day_key text not null default '';
+create index if not exists rankings_day_score_idx on public.rankings (day_key, spent_coffee_cups desc);
+
+-- 일별 랭킹 히스토리 (자정 마감 순위 보존)
+create table if not exists public.ranking_daily_entries (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day_key text not null,
+  display_name text not null,
+  spent_coffee_cups integer not null default 0 check (spent_coffee_cups >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day_key)
+);
+create index if not exists ranking_daily_entries_day_score_idx on public.ranking_daily_entries (day_key, spent_coffee_cups desc);
+
+-- 프로모션 지급 중복 방지
+create table if not exists public.promotion_claims (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  claim_type text not null,
+  day_key text not null,
+  reward_key text not null,
+  claimed_at timestamptz not null default now(),
+  primary key (user_id, claim_type, day_key)
+);
+alter table public.promotion_claims enable row level security;
+
 alter table public.game_states add column if not exists attendance_day_key text not null default '';
 alter table public.game_states add column if not exists attendance_cups_today integer not null default 0 check (attendance_cups_today >= 0);
 alter table public.game_states add column if not exists attendance_streak integer not null default 0 check (attendance_streak >= 0);
@@ -89,3 +150,24 @@ alter table public.game_states add column if not exists point_day_key text not n
 alter table public.game_states add column if not exists daily_login_roulette_day_key text not null default '';
 alter table public.game_states add column if not exists daily_login_roulette_reward_cups integer not null default 0 check (daily_login_roulette_reward_cups >= 0);
 alter table public.game_states add column if not exists daily_login_roulette_respin_day_key text not null default '';
+
+-- 오늘의 커피 운세 (Daily Ritual)
+alter table public.game_states add column if not exists ritual_day_key text not null default '';
+alter table public.game_states add column if not exists ritual_fortune_id text not null default '';
+alter table public.game_states add column if not exists ritual_fortune_revealed boolean not null default false;
+alter table public.game_states add column if not exists ritual_fortune_progress integer not null default 0 check (ritual_fortune_progress >= 0);
+alter table public.game_states add column if not exists ritual_fortune_claimed boolean not null default false;
+alter table public.game_states add column if not exists ritual_gift_opened boolean not null default false;
+alter table public.game_states add column if not exists ritual_gift_id text not null default '';
+alter table public.game_states add column if not exists ritual_mission_1_id text not null default '';
+alter table public.game_states add column if not exists ritual_mission_2_id text not null default '';
+alter table public.game_states add column if not exists ritual_mission_3_id text not null default '';
+alter table public.game_states add column if not exists ritual_mission_1_done boolean not null default false;
+alter table public.game_states add column if not exists ritual_mission_2_done boolean not null default false;
+alter table public.game_states add column if not exists ritual_mission_3_done boolean not null default false;
+alter table public.game_states add column if not exists ritual_mission_claimed boolean not null default false;
+alter table public.game_states add column if not exists ritual_mission_harvest_count integer not null default 0 check (ritual_mission_harvest_count >= 0);
+alter table public.game_states add column if not exists ritual_mission_minigame_done boolean not null default false;
+alter table public.game_states add column if not exists ritual_mission_roulette_done boolean not null default false;
+alter table public.game_states add column if not exists ritual_fertilizer_charges integer not null default 0 check (ritual_fertilizer_charges >= 0);
+alter table public.game_states add column if not exists ritual_bonus_roulette_spins integer not null default 0 check (ritual_bonus_roulette_spins >= 0);

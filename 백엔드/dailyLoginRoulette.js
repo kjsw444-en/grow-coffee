@@ -1,4 +1,6 @@
 import { getTodayKey } from './waterQuota.js'
+import { onRitualRouletteSpun } from './dailyRitualMissions.js'
+import { applyBrewedCoffeeDeltaFields, grantBrewedCoffeeFields } from './brewedCoffeeReceived.js'
 
 
 
@@ -85,41 +87,47 @@ export function readDailyLoginRouletteRewardCups(raw) {
 export function applyDailyLoginRouletteClaim(state, dateKey = getTodayKey()) {
 
   const claimedDayKey = readDailyLoginRouletteDayKey(state)
-
-
+  const bonusSpins = Math.max(0, Math.floor(Number(state?.ritualBonusRouletteSpins ?? 0)))
 
   if (claimedDayKey === dateKey) {
+    if (bonusSpins <= 0) {
+      return { ok: false, reason: 'already-claimed', state }
+    }
 
-    return { ok: false, reason: 'already-claimed', state }
+    const rewardCups = pickDailyLoginRouletteCups()
+    let next = {
+      ...state,
+      ritualBonusRouletteSpins: bonusSpins - 1,
+      dailyLoginRouletteRewardCups: readDailyLoginRouletteRewardCups(state) + rewardCups,
+      ...applyBrewedCoffeeDeltaFields(state, rewardCups),
+    }
+    next = onRitualRouletteSpun(next)
 
+    return {
+      ok: true,
+      rewardCups,
+      bonusSpin: true,
+      state: next,
+    }
   }
-
-
 
   const rewardCups = pickDailyLoginRouletteCups()
 
-
+  let next = {
+    ...state,
+    dailyLoginRouletteDayKey: dateKey,
+    dailyLoginRouletteRewardCups: rewardCups,
+    dailyLoginRouletteRespinDayKey: '',
+    ...grantBrewedCoffeeFields(state, rewardCups),
+  }
+  next = onRitualRouletteSpun(next)
 
   return {
-
     ok: true,
-
     rewardCups,
-
-    state: {
-
-      ...state,
-
-      dailyLoginRouletteDayKey: dateKey,
-
-      dailyLoginRouletteRewardCups: rewardCups,
-      dailyLoginRouletteRespinDayKey: '',
-      totalCoffees: Math.max(0, Number(state.totalCoffees ?? 0)) + rewardCups,
-
-    },
-
+    bonusSpin: false,
+    state: next,
   }
-
 }
 
 
@@ -153,39 +161,19 @@ export function applyDailyLoginRouletteRespin(state, dateKey = getTodayKey()) {
   }
 
   const rewardCups = pickDailyLoginRouletteCups()
-
-  const totalCoffees = Math.max(
-
-    0,
-
-    Number(state.totalCoffees ?? 0) - previousRewardCups + rewardCups,
-
-  )
-
-
+  const delta = rewardCups - previousRewardCups
 
   return {
-
     ok: true,
-
     rewardCups,
-
     previousRewardCups,
-
     state: {
-
       ...state,
-
       dailyLoginRouletteRewardCups: rewardCups,
-
       dailyLoginRouletteRespinDayKey: dateKey,
-
-      totalCoffees,
-
+      ...applyBrewedCoffeeDeltaFields(state, delta),
     },
-
   }
-
 }
 
 export function applyDailyLoginRouletteRespinWithClientReward(

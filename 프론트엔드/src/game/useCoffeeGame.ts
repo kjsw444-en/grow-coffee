@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ApiRequestError,
   claimBrewedCoffeeFinishBonusGame,
@@ -41,6 +41,7 @@ import {
   BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
   getBrewedCoffeePointReward,
 } from './brewedCoffeeDrink';
+import { grantBrewedCoffeeFields } from './brewedCoffeeReceived';
 import {
   type HoldMode,
   COFFEE_STAGE_MIN,
@@ -127,7 +128,7 @@ import {
   getTodayKey,
 } from './attendance';
 import {
-  canClaimDailyLoginRouletteToday,
+  canSpinDailyLoginRouletteToday,
   canRespinDailyLoginRouletteToday,
 } from './dailyLoginRoulette';
 
@@ -136,6 +137,7 @@ export type DailyLoginRouletteOutcome = {
   errorMessage?: string;
 };
 import { markDailyLoginRouletteClaimedLocal, resetDailyLoginRouletteStorage } from '../services/dailyLoginRouletteStorage';
+import { resetCatRouletteGuideForToday } from '../services/catGuideStorage';
 import {
   getShopPurchaseCount,
   hasCrossedBrewedSpentReviewThreshold,
@@ -166,6 +168,18 @@ function normalizeLoadedState(raw: GameState) {
       readCount(raw, 'lifetimeBrewedSpent', 'lifetime_brewed_spent'),
       readCount(raw, 'lifetimeDrunkCoffees', 'lifetime_drunk_coffees'),
     ),
+    dailyBrewedSpentDayKey: String(
+      raw.dailyBrewedSpentDayKey ??
+        (raw as GameState & { daily_brewed_spent_day_key?: string }).daily_brewed_spent_day_key ??
+        '',
+    ),
+    dailyBrewedSpent: readCount(raw, 'dailyBrewedSpent', 'daily_brewed_spent'),
+    dailyBrewedReceivedDayKey: String(
+      raw.dailyBrewedReceivedDayKey ??
+        (raw as GameState & { daily_brewed_received_day_key?: string }).daily_brewed_received_day_key ??
+        '',
+    ),
+    dailyBrewedReceived: readCount(raw, 'dailyBrewedReceived', 'daily_brewed_received'),
     waterDayKey: String(
       raw.waterDayKey ?? (raw as GameState & { water_day_key?: string }).water_day_key ?? '',
     ),
@@ -237,6 +251,58 @@ function normalizeLoadedState(raw: GameState) {
         (raw as GameState & { daily_login_roulette_respin_day_key?: string }).daily_login_roulette_respin_day_key ??
         '',
     ),
+    ritualDayKey: String(
+      raw.ritualDayKey ?? (raw as GameState & { ritual_day_key?: string }).ritual_day_key ?? '',
+    ),
+    ritualFortuneId: String(
+      raw.ritualFortuneId ?? (raw as GameState & { ritual_fortune_id?: string }).ritual_fortune_id ?? '',
+    ),
+    ritualFortuneRevealed:
+      raw.ritualFortuneRevealed === true ||
+      (raw as GameState & { ritual_fortune_revealed?: boolean | number | string }).ritual_fortune_revealed === true ||
+      (raw as GameState & { ritual_fortune_revealed?: boolean | number | string }).ritual_fortune_revealed === 1,
+    ritualFortuneProgress: readCount(raw, 'ritualFortuneProgress', 'ritual_fortune_progress'),
+    ritualFortuneClaimed:
+      raw.ritualFortuneClaimed === true ||
+      (raw as GameState & { ritual_fortune_claimed?: boolean | number | string }).ritual_fortune_claimed === true ||
+      (raw as GameState & { ritual_fortune_claimed?: boolean | number | string }).ritual_fortune_claimed === 1,
+    ritualGiftOpened:
+      raw.ritualGiftOpened === true ||
+      (raw as GameState & { ritual_gift_opened?: boolean | number | string }).ritual_gift_opened === true ||
+      (raw as GameState & { ritual_gift_opened?: boolean | number | string }).ritual_gift_opened === 1,
+    ritualGiftId: String(
+      raw.ritualGiftId ?? (raw as GameState & { ritual_gift_id?: string }).ritual_gift_id ?? '',
+    ),
+    ritualMission1Id: String(
+      raw.ritualMission1Id ?? (raw as GameState & { ritual_mission_1_id?: string }).ritual_mission_1_id ?? '',
+    ),
+    ritualMission2Id: String(
+      raw.ritualMission2Id ?? (raw as GameState & { ritual_mission_2_id?: string }).ritual_mission_2_id ?? '',
+    ),
+    ritualMission3Id: String(
+      raw.ritualMission3Id ?? (raw as GameState & { ritual_mission_3_id?: string }).ritual_mission_3_id ?? '',
+    ),
+    ritualMission1Done:
+      raw.ritualMission1Done === true ||
+      (raw as GameState & { ritual_mission_1_done?: boolean | number | string }).ritual_mission_1_done === true,
+    ritualMission2Done:
+      raw.ritualMission2Done === true ||
+      (raw as GameState & { ritual_mission_2_done?: boolean | number | string }).ritual_mission_2_done === true,
+    ritualMission3Done:
+      raw.ritualMission3Done === true ||
+      (raw as GameState & { ritual_mission_3_done?: boolean | number | string }).ritual_mission_3_done === true,
+    ritualMissionClaimed:
+      raw.ritualMissionClaimed === true ||
+      (raw as GameState & { ritual_mission_claimed?: boolean | number | string }).ritual_mission_claimed === true,
+    ritualMissionHarvestCount: readCount(raw, 'ritualMissionHarvestCount', 'ritual_mission_harvest_count'),
+    ritualMissionMinigameDone:
+      raw.ritualMissionMinigameDone === true ||
+      (raw as GameState & { ritual_mission_minigame_done?: boolean | number | string }).ritual_mission_minigame_done === true,
+    ritualMissionRouletteDone:
+      raw.ritualMissionRouletteDone === true ||
+      (raw as GameState & { ritual_mission_roulette_done?: boolean | number | string }).ritual_mission_roulette_done === true,
+    ritualFertilizerCharges: readCount(raw, 'ritualFertilizerCharges', 'ritual_fertilizer_charges'),
+    ritualBonusRouletteSpins: readCount(raw, 'ritualBonusRouletteSpins', 'ritual_bonus_roulette_spins'),
   };
   return settleDailyPoint(
     withNormalizedPassive(
@@ -460,7 +526,22 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const applyPassiveAccrual = useCallback((next: GameState) => {
     stateRef.current = next;
-    setState(next);
+    setState((prev) => {
+      if (
+        prev.dailyPassiveGrowth === next.dailyPassiveGrowth &&
+        prev.growthAccrualSyncedAt === next.growthAccrualSyncedAt &&
+        prev.passiveDayKey === next.passiveDayKey
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        dailyPassiveGrowth: next.dailyPassiveGrowth,
+        growthAccrualSyncedAt: next.growthAccrualSyncedAt,
+        passiveDayKey: next.passiveDayKey,
+      };
+    });
   }, []);
 
   const triggerTapBurst = useCallback(() => {
@@ -753,18 +834,19 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
     holdProgressRef.current = progress;
 
+    const now = performance.now();
+    const shouldCommitUi = now - lastHoldUiCommitRef.current >= HOLD_UI_COMMIT_MS || progress >= 100;
+
     if (holdModeRef.current === 'water' || holdModeRef.current === 'brew') {
       const startGrowth = holdStartGrowthRef.current;
-      if (startGrowth !== null) {
+      if (startGrowth !== null && shouldCommitUi) {
         commitDisplayGrowth(
           previewHoldDisplayGrowth(startGrowth, holdDisplayStartRef.current, progress),
-          true,
+          progress >= 100,
         );
       }
     }
 
-    const now = performance.now();
-    const shouldCommitUi = now - lastHoldUiCommitRef.current >= HOLD_UI_COMMIT_MS || progress >= 100;
     if (shouldCommitUi) {
       lastHoldUiCommitRef.current = now;
       setHoldProgress((prev) => (Math.abs(prev - progress) < 0.01 ? prev : progress));
@@ -1435,7 +1517,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const today = getTodayKey();
     const before = stateRef.current;
 
-    if (!canClaimDailyLoginRouletteToday(before.dailyLoginRouletteDayKey, today)) {
+    if (!canSpinDailyLoginRouletteToday(before, today)) {
       const message = '오늘 접속 룰렛은 이미 받았어요.';
       showSceneDialogue(message);
       return { rewardCups: null, errorMessage: message };
@@ -1456,20 +1538,32 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     try {
       const result = await claimDailyLoginRouletteGame();
       const rewardTotalCoffees = before.totalCoffees + result.rewardCups;
-      applyAuthoritativeState(
-        {
-          ...result.state,
-          totalCoffees: rewardTotalCoffees,
-          dailyLoginRouletteDayKey: today,
-          dailyLoginRouletteRewardCups: result.rewardCups,
-          dailyLoginRouletteRespinDayKey: '',
-        },
-        { epoch },
-      );
+      if (result.bonusSpin) {
+        applyAuthoritativeState(
+          {
+            ...result.state,
+            totalCoffees: rewardTotalCoffees,
+            dailyLoginRouletteRewardCups:
+              Math.max(0, Number(before.dailyLoginRouletteRewardCups ?? 0)) + result.rewardCups,
+          },
+          { epoch },
+        );
+      } else {
+        applyAuthoritativeState(
+          {
+            ...result.state,
+            totalCoffees: rewardTotalCoffees,
+            dailyLoginRouletteDayKey: today,
+            dailyLoginRouletteRewardCups: result.rewardCups,
+            dailyLoginRouletteRespinDayKey: '',
+          },
+          { epoch },
+        );
+        markDailyLoginRouletteClaimedLocal(result.rewardCups, today);
+      }
       if (result.playerRank != null) {
         updatePlayerRank(result.playerRank);
       }
-      markDailyLoginRouletteClaimedLocal(result.rewardCups, today);
       return { rewardCups: result.rewardCups };
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
@@ -1545,6 +1639,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const resetDailyLoginRouletteForTest = useCallback(async () => {
     resetDailyLoginRouletteStorage();
+    resetCatRouletteGuideForToday();
 
     const epoch = stateEpochRef.current;
     applyAuthoritativeState(
@@ -1875,7 +1970,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const epoch = stateEpochRef.current;
       const optimistic = {
         ...before,
-        totalCoffees: before.totalCoffees + BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+        ...grantBrewedCoffeeFields(before, BREWED_COFFEE_FINISH_BONUS_AMOUNT),
       };
       stateRef.current = optimistic;
       setState(optimistic);
@@ -1957,12 +2052,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const epoch = stateEpochRef.current;
 
     const nextMoney = before.money + actualReward;
+    const today = getTodayKey();
+    const dailyBrewedSpent =
+      before.dailyBrewedSpentDayKey === today ? before.dailyBrewedSpent + batchSize : batchSize;
     const optimistic = {
       ...before,
       totalCoffees: before.totalCoffees - batchSize,
       spentCoffeeCups: before.spentCoffeeCups + batchSize,
       lifetimeDrunkCoffees: (before.lifetimeDrunkCoffees ?? 0) + batchSize,
       lifetimeBrewedSpent: (before.lifetimeBrewedSpent ?? 0) + batchSize,
+      dailyBrewedSpentDayKey: today,
+      dailyBrewedSpent,
       money: nextMoney,
     };
     stateRef.current = optimistic;
@@ -2042,14 +2142,21 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   }, [releasePassiveClaimUi]);
 
   useEffect(() => {
-    const stats = getPassiveUiStats(state, balanceRules);
+    const stats = getPassiveUiStats(stateRef.current, balanceRules);
 
     if (stats.canClaim && !prevPassiveCanClaimRef.current) {
       showSceneDialogue(sceneDialogueForPassiveReady());
     }
 
     prevPassiveCanClaimRef.current = stats.canClaim;
-  }, [balanceRules, showSceneDialogue, state]);
+  }, [
+    balanceRules,
+    showSceneDialogue,
+    state.dailyPassiveGrowth,
+    state.passiveCoffeesClaimed,
+    state.passiveDayKey,
+    state.growth,
+  ]);
 
   useEffect(
     () => () => {
@@ -2081,7 +2188,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     !actionSyncing &&
     !isHolding;
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
-  const waterStatus = getWaterStatus(state);
+  const waterStatus = useMemo(
+    () => getWaterStatus(state),
+    [state.waterDayKey, state.watersToday, state.adWaterCredits, state.growth],
+  );
   const needsAd = waterStatus.needsAd;
   const growActionSlot = getGrowActionSlot({
     readyToDrink,
@@ -2118,6 +2228,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           switch (trigger) {
             case 'daily-point-cap':
               showSceneDialogue(sceneDialogueForDailyPointCap(), false);
+              break;
+            case 'daily-ranking-top3':
+              showSceneDialogue('오늘의 커피 랭킹 TOP3에 들었어요!', false);
               break;
             case 'attendance-streak-7':
               showSceneDialogue(sceneDialogueForAttendanceStreakClaim(10), false);
@@ -2232,6 +2345,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     reviewPreviewStatus,
     sceneDialogue,
     showSceneDialogue,
+    applyServerState: applyAuthoritativeState,
     updatePlayerRank,
     previewReviewTest,
     resetReviewTestStore,

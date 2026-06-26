@@ -58,6 +58,63 @@
   color: var(--pastel-text-muted);
 }
 
+.ranking-sheet__promo {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(220, 152, 58, 0.35);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 248, 222, 0.96) 0%, rgba(255, 237, 206, 0.94) 100%);
+  color: #704316;
+}
+
+.ranking-sheet__promo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 14px;
+}
+
+.ranking-sheet__promo-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(209, 132, 31, 0.13);
+  color: #a46112;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.ranking-sheet__promo-copy {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.ranking-sheet__promo-copy strong {
+  color: #c66a13;
+}
+
+.ranking-sheet__promo-list {
+  display: grid;
+  gap: 4px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #8a6747;
+}
+
+.ranking-sheet__promo-list li::before {
+  content: '•';
+  margin-right: 6px;
+  color: #d88622;
+}
+
 .ranking-sheet__error {
   margin: 0 0 10px;
   padding: 10px 12px;
@@ -89,6 +146,101 @@
 
 .ranking-sheet__mine strong {
   color: #c45a7a;
+}
+
+.ranking-sheet__winner {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(123, 111, 214, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(245, 241, 255, 0.96) 0%, rgba(255, 239, 247, 0.94) 100%);
+  color: #6658b9;
+}
+
+.ranking-sheet__reward {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid rgba(240, 124, 171, 0.28);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 244, 250, 0.98) 0%, rgba(245, 241, 255, 0.96) 100%);
+  text-align: center;
+}
+
+.ranking-sheet__reward-copy {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #7a4f68;
+}
+
+.ranking-sheet__reward-copy strong {
+  color: #5748ad;
+}
+
+@keyframes ranking-reward-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(240, 124, 171, 0.24);
+  }
+
+  14% {
+    transform: scale(1.06);
+    box-shadow: 0 10px 22px rgba(240, 124, 171, 0.34);
+  }
+
+  28% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(240, 124, 171, 0.24);
+  }
+
+  42% {
+    transform: scale(1.04);
+    box-shadow: 0 9px 20px rgba(240, 124, 171, 0.3);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(240, 124, 171, 0.24);
+  }
+}
+
+.ranking-sheet__reward-button {
+  min-height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f07cab 0%, #8b7cf6 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ranking-sheet__reward-button--pulse {
+  animation: ranking-reward-heartbeat 1.35s ease-in-out infinite;
+}
+
+.ranking-sheet__reward-button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+  animation: none;
+}
+
+.ranking-sheet__claimed {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(123, 111, 214, 0.08);
+  border: 1px solid rgba(123, 111, 214, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #6658b9;
 }
 
 .ranking-sheet__list {

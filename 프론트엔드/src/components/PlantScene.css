@@ -119,6 +119,58 @@
   justify-content: center;
 }
 
+.plant-scene__coffee-value-chip {
+  position: absolute;
+  left: 0;
+  bottom: 2.5%;
+  z-index: 5;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  padding: 4px 7px 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  background: rgba(18, 14, 12, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: none;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0.82;
+}
+
+.plant-scene__coffee-value-chip-label {
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgba(255, 248, 240, 0.62);
+}
+
+.plant-scene__coffee-value-chip strong {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: rgba(255, 248, 240, 0.88);
+  font-variant-numeric: tabular-nums;
+}
+
+.plant-scene__coffee-value-chip:active {
+  transform: scale(0.98);
+  opacity: 0.95;
+  background: rgba(18, 14, 12, 0.4);
+}
+
+.plant-scene__coffee-value-chip:hover,
+.plant-scene__coffee-value-chip:focus-visible {
+  opacity: 0.95;
+  background: rgba(18, 14, 12, 0.36);
+}
+
 .plant-scene__frame--complete .plant-scene__bg {
   aspect-ratio: auto;
 }

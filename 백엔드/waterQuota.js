@@ -2,6 +2,12 @@ export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
 }
 
+export function getYesterdayKey(date = new Date()) {
+  const todayStart = new Date(`${getTodayKey(date)}T00:00:00+09:00`)
+  todayStart.setTime(todayStart.getTime() - 24 * 60 * 60 * 1000)
+  return getTodayKey(todayStart)
+}
+
 function readQuotaCount(raw, camel, snake) {
   const value = raw?.[camel] ?? raw?.[snake]
   const parsed = Number(value)

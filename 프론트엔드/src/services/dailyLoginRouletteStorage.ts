@@ -73,6 +73,14 @@ export function dismissDailyLoginRouletteForSession(dateKey = getTodayKey()) {
   }
 }
 
+export function clearDailyLoginRouletteSessionDismiss() {
+  try {
+    sessionStorage.removeItem(DISMISS_SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function markDailyLoginRouletteShownLocal(dateKey = getTodayKey()) {
   const record = readRecord();
   writeRecord({

@@ -111,6 +111,56 @@ class SoundEngine {
     osc.stop(now + duration + release);
   }
 
+  /** 내린 커피 마시기 — 옵션 펼침(촤르륵) */
+  private playSellUnfold() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain || this.settings.muted) return;
+
+    const duration = 0.26;
+    const now = ctx.currentTime;
+    const sampleCount = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < sampleCount; i++) {
+      const progress = i / sampleCount;
+      const envelope = Math.sin(Math.PI * progress) * (1 - progress * 0.35);
+      data[i] = (Math.random() * 2 - 1) * envelope;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 0.85;
+    filter.frequency.setValueAtTime(320, now);
+    filter.frequency.exponentialRampToValueAtTime(2200, now + duration * 0.55);
+    filter.frequency.exponentialRampToValueAtTime(960, now + duration);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.2, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+    noise.start(now);
+    noise.stop(now + duration + 0.04);
+
+    [523, 659, 784, 988].forEach((freq, index) => {
+      window.setTimeout(() => {
+        this.tone(freq, 0.05, {
+          volume: 0.07 - index * 0.01,
+          type: 'sine',
+          attack: 0.006,
+          release: 0.035,
+        });
+      }, 40 + index * 32);
+    });
+  }
+
   private chord(
     freqs: number[],
     duration: number,
@@ -214,6 +264,9 @@ class SoundEngine {
       case 'minigameLose':
         this.tone(220, 0.16, { volume: 0.09, type: 'triangle', release: 0.14 });
         this.tone(165, 0.2, { volume: 0.07, type: 'triangle', release: 0.16 });
+        break;
+      case 'sellUnfold':
+        this.playSellUnfold();
         break;
       default:
         break;

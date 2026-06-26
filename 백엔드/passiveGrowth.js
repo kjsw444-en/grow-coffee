@@ -6,6 +6,7 @@ import {
   SELL_BATCH_SIZE,
 } from './constants.js'
 import { getMediaAssetRules } from './mediaAssets.js'
+import { getRitualPassiveRateMultiplier } from './dailyRitualFortunes.js'
 
 export function getPassiveDayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
@@ -97,6 +98,7 @@ export function calculatePassiveGrowthDelta({
   dailyPassiveGrowth,
   passiveCoffeesClaimed = 0,
   redeemed,
+  passiveRateMultiplier = 1,
 }) {
   const accrualCap = getPassiveGrowthAccrualCap(passiveCoffeesClaimed)
 
@@ -112,7 +114,7 @@ export function calculatePassiveGrowthDelta({
   }
 
   const seconds = (toMs - fromMs) / 1000
-  const raw = seconds * PASSIVE_GROWTH_PER_SECOND
+  const raw = seconds * PASSIVE_GROWTH_PER_SECOND * Math.max(1, passiveRateMultiplier)
   const roomInDaily = Math.max(0, accrualCap - dailyPassiveGrowth)
   const quotaDelta = roundGrowth(Math.min(raw, roomInDaily))
 
@@ -130,6 +132,7 @@ export function settlePassiveGrowth(state, now = new Date()) {
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
     passiveCoffeesClaimed: passiveQuota.passiveCoffeesClaimed,
     redeemed: current.redeemed,
+    passiveRateMultiplier: getRitualPassiveRateMultiplier(current),
   })
 
   return {
@@ -150,6 +153,7 @@ export function previewPassiveGrowth(state, now = new Date()) {
     dailyPassiveGrowth: passiveQuota.dailyPassiveGrowth,
     passiveCoffeesClaimed: passiveQuota.passiveCoffeesClaimed,
     redeemed: state.redeemed,
+    passiveRateMultiplier: getRitualPassiveRateMultiplier(state),
   })
 
   return {

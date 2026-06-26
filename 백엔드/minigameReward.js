@@ -1,4 +1,6 @@
+import { grantBrewedCoffeeFields } from './brewedCoffeeReceived.js'
 import { getTodayKey } from './waterQuota.js'
+import { onRitualMinigamePlayed } from './dailyRitualMissions.js'
 
 /** 난이도 클리어 보상 — 내린 커피 (기본) */
 export const MINIGAME_REWARD_COFFEE_CUPS = 1
@@ -77,16 +79,20 @@ export function applyMinigameReward(state, missionKey, slot = 'free') {
 
   const rewardCups = getMinigameRewardCups(missionKey)
 
+  let next = {
+    ...state,
+    minigameRewardDayKey: current.minigameRewardDayKey,
+    minigameRewardFreeMask: current.minigameRewardFreeMask,
+    minigameRewardAdMask: current.minigameRewardAdMask,
+    [maskField]: current[maskField] | bit,
+    ...grantBrewedCoffeeFields(state, rewardCups),
+  }
+
+  next = onRitualMinigamePlayed(next)
+
   return {
     ok: true,
     rewardCups,
-    state: {
-      ...state,
-      totalCoffees: Math.max(0, Number(state.totalCoffees ?? 0)) + rewardCups,
-      minigameRewardDayKey: current.minigameRewardDayKey,
-      minigameRewardFreeMask: current.minigameRewardFreeMask,
-      minigameRewardAdMask: current.minigameRewardAdMask,
-      [maskField]: current[maskField] | bit,
-    },
+    state: next,
   }
 }

@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import './SceneDialogueBox.css';
 
 type SceneDialogueBoxProps = {
   message?: string | null;
 };
 
-export function SceneDialogueBox({ message }: SceneDialogueBoxProps) {
+export const SceneDialogueBox = memo(function SceneDialogueBox({ message }: SceneDialogueBoxProps) {
   const text = message?.trim();
   if (!text) return null;
 
@@ -15,4 +16,4 @@ export function SceneDialogueBox({ message }: SceneDialogueBoxProps) {
       </div>
     </div>
   );
-}
+});

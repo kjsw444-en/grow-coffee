@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import { WATERING_CAN_SRC } from '../game/constants';
 import './WateringCanPour.css';
 
@@ -8,7 +8,7 @@ type WateringCanPourProps = {
 };
 
 /** 물주기 홀드 중 화분 위 물뿌리개 붓기 모션 */
-export function WateringCanPour({ progress, active }: WateringCanPourProps) {
+function WateringCanPourComponent({ progress, active }: WateringCanPourProps) {
   if (!active) return null;
 
   const pour = Math.min(100, Math.max(0, progress));
@@ -30,3 +30,5 @@ export function WateringCanPour({ progress, active }: WateringCanPourProps) {
     </div>
   );
 }
+
+export const WateringCanPour = memo(WateringCanPourComponent);

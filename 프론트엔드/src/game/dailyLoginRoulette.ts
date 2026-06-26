@@ -78,6 +78,34 @@ export function canClaimDailyLoginRouletteToday(
   return String(dailyLoginRouletteDayKey ?? '') !== dateKey;
 }
 
+export function canSpinDailyLoginRouletteToday(
+  state: {
+    dailyLoginRouletteDayKey?: string;
+    ritualBonusRouletteSpins?: number;
+  },
+  dateKey = getTodayKey(),
+) {
+  if (canClaimDailyLoginRouletteToday(state.dailyLoginRouletteDayKey, dateKey)) {
+    return true;
+  }
+
+  return Math.max(0, Number(state.ritualBonusRouletteSpins ?? 0)) > 0;
+}
+
+/** 고양이 선물 등으로 받은 추가 룰렛 — 오늘 1회 룰렛을 이미 돌린 뒤 보너스만 남은 상태 */
+export function hasPendingBonusRouletteSpin(
+  state: {
+    dailyLoginRouletteDayKey?: string;
+    ritualBonusRouletteSpins?: number;
+  },
+  dateKey = getTodayKey(),
+) {
+  return (
+    String(state.dailyLoginRouletteDayKey ?? '') === dateKey &&
+    Math.max(0, Number(state.ritualBonusRouletteSpins ?? 0)) > 0
+  );
+}
+
 export function canRespinDailyLoginRouletteToday(
   dailyLoginRouletteDayKey: string | undefined,
   dailyLoginRouletteRespinDayKey: string | undefined,

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useButtonSound } from '../audio/SoundProvider';
 import './BottomNav.css';
 
@@ -16,7 +17,7 @@ type BottomNavProps = {
   onSettings: () => void;
 };
 
-export function BottomNav({ onRank, onShop, onMyCoffee, onSettings }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({ onRank, onShop, onMyCoffee, onSettings }: BottomNavProps) {
   const buttonSound = useButtonSound('tap');
 
   return (
@@ -62,4 +63,4 @@ export function BottomNav({ onRank, onShop, onMyCoffee, onSettings }: BottomNavP
       ))}
     </nav>
   );
-}
+});

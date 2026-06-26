@@ -12,6 +12,7 @@ export type CoffeeRankingView = {
   playerSpentCoffeeCups: number
   inTop50: boolean
   totalPlayers: number
+  dayKey?: string
   live: boolean
 }
 
@@ -56,6 +57,7 @@ function createLocalRanking(spentCoffeeCups: number, playerName = '나'): Coffee
     playerSpentCoffeeCups: safeScore,
     inTop50: playerRank <= COFFEE_RANKING_SIZE,
     totalPlayers: ranked.length,
+    dayKey: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
     live: false,
   }
 }
@@ -94,6 +96,7 @@ export async function syncCoffeeRanking({
       playerSpentCoffeeCups: result.playerSpentCoffeeCups,
       inTop50: result.inTop50,
       totalPlayers: result.totalPlayers,
+      dayKey: result.dayKey,
       live: true,
     }
   } catch {
@@ -123,6 +126,7 @@ export async function syncCoffeeRanking({
         playerSpentCoffeeCups: playerEntry.spentCoffeeCups,
         inTop50: playerRank <= COFFEE_RANKING_SIZE,
         totalPlayers: remote.totalPlayers,
+        dayKey: remote.dayKey,
         live: true,
       }
     } catch {

@@ -2,6 +2,7 @@ import {
   DAILY_PASSIVE_GROWTH_CAP,
   PASSIVE_GROWTH_PER_SECOND,
 } from './constants';
+import { grantBrewedCoffeeFields } from './brewedCoffeeReceived';
 import { initialState } from './types';
 
 export type BalanceRules = {
@@ -331,6 +332,45 @@ export function getPassiveUiStats(
 }
 
 /** 성장 패널 하단 — 한 줄 요약 */
+function getPassiveSecondsUntilNextCup(
+  stats: Pick<
+    ReturnType<typeof getPassiveUiStats>,
+    'cupFillPercent' | 'canClaim' | 'complete'
+  >,
+  passiveGrowthPerSecond: number,
+) {
+  if (stats.canClaim || stats.complete) {
+    return null;
+  }
+
+  if (stats.cupFillPercent >= 100 || passiveGrowthPerSecond <= 0) {
+    return null;
+  }
+
+  const remaining = 100 - stats.cupFillPercent;
+  const seconds = Math.ceil(remaining / passiveGrowthPerSecond);
+  return seconds > 0 ? seconds : null;
+}
+
+export function formatPassiveTimeRemainingLabel(
+  stats: Pick<
+    ReturnType<typeof getPassiveUiStats>,
+    'cupFillPercent' | 'canClaim' | 'complete'
+  >,
+  passiveGrowthPerSecond: number,
+) {
+  const seconds = getPassiveSecondsUntilNextCup(stats, passiveGrowthPerSecond);
+  if (seconds == null) {
+    return null;
+  }
+
+  if (seconds < 60) {
+    return `${seconds}초 남음`;
+  }
+
+  return `${Math.ceil(seconds / 60)}분 남음`;
+}
+
 export function formatPassivePanelHint(
   stats: ReturnType<typeof getPassiveUiStats>,
   passiveGrowthPerSecond: number,
@@ -351,12 +391,9 @@ export function formatPassivePanelHint(
 
   const parts = [`방치 커피 ${cupsReceived}/${maxCups}잔`, `${cupFillPercent.toFixed(1)}%`];
 
-  if (cupFillPercent < 100 && passiveGrowthPerSecond > 0) {
-    const remaining = 100 - cupFillPercent;
-    const seconds = Math.ceil(remaining / passiveGrowthPerSecond);
-    if (seconds > 0) {
-      parts.push(seconds < 60 ? `약 ${seconds}초 후 1잔` : `약 ${Math.ceil(seconds / 60)}분 후 1잔`);
-    }
+  const seconds = getPassiveSecondsUntilNextCup(stats, passiveGrowthPerSecond);
+  if (seconds != null) {
+    parts.push(seconds < 60 ? `약 ${seconds}초 후 1잔` : `약 ${Math.ceil(seconds / 60)}분 후 1잔`);
   }
 
   return parts.join(' · ');
@@ -392,7 +429,7 @@ export function buildPassiveCoffeeClaim(
     state: {
       ...current,
       passiveCoffeesClaimed: current.passiveCoffeesClaimed + 1,
-      totalCoffees: current.totalCoffees + 1,
+      ...grantBrewedCoffeeFields(current, 1),
       dailyPassiveGrowth: roundGrowth(previewDaily),
       growthAccrualSyncedAt: now,
     },

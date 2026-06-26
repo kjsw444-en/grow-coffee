@@ -213,6 +213,7 @@ export type CoffeeRankingPayload = {
   playerSpentCoffeeCups: number
   inTop50: boolean
   totalPlayers: number
+  dayKey?: string
 }
 
 export type PlayerSession = {
@@ -327,6 +328,82 @@ export async function devResetDailyLoginRouletteGame() {
   }>
 }
 
+/** DEV 전용 — 어제 랭킹 TOP3 토스 지급 기록 초기화 */
+export async function devResetRankingTop3Promotion() {
+  return request('/api/game/dev/reset-ranking-top3-promotion', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<{ ok: true; rewardDayKey: string }>
+}
+
+/** DEV 전용 — 오늘 랭킹을 어제 마감 랭킹으로 즉시 확정 */
+export async function devFinalizeRankingNow() {
+  return request('/api/game/dev/finalize-ranking', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<{
+    ok: true
+    finalizedDayKey: string
+    sourceDayKey: string
+    entryCount: number
+    rewardStatus: RankingTop3RewardStatus
+  }>
+}
+
+/** DEV 전용 — 오늘의 커피 운세 초기화 */
+export async function devResetDailyRitualGame() {
+  return request('/api/game/dev/reset-daily-ritual', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<{
+    ok: true
+    state: GameState
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+/** DEV 전용 — 오늘의 커피 운세 종류 지정 */
+export async function devSetDailyRitualFortuneGame(fortuneId: string) {
+  return request('/api/game/dev/set-daily-ritual-fortune', {
+    method: 'POST',
+    body: JSON.stringify({ fortuneId }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    fortuneId: string
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+/** DEV 전용 — 오늘의 미션 1개 즉시 완료 */
+export async function devCompleteDailyRitualMissionGame(
+  mission: 'harvest' | 'minigame' | 'roulette',
+) {
+  return request('/api/game/dev/complete-daily-ritual-mission', {
+    method: 'POST',
+    body: JSON.stringify({ mission }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    missionKind: string
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+/** DEV 전용 — 운세 확인·선물 열기 단계 건너뛰기 */
+export async function devAdvanceDailyRitualGame(step: 'reveal' | 'gift') {
+  return request('/api/game/dev/advance-daily-ritual', {
+    method: 'POST',
+    body: JSON.stringify({ step }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    step: string
+    copy: string | null
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
 export async function drinkGame() {
   return request('/api/game/drink', { method: 'POST', body: '{}' }) as Promise<{
     ok: true
@@ -391,8 +468,57 @@ export async function claimDailyLoginRouletteGame() {
     ok: true
     state: GameState
     rewardCups: number
+    bonusSpin?: boolean
     playerRank?: number | null
     passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+export async function fetchRitualToday() {
+  return request('/api/ritual/today') as Promise<{
+    ok: true
+    state: GameState
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+export async function revealRitualFortuneGame() {
+  return request('/api/ritual/fortune/reveal', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    fortuneId: string
+    copy: string
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+export async function openRitualGiftGame() {
+  return request('/api/ritual/gift/open', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    giftId: string
+    label: string
+    copy: string
+    ritual: import('./dailyRitual').RitualTodayView
+    playerRank?: number | null
+  }>
+}
+
+export async function claimRitualFortuneRewardGame() {
+  return request('/api/ritual/fortune/claim', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    ritual: import('./dailyRitual').RitualTodayView
+  }>
+}
+
+export async function claimRitualMissionRewardGame() {
+  return request('/api/ritual/missions/claim', { method: 'POST', body: '{}' }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    ritual: import('./dailyRitual').RitualTodayView
   }>
 }
 
@@ -498,6 +624,7 @@ export async function fetchTopRanking() {
     ok: true
     top50: RankingEntry[]
     totalPlayers: number
+    dayKey?: string
     updatedAt: number
   }>
 }
@@ -513,6 +640,38 @@ export async function submitCoffeeRanking({
     method: 'POST',
     body: JSON.stringify({ spentCoffeeCups, displayName }),
   }) as Promise<{ ok: true } & CoffeeRankingPayload>
+}
+
+export type RankingTop3RewardStatus = {
+  rewardDayKey: string
+  playerRank: number | null
+  eligible: boolean
+  claimed: boolean
+  canClaim: boolean
+}
+
+export async function fetchRankingTop3PromotionStatus() {
+  return request('/api/promotion/ranking-top3/status') as Promise<{ ok: true } & RankingTop3RewardStatus>
+}
+
+export async function recordRankingTop3PromotionClaim(rewardKey: string) {
+  return request('/api/promotion/ranking-top3/claim', {
+    method: 'POST',
+    body: JSON.stringify({ rewardKey }),
+  }) as Promise<{
+    ok: true
+    alreadyClaimed: boolean
+    rewardKey: string | null
+    rewardAmount: number
+    playerRank: number
+    rewardDayKey: string
+    message: string
+    state: GameState
+    eligible: boolean
+    claimed: boolean
+    canClaim: boolean
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
 }
 
 export async function selectCoffeeVariant(slug: string) {

@@ -118,6 +118,10 @@
   overflow: visible;
 }
 
+.recommend-buttons__col:first-child .recommend-buttons__sub-stack {
+  align-items: flex-start;
+}
+
 .recommend-buttons__sub-stack--panel-open {
   margin-top: 4px;
 }
@@ -223,6 +227,19 @@
 
 .recommend-buttons__shop-wrap--nudge {
   z-index: 4;
+}
+
+.recommend-buttons__mission-dock {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: auto;
+}
+
+.recommend-buttons__mission-dock-scale {
+  width: 50%;
+  pointer-events: auto;
 }
 
 .recommend-buttons__shop-bubble {

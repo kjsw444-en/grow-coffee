@@ -13,7 +13,7 @@
     "test:hold": "node scripts/test-growth-hold.mjs",
     "test:passive": "node scripts/test-passive-growth.mjs",
     "sync:videos": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-coffee-videos.ps1",
-    "test": "npm run test:hold && npm run test:passive && node scripts/test-daily-login-roulette-rotation.mjs"
+    "test": "npm run test:hold && npm run test:passive && node scripts/test-daily-login-roulette-rotation.mjs && node scripts/test-scene-dialogue.mjs && node scripts/test-bonus-roulette-nudge.mjs"
   },
   "dependencies": {
     "@apps-in-toss/web-framework": "^2.9.2",

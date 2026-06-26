@@ -5,11 +5,27 @@ import './CatBonusButton.css';
 
 type CatBonusButtonProps = {
   disabled?: boolean;
+  fortuneNudgeVisible?: boolean;
+  fortuneNudgeText?: string;
+  rouletteNudgeVisible?: boolean;
+  rouletteNudgeText?: string;
+  onFortuneNudgeClick?: () => void;
+  onRouletteNudgeClick?: () => void;
   onPressStart: () => void;
   onPressEnd: () => void;
 };
 
-export function CatBonusButton({ disabled, onPressStart, onPressEnd }: CatBonusButtonProps) {
+export function CatBonusButton({
+  disabled,
+  fortuneNudgeVisible = false,
+  fortuneNudgeText,
+  rouletteNudgeVisible = false,
+  rouletteNudgeText,
+  onFortuneNudgeClick,
+  onRouletteNudgeClick,
+  onPressStart,
+  onPressEnd,
+}: CatBonusButtonProps) {
   const buttonSound = useButtonSound();
   const [pressed, setPressed] = useState(false);
   const pressedRef = useRef(false);
@@ -47,26 +63,56 @@ export function CatBonusButton({ disabled, onPressStart, onPressEnd }: CatBonusB
     [disabled, finishPress],
   );
 
+  const handleBubbleClick = useCallback(async () => {
+    if (disabled) return;
+    await buttonSound();
+    if (rouletteNudgeVisible) {
+      onRouletteNudgeClick?.();
+      return;
+    }
+    if (fortuneNudgeVisible) {
+      onFortuneNudgeClick?.();
+    }
+  }, [buttonSound, disabled, fortuneNudgeVisible, onFortuneNudgeClick, onRouletteNudgeClick, rouletteNudgeVisible]);
+
+  const bubbleVisible = rouletteNudgeVisible || fortuneNudgeVisible;
+  const bubbleText = rouletteNudgeVisible ? rouletteNudgeText : fortuneNudgeText;
+  const bubbleLabel = rouletteNudgeVisible ? '1일 1룰렛 열기' : '오늘의 선물 받기';
+
   return (
-    <button
-      type="button"
-      className={`cat-bonus-btn${pressed ? ' cat-bonus-btn--pressed' : ''}`}
-      disabled={disabled}
-      aria-label="커피냥"
-      onPointerDown={(event) => void handlePointerDown(event)}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={() => finishPress(true)}
-      onPointerCancel={() => finishPress(true)}
+    <div
+      className={`cat-bonus-btn-wrap${bubbleVisible ? ' cat-bonus-btn-wrap--nudge' : ''}`}
     >
-      <span className="cat-bonus-btn__frame" aria-hidden="true">
-        <img
-          className="cat-bonus-btn__img"
-          src={pressed ? CAT_BUTTON_PRESSED_SRC : CAT_BUTTON_SRC}
-          alt=""
-          draggable={false}
-        />
-      </span>
-      <span className="cat-bonus-btn__label">커피냥</span>
-    </button>
+      {bubbleVisible && bubbleText && (
+        <button
+          type="button"
+          className="cat-bonus-btn__roulette-bubble"
+          aria-label={bubbleLabel}
+          onClick={() => void handleBubbleClick()}
+        >
+          <p className="cat-bonus-btn__roulette-bubble-text">{bubbleText}</p>
+        </button>
+      )}
+      <button
+        type="button"
+        className={`cat-bonus-btn${pressed ? ' cat-bonus-btn--pressed' : ''}${bubbleVisible ? ' cat-bonus-btn--nudge-pulse' : ''}`}
+        disabled={disabled}
+        aria-label={bubbleVisible ? bubbleLabel : '커피냥'}
+        onPointerDown={(event) => void handlePointerDown(event)}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={() => finishPress(true)}
+        onPointerCancel={() => finishPress(true)}
+      >
+        <span className="cat-bonus-btn__frame" aria-hidden="true">
+          <img
+            className="cat-bonus-btn__img"
+            src={pressed ? CAT_BUTTON_PRESSED_SRC : CAT_BUTTON_SRC}
+            alt=""
+            draggable={false}
+          />
+        </span>
+        <span className="cat-bonus-btn__label">커피냥</span>
+      </button>
+    </div>
   );
 }

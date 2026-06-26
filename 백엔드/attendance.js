@@ -1,4 +1,5 @@
 import { getTodayKey } from './waterQuota.js'
+import { grantBrewedCoffeeFields } from './brewedCoffeeReceived.js'
 
 /** 하루 목표: 커피나무 100% 수확(내리기) 횟수 */
 export const ATTENDANCE_DAILY_GOAL = 3
@@ -154,7 +155,7 @@ export function applyClaimAttendanceDailyReward(state) {
     state: {
       ...state,
       ...att,
-      totalCoffees: Number(state.totalCoffees ?? 0) + ATTENDANCE_DAILY_REWARD,
+      ...grantBrewedCoffeeFields(state, ATTENDANCE_DAILY_REWARD),
       attendanceDailyClaimDayKey: today,
     },
     rewardCups: ATTENDANCE_DAILY_REWARD,
@@ -173,7 +174,7 @@ export function applyClaimAttendanceStreakBonus(state) {
     state: {
       ...state,
       ...att,
-      totalCoffees: Number(state.totalCoffees ?? 0) + ATTENDANCE_STREAK_BONUS,
+      ...grantBrewedCoffeeFields(state, ATTENDANCE_STREAK_BONUS),
       attendanceStreak: 0,
       attendanceStreakBonusPending: false,
     },

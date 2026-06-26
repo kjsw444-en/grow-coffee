@@ -19,10 +19,10 @@ export const PASSIVE_GROWTH_PER_MINUTE = 5;
 export const PASSIVE_MINUTES_PER_CUP = 100 / PASSIVE_GROWTH_PER_MINUTE;
 export const PASSIVE_GROWTH_PER_SECOND = PASSIVE_GROWTH_PER_MINUTE / 60;
 export const DAILY_PASSIVE_GROWTH_CAP = 200;
-/** 방치 성장 UI 갱신 주기(ms) — 상시 리렌더 비용을 낮추기 위해 1초 단위로 표시 */
-export const PASSIVE_DISPLAY_TICK_MS = 1000;
-/** 성장률 React 반영 최소 간격(ms) — 과도한 리렌더 방지 */
-export const DISPLAY_GROWTH_COMMIT_MS = 200;
+/** 방치 성장 UI 갱신 주기(ms) — 상시 리렌더 비용을 낮추기 위해 1.5초 단위로 표시 */
+export const PASSIVE_DISPLAY_TICK_MS = 1500;
+/** 성장률 React 반영 최소 간격(ms) — 물주기 중 숫자·게이지가 눈에 보이게 */
+export const DISPLAY_GROWTH_COMMIT_MS = 80;
 /** 커피나무 성장률 표시 — 물주기 25% 단위라 정수만 */
 export const TREE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 방치 커피 게이지 표시 소수 자릿수 */

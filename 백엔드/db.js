@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { initialGameState } from './constants.js'
 import { normalizeGameState, sanitizeLoadedGameState } from './gameLogic.js'
 import { settlePassiveGrowth } from './passiveGrowth.js'
+import { resolveDailyRitual, normalizeDailyRitual } from './dailyRitual.js'
+import { getTodayKey } from './waterQuota.js'
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from './supabase.js'
 import { patchLocalDb, readLocalDb } from './store.js'
 
@@ -10,7 +12,12 @@ const GAME_STATE_COLUMNS_LEGACY_CORE =
 
 const GAME_STATE_COLUMNS_CORE = `${GAME_STATE_COLUMNS_LEGACY_CORE}, lifetime_drunk_coffees, lifetime_brewed_spent`
 
-const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM = `${GAME_STATE_COLUMNS_CORE}, passive_coffees_claimed`
+const DAILY_RANKING_COLUMNS =
+  'daily_brewed_spent_day_key, daily_brewed_spent, daily_brewed_received_day_key, daily_brewed_received'
+
+const GAME_STATE_COLUMNS_WITH_DAILY_RANKING = `${GAME_STATE_COLUMNS_CORE}, ${DAILY_RANKING_COLUMNS}`
+
+const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM = `${GAME_STATE_COLUMNS_WITH_DAILY_RANKING}, passive_coffees_claimed`
 const GAME_STATE_COLUMNS_WITH_SHARE = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM}, share_reward_day_key`
 const GAME_STATE_COLUMNS_FULL = `${GAME_STATE_COLUMNS_WITH_SHARE}, passive_reactivate_day_key`
 
@@ -19,6 +26,20 @@ const GAME_STATE_COLUMNS_WITH_ATTENDANCE = `${GAME_STATE_COLUMNS_FULL}, attendan
 const GAME_STATE_COLUMNS_WITH_POINT = `${GAME_STATE_COLUMNS_WITH_ATTENDANCE}, point_day_key`
 
 const GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE = `${GAME_STATE_COLUMNS_WITH_POINT}, daily_login_roulette_day_key, daily_login_roulette_reward_cups, daily_login_roulette_respin_day_key`
+
+const RITUAL_STATE_COLUMNS =
+  'ritual_day_key, ritual_fortune_id, ritual_fortune_revealed, ritual_fortune_progress, ritual_fortune_claimed, ritual_gift_opened, ritual_gift_id, ritual_mission_1_id, ritual_mission_2_id, ritual_mission_3_id, ritual_mission_1_done, ritual_mission_2_done, ritual_mission_3_done, ritual_mission_claimed, ritual_mission_harvest_count, ritual_mission_minigame_done, ritual_mission_roulette_done, ritual_fertilizer_charges, ritual_bonus_roulette_spins'
+
+const GAME_STATE_COLUMNS_WITH_RITUAL = `${GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE}, ${RITUAL_STATE_COLUMNS}`
+
+const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_CORE}, passive_coffees_claimed`
+const GAME_STATE_COLUMNS_WITH_SHARE_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_NO_DAILY_RANKING}, share_reward_day_key`
+const GAME_STATE_COLUMNS_FULL_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_SHARE_NO_DAILY_RANKING}, passive_reactivate_day_key`
+const GAME_STATE_COLUMNS_WITH_ATTENDANCE_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_FULL_NO_DAILY_RANKING}, attendance_day_key, attendance_cups_today, attendance_streak, attendance_last_goal_day_key, attendance_daily_claim_day_key, attendance_streak_bonus_pending`
+const GAME_STATE_COLUMNS_WITH_POINT_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_ATTENDANCE_NO_DAILY_RANKING}, point_day_key`
+const GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_POINT_NO_DAILY_RANKING}, daily_login_roulette_day_key, daily_login_roulette_reward_cups, daily_login_roulette_respin_day_key`
+
+const GAME_STATE_COLUMNS_WITH_RITUAL_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE_NO_DAILY_RANKING}, ${RITUAL_STATE_COLUMNS}`
 
 const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY = `${GAME_STATE_COLUMNS_LEGACY_CORE}, passive_coffees_claimed`
 const GAME_STATE_COLUMNS_WITH_SHARE_LEGACY = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY}, share_reward_day_key`
@@ -44,6 +65,22 @@ function stripLifetimeBrewedSpent(row) {
 function isMissingLifetimeDrunkCoffeesColumnError(error) {
   const message = String(error?.message ?? '')
   return message.includes('lifetime_drunk_coffees')
+}
+
+function isMissingDailyBrewedSpentColumnError(error) {
+  const message = String(error?.message ?? '')
+  return (
+    message.includes('daily_brewed_spent_day_key') ||
+    message.includes('daily_brewed_spent') ||
+    message.includes('daily_brewed_received_day_key') ||
+    message.includes('daily_brewed_received')
+  )
+}
+
+function warnMissingDailyBrewedSpentColumnOnce() {
+  console.warn(
+    'game_states 일일 랭킹 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
 }
 
 function warnMissingLifetimeDrunkColumnOnce() {
@@ -93,6 +130,11 @@ function isMissingDailyLoginRouletteColumnError(error) {
   )
 }
 
+function isMissingRitualColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('ritual_')
+}
+
 function warnMissingPassiveColumnOnce() {
   console.warn(
     'game_states.passive_coffees_claimed 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
@@ -129,18 +171,38 @@ function warnMissingDailyLoginRouletteColumnOnce() {
   )
 }
 
+function warnMissingRitualColumnOnce() {
+  console.warn(
+    'game_states 오늘의 커피 운세(ritual) 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
 let warnedPassiveColumn = false
 let warnedShareColumn = false
 let warnedReactivateColumn = false
 let warnedAttendanceColumn = false
 let warnedPointDayKeyColumn = false
 let warnedDailyLoginRouletteColumn = false
+let warnedRitualColumn = false
 let warnedLifetimeDrunkColumn = false
 let warnedLifetimeBrewedColumn = false
+let warnedDailyBrewedSpentColumn = false
 
 function stripLifetimeDrunkCoffees(row) {
   if (!('lifetime_drunk_coffees' in row)) return row
   const { lifetime_drunk_coffees: _ignored, ...rest } = row
+  return rest
+}
+
+function stripDailyBrewedSpentColumns(row) {
+  if (!('daily_brewed_spent_day_key' in row) && !('daily_brewed_received_day_key' in row)) return row
+  const {
+    daily_brewed_spent_day_key: _dayKey,
+    daily_brewed_spent: _spent,
+    daily_brewed_received_day_key: _receivedDayKey,
+    daily_brewed_received: _received,
+    ...rest
+  } = row
   return rest
 }
 
@@ -200,6 +262,33 @@ function stripDailyLoginRouletteDayKey(row) {
   return rest
 }
 
+function stripRitualColumns(row) {
+  if (!('ritual_day_key' in row)) return row
+  const {
+    ritual_day_key: _dayKey,
+    ritual_fortune_id: _fortuneId,
+    ritual_fortune_revealed: _fortuneRevealed,
+    ritual_fortune_progress: _fortuneProgress,
+    ritual_fortune_claimed: _fortuneClaimed,
+    ritual_gift_opened: _giftOpened,
+    ritual_gift_id: _giftId,
+    ritual_mission_1_id: _m1Id,
+    ritual_mission_2_id: _m2Id,
+    ritual_mission_3_id: _m3Id,
+    ritual_mission_1_done: _m1Done,
+    ritual_mission_2_done: _m2Done,
+    ritual_mission_3_done: _m3Done,
+    ritual_mission_claimed: _missionClaimed,
+    ritual_mission_harvest_count: _harvestCount,
+    ritual_mission_minigame_done: _minigameDone,
+    ritual_mission_roulette_done: _rouletteDone,
+    ritual_fertilizer_charges: _fertilizer,
+    ritual_bonus_roulette_spins: _bonusSpins,
+    ...rest
+  } = row
+  return rest
+}
+
 function mapProfileRow(row) {
   return {
     userId: row.id,
@@ -256,6 +345,10 @@ function mapGameRow(row) {
     spentCoffeeCups: row.spent_coffee_cups,
     lifetimeDrunkCoffees: Number(row.lifetime_drunk_coffees ?? 0),
     lifetimeBrewedSpent: Number(row.lifetime_brewed_spent ?? row.lifetime_drunk_coffees ?? 0),
+    dailyBrewedSpentDayKey: String(row.daily_brewed_spent_day_key ?? ''),
+    dailyBrewedSpent: Number(row.daily_brewed_spent ?? 0),
+    dailyBrewedReceivedDayKey: String(row.daily_brewed_received_day_key ?? ''),
+    dailyBrewedReceived: Number(row.daily_brewed_received ?? 0),
     shareRewardDayKey: row.share_reward_day_key,
     attendanceDayKey: String(row.attendance_day_key ?? ''),
     attendanceCupsToday: Number(row.attendance_cups_today ?? 0),
@@ -267,6 +360,25 @@ function mapGameRow(row) {
     dailyLoginRouletteDayKey: String(row.daily_login_roulette_day_key ?? ''),
     dailyLoginRouletteRewardCups: Number(row.daily_login_roulette_reward_cups ?? 0),
     dailyLoginRouletteRespinDayKey: String(row.daily_login_roulette_respin_day_key ?? ''),
+    ritualDayKey: String(row.ritual_day_key ?? ''),
+    ritualFortuneId: String(row.ritual_fortune_id ?? ''),
+    ritualFortuneRevealed: Boolean(row.ritual_fortune_revealed),
+    ritualFortuneProgress: Number(row.ritual_fortune_progress ?? 0),
+    ritualFortuneClaimed: Boolean(row.ritual_fortune_claimed),
+    ritualGiftOpened: Boolean(row.ritual_gift_opened),
+    ritualGiftId: String(row.ritual_gift_id ?? ''),
+    ritualMission1Id: String(row.ritual_mission_1_id ?? ''),
+    ritualMission2Id: String(row.ritual_mission_2_id ?? ''),
+    ritualMission3Id: String(row.ritual_mission_3_id ?? ''),
+    ritualMission1Done: Boolean(row.ritual_mission_1_done),
+    ritualMission2Done: Boolean(row.ritual_mission_2_done),
+    ritualMission3Done: Boolean(row.ritual_mission_3_done),
+    ritualMissionClaimed: Boolean(row.ritual_mission_claimed),
+    ritualMissionHarvestCount: Number(row.ritual_mission_harvest_count ?? 0),
+    ritualMissionMinigameDone: Boolean(row.ritual_mission_minigame_done),
+    ritualMissionRouletteDone: Boolean(row.ritual_mission_roulette_done),
+    ritualFertilizerCharges: Number(row.ritual_fertilizer_charges ?? 0),
+    ritualBonusRouletteSpins: Number(row.ritual_bonus_roulette_spins ?? 0),
   })
 }
 
@@ -768,6 +880,10 @@ function toGameRow(state) {
     spent_coffee_cups: current.spentCoffeeCups,
     lifetime_drunk_coffees: current.lifetimeDrunkCoffees,
     lifetime_brewed_spent: current.lifetimeBrewedSpent,
+    daily_brewed_spent_day_key: current.dailyBrewedSpentDayKey,
+    daily_brewed_spent: current.dailyBrewedSpent,
+    daily_brewed_received_day_key: current.dailyBrewedReceivedDayKey,
+    daily_brewed_received: current.dailyBrewedReceived,
     share_reward_day_key: current.shareRewardDayKey,
     attendance_day_key: current.attendanceDayKey,
     attendance_cups_today: current.attendanceCupsToday,
@@ -779,27 +895,57 @@ function toGameRow(state) {
     daily_login_roulette_day_key: current.dailyLoginRouletteDayKey,
     daily_login_roulette_reward_cups: current.dailyLoginRouletteRewardCups,
     daily_login_roulette_respin_day_key: current.dailyLoginRouletteRespinDayKey,
+    ritual_day_key: current.ritualDayKey,
+    ritual_fortune_id: current.ritualFortuneId,
+    ritual_fortune_revealed: current.ritualFortuneRevealed,
+    ritual_fortune_progress: current.ritualFortuneProgress,
+    ritual_fortune_claimed: current.ritualFortuneClaimed,
+    ritual_gift_opened: current.ritualGiftOpened,
+    ritual_gift_id: current.ritualGiftId,
+    ritual_mission_1_id: current.ritualMission1Id,
+    ritual_mission_2_id: current.ritualMission2Id,
+    ritual_mission_3_id: current.ritualMission3Id,
+    ritual_mission_1_done: current.ritualMission1Done,
+    ritual_mission_2_done: current.ritualMission2Done,
+    ritual_mission_3_done: current.ritualMission3Done,
+    ritual_mission_claimed: current.ritualMissionClaimed,
+    ritual_mission_harvest_count: current.ritualMissionHarvestCount,
+    ritual_mission_minigame_done: current.ritualMissionMinigameDone,
+    ritual_mission_roulette_done: current.ritualMissionRouletteDone,
+    ritual_fertilizer_charges: current.ritualFertilizerCharges,
+    ritual_bonus_roulette_spins: current.ritualBonusRouletteSpins,
   }
 
   return row
 }
 
 const GAME_STATE_SELECT_VARIANTS = [
+  GAME_STATE_COLUMNS_WITH_RITUAL,
+  GAME_STATE_COLUMNS_WITH_RITUAL_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE,
+  GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_POINT,
+  GAME_STATE_COLUMNS_WITH_POINT_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_ATTENDANCE,
+  GAME_STATE_COLUMNS_WITH_ATTENDANCE_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_FULL,
+  GAME_STATE_COLUMNS_FULL_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_FULL_LEGACY,
   GAME_STATE_COLUMNS_WITH_SHARE,
+  GAME_STATE_COLUMNS_WITH_SHARE_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM,
+  GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_NO_DAILY_RANKING,
+  GAME_STATE_COLUMNS_CORE,
   GAME_STATE_COLUMNS_LEGACY_CORE,
 ]
 
 function isMissingGameStateColumnError(error) {
   return (
+    isMissingRitualColumnError(error) ||
     isMissingDailyLoginRouletteColumnError(error) ||
     isMissingPointDayKeyColumnError(error) ||
     isMissingAttendanceColumnError(error) ||
+    isMissingDailyBrewedSpentColumnError(error) ||
     isMissingLifetimeDrunkCoffeesColumnError(error) ||
     isMissingLifetimeBrewedSpentColumnError(error) ||
     isMissingPassiveReactivateColumnError(error) ||
@@ -809,6 +955,12 @@ function isMissingGameStateColumnError(error) {
 }
 
 function warnMissingGameStateColumnOnce(error) {
+  if (isMissingRitualColumnError(error) && !warnedRitualColumn) {
+    warnedRitualColumn = true
+    warnMissingRitualColumnOnce()
+    return
+  }
+
   if (isMissingDailyLoginRouletteColumnError(error) && !warnedDailyLoginRouletteColumn) {
     warnedDailyLoginRouletteColumn = true
     warnMissingDailyLoginRouletteColumnOnce()
@@ -824,6 +976,12 @@ function warnMissingGameStateColumnOnce(error) {
   if (isMissingAttendanceColumnError(error) && !warnedAttendanceColumn) {
     warnedAttendanceColumn = true
     warnMissingAttendanceColumnOnce()
+    return
+  }
+
+  if (isMissingDailyBrewedSpentColumnError(error) && !warnedDailyBrewedSpentColumn) {
+    warnedDailyBrewedSpentColumn = true
+    warnMissingDailyBrewedSpentColumnOnce()
     return
   }
 
@@ -858,6 +1016,10 @@ function warnMissingGameStateColumnOnce(error) {
 }
 
 function stripMissingGameStateColumns(error, payload) {
+  if (isMissingRitualColumnError(error)) {
+    return stripRitualColumns(payload)
+  }
+
   if (String(error?.message ?? '').includes('daily_login_roulette_respin_day_key')) {
     return stripDailyLoginRouletteRespinDayKey(payload)
   }
@@ -876,6 +1038,10 @@ function stripMissingGameStateColumns(error, payload) {
 
   if (isMissingAttendanceColumnError(error)) {
     return stripAttendanceColumns(payload)
+  }
+
+  if (isMissingDailyBrewedSpentColumnError(error)) {
+    return stripDailyBrewedSpentColumns(payload)
   }
 
   if (isMissingLifetimeDrunkCoffeesColumnError(error)) {
@@ -969,6 +1135,63 @@ function passiveGrowthChanged(before, after) {
   )
 }
 
+function ritualProgressScore(ritual) {
+  let score = 0
+  if (ritual.ritualFortuneId) score += 1
+  if (ritual.ritualFortuneRevealed) score += 4
+  if (ritual.ritualGiftOpened) score += 16
+  if (ritual.ritualMissionClaimed) score += 64
+  return score
+}
+
+function saveRitualOverlay(userId, state) {
+  patchLocalDb((db) => {
+    db.ritualOverlays ??= {}
+    db.ritualOverlays[userId] = normalizeDailyRitual(state)
+  })
+}
+
+function clearStaleRitualOverlay(userId, today = getTodayKey()) {
+  patchLocalDb((db) => {
+    const overlay = db.ritualOverlays?.[userId]
+    if (overlay?.ritualDayKey && overlay.ritualDayKey !== today) {
+      delete db.ritualOverlays[userId]
+    }
+  })
+}
+
+function mergeRitualOverlay(userId, state) {
+  clearStaleRitualOverlay(userId)
+  const overlay = readLocalDb().ritualOverlays?.[userId]
+  if (!overlay) {
+    return state
+  }
+
+  const fromDb = normalizeDailyRitual(state)
+  const fromOverlay = normalizeDailyRitual(overlay)
+  if (ritualProgressScore(fromOverlay) > ritualProgressScore(fromDb)) {
+    return { ...state, ...fromOverlay }
+  }
+
+  return state
+}
+
+async function resolveAndPersistDailyRitual(userId, state) {
+  const resolved = resolveDailyRitual(userId, state, getTodayKey())
+  const before = normalizeDailyRitual(state)
+  const after = normalizeDailyRitual(resolved)
+
+  const needsSave =
+    before.ritualDayKey !== after.ritualDayKey ||
+    (!before.ritualFortuneId && after.ritualFortuneId)
+
+  if (!needsSave) {
+    return { ...state, ...after }
+  }
+
+  return saveGameState(userId, resolved)
+}
+
 async function settleAndPersistPassiveGrowth(userId, raw) {
   const loaded = sanitizeLoadedGameState(raw ?? initialGameState)
   const settled = settlePassiveGrowth(loaded)
@@ -983,7 +1206,8 @@ async function settleAndPersistPassiveGrowth(userId, raw) {
 export async function getGameState(userId) {
   if (!isSupabaseAdminConfigured()) {
     const db = readLocalDb()
-    return settleAndPersistPassiveGrowth(userId, db.gameStates[userId])
+    const afterPassive = await settleAndPersistPassiveGrowth(userId, db.gameStates[userId])
+    return resolveAndPersistDailyRitual(userId, mergeRitualOverlay(userId, afterPassive))
   }
 
   const supabase = getSupabaseAdmin()
@@ -1003,10 +1227,13 @@ export async function getGameState(userId) {
       throw insertError
     }
 
-    return settlePassiveGrowth({ ...initialGameState })
+    const seeded = resolveDailyRitual(userId, { ...initialGameState }, getTodayKey())
+    return resolveAndPersistDailyRitual(userId, settlePassiveGrowth(seeded))
   }
 
-  return settleAndPersistPassiveGrowth(userId, mapGameRow(data))
+  const afterPassive = await settleAndPersistPassiveGrowth(userId, mapGameRow(data))
+  const withRitual = mergeRitualOverlay(userId, afterPassive)
+  return resolveAndPersistDailyRitual(userId, withRitual)
 }
 
 export async function saveGameState(userId, state, options = {}) {
@@ -1023,6 +1250,7 @@ export async function saveGameState(userId, state, options = {}) {
         }
       }
       db.gameStates[userId] = next
+      saveRitualOverlay(userId, next)
     })
     return next
   }
@@ -1056,6 +1284,8 @@ export async function saveGameState(userId, state, options = {}) {
   if (error) {
     throw error
   }
+
+  saveRitualOverlay(userId, next)
 
   return next
 }

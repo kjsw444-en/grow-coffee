@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useButtonSound } from '../audio/SoundProvider';
 import {
   RECOMMEND_BTN_HEIGHT,
@@ -40,13 +40,15 @@ type RecommendButtonsProps = {
   onOpenComicSeries?: (seriesId: string) => void;
   onOpenDailyGame?: (gameId: DailyGameId) => void;
   onOpenShop?: () => void;
+  slotBelowShop?: ReactNode;
 };
 
-export function RecommendButtons({
+function RecommendButtonsComponent({
   placement = 'overlay',
   onOpenComicSeries,
   onOpenDailyGame,
   onOpenShop,
+  slotBelowShop,
 }: RecommendButtonsProps) {
   const [expandKind, setExpandKind] = useState<ExpandKind>(null);
   const [coffeeItem, setCoffeeItem] = useState<CoffeeRecommendation>(() => getActiveCoffeeRecommendation());
@@ -227,6 +229,11 @@ export function RecommendButtons({
               </button>
             </div>
           )}
+          {slotBelowShop ? (
+            <div className="recommend-buttons__mission-dock">
+              <div className="recommend-buttons__mission-dock-scale">{slotBelowShop}</div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -292,3 +299,5 @@ export function RecommendButtons({
     </div>
   );
 }
+
+export const RecommendButtons = memo(RecommendButtonsComponent);

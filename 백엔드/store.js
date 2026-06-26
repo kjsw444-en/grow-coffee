@@ -10,7 +10,11 @@ const DEFAULT_DB = {
   profiles: {},
   gameStates: {},
   rankings: {},
+  rankingDailyEntries: {},
+  promotionClaims: {},
   lastActionAt: {},
+  /** Supabase ritual 컬럼 미마이그레이션 시 일일 운세 진행 상태 보조 저장 */
+  ritualOverlays: {},
 }
 
 function ensureDataFile() {
@@ -32,7 +36,10 @@ export function readLocalDb() {
       profiles: parsed.profiles ?? {},
       gameStates: parsed.gameStates ?? {},
       rankings: parsed.rankings ?? {},
+      rankingDailyEntries: parsed.rankingDailyEntries ?? {},
+      promotionClaims: parsed.promotionClaims ?? {},
       lastActionAt: parsed.lastActionAt ?? {},
+      ritualOverlays: parsed.ritualOverlays ?? {},
     }
   } catch {
     return structuredClone(DEFAULT_DB)
@@ -48,7 +55,10 @@ export function writeLocalDb(nextDb) {
         profiles: nextDb.profiles ?? {},
         gameStates: nextDb.gameStates ?? {},
         rankings: nextDb.rankings ?? {},
+        rankingDailyEntries: nextDb.rankingDailyEntries ?? {},
+        promotionClaims: nextDb.promotionClaims ?? {},
         lastActionAt: nextDb.lastActionAt ?? {},
+        ritualOverlays: nextDb.ritualOverlays ?? {},
       },
       null,
       2,

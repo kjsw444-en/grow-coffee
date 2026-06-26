@@ -22,7 +22,8 @@ export type SfxId =
   | 'cardFlip'
   | 'cardMatch'
   | 'cardMismatch'
-  | 'minigameLose';
+  | 'minigameLose'
+  | 'sellUnfold';
 
 export type SoundSettings = {
   muted: boolean;

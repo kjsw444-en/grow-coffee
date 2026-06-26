@@ -22,8 +22,16 @@ export type GameState = {
   spentCoffeeCups: number;
   /** 마신 커피 누적 — sell-batch 시 spentCoffeeCups와 함께 증가 */
   lifetimeDrunkCoffees: number;
-  /** 내린 커피 마시기 누적 소모 — 랭킹 기준 */
+  /** 내린 커피 마시기 누적 소모 — 출석·통계용 (랭킹과 별개) */
   lifetimeBrewedSpent: number;
+  /** 오늘 내린 커피 마시기 소모일 (KST en-CA) — 출석용 */
+  dailyBrewedSpentDayKey: string;
+  /** 오늘 내린 커피 마시기로 소모한 잔 수 */
+  dailyBrewedSpent: number;
+  /** 오늘 받은 내린 커피 수령일 (KST en-CA) — 일일 랭킹 기준 */
+  dailyBrewedReceivedDayKey: string;
+  /** 오늘 받은 내린 커피 잔 수 — 일일 랭킹 기준 */
+  dailyBrewedReceived: number;
   /** 마지막 공유 리워드 수령일 (KST en-CA) */
   shareRewardDayKey: string;
   /** 방치 커피 재활성(광고) 사용일 — 하루 1회 */
@@ -48,6 +56,26 @@ export type GameState = {
   dailyLoginRouletteRewardCups: number;
   /** 접속 룰렛 다시 돌리기 사용일 (KST en-CA) — 하루 1회 */
   dailyLoginRouletteRespinDayKey: string;
+  /** 오늘의 커피 운세 — 일일 키 (KST en-CA) */
+  ritualDayKey: string;
+  ritualFortuneId: string;
+  ritualFortuneRevealed: boolean;
+  ritualFortuneProgress: number;
+  ritualFortuneClaimed: boolean;
+  ritualGiftOpened: boolean;
+  ritualGiftId: string;
+  ritualMission1Id: string;
+  ritualMission2Id: string;
+  ritualMission3Id: string;
+  ritualMission1Done: boolean;
+  ritualMission2Done: boolean;
+  ritualMission3Done: boolean;
+  ritualMissionClaimed: boolean;
+  ritualMissionHarvestCount: number;
+  ritualMissionMinigameDone: boolean;
+  ritualMissionRouletteDone: boolean;
+  ritualFertilizerCharges: number;
+  ritualBonusRouletteSpins: number;
 };
 
 export const initialState: GameState = {
@@ -68,6 +96,10 @@ export const initialState: GameState = {
   spentCoffeeCups: 0,
   lifetimeDrunkCoffees: 0,
   lifetimeBrewedSpent: 0,
+  dailyBrewedSpentDayKey: '',
+  dailyBrewedSpent: 0,
+  dailyBrewedReceivedDayKey: '',
+  dailyBrewedReceived: 0,
   shareRewardDayKey: '',
   passiveReactivateDayKey: '',
   attendanceDayKey: '',
@@ -80,4 +112,23 @@ export const initialState: GameState = {
   dailyLoginRouletteDayKey: '',
   dailyLoginRouletteRewardCups: 0,
   dailyLoginRouletteRespinDayKey: '',
+  ritualDayKey: '',
+  ritualFortuneId: '',
+  ritualFortuneRevealed: false,
+  ritualFortuneProgress: 0,
+  ritualFortuneClaimed: false,
+  ritualGiftOpened: false,
+  ritualGiftId: '',
+  ritualMission1Id: '',
+  ritualMission2Id: '',
+  ritualMission3Id: '',
+  ritualMission1Done: false,
+  ritualMission2Done: false,
+  ritualMission3Done: false,
+  ritualMissionClaimed: false,
+  ritualMissionHarvestCount: 0,
+  ritualMissionMinigameDone: false,
+  ritualMissionRouletteDone: false,
+  ritualFertilizerCharges: 0,
+  ritualBonusRouletteSpins: 0,
 };
