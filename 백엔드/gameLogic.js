@@ -1,9 +1,12 @@
 import {
   GOAL_AMOUNT,
   GROWTH_PER_WATER,
+  BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+  BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
   SELL_BATCH_REWARD,
   SELL_BATCH_SIZE,
   BREWED_COFFEE_DRINK_OPTIONS,
+  TREE_HARVEST_REWARD_TABLE,
   getBrewedCoffeePointReward,
   SHARE_REWARD_COFFEE_AMOUNT,
   DAILY_PASSIVE_GROWTH_CAP,
@@ -306,7 +309,22 @@ export function getRankingBrewedSpend(state) {
   return Math.max(0, Math.floor(Number(state?.lifetimeBrewedSpent ?? 0)))
 }
 
-export function applyDrink(state) {
+export function pickTreeHarvestRewardCups(randomValue = Math.random()) {
+  const totalWeight = TREE_HARVEST_REWARD_TABLE.reduce((sum, reward) => sum + reward.weight, 0)
+  const roll = Math.min(0.999999, Math.max(0, Number(randomValue) || 0)) * totalWeight
+  let cursor = 0
+
+  for (const reward of TREE_HARVEST_REWARD_TABLE) {
+    cursor += reward.weight
+    if (roll < cursor) {
+      return reward.cups
+    }
+  }
+
+  return TREE_HARVEST_REWARD_TABLE[0]?.cups ?? 1
+}
+
+export function applyDrink(state, options = {}) {
   const current = withSettledPassive(state)
 
   if (roundGrowth(current.growth) < 100) {
@@ -314,11 +332,12 @@ export function applyDrink(state) {
   }
 
   const attendanceResult = applyAttendanceFromTreeHarvest(current)
+  const rewardCups = pickTreeHarvestRewardCups(options.randomValue ?? Math.random())
 
   const next = {
     ...current,
     growth: 0,
-    totalCoffees: current.totalCoffees + 1,
+    totalCoffees: current.totalCoffees + rewardCups,
     growthAccrualSyncedAt: new Date().toISOString(),
     ...attendanceResult.attendance,
   }
@@ -326,7 +345,7 @@ export function applyDrink(state) {
   return {
     ok: true,
     state: next,
-    lastEarned: null,
+    lastEarned: rewardCups,
     attendanceGoalJustMet: attendanceResult.goalJustMet,
   }
 }
@@ -368,6 +387,27 @@ export function applySellBatch(state, cupCount = SELL_BATCH_SIZE) {
     }),
     lastEarned: reward,
     dailyCapJustReached,
+  }
+}
+
+export function applyClaimBrewedCoffeeFinishBonus(state) {
+  const current = withSettledPassive(state)
+
+  if (current.totalCoffees >= SELL_BATCH_SIZE) {
+    return { ok: false, reason: 'already-ready', state: current, rewardCups: 0 }
+  }
+
+  if (current.totalCoffees < BREWED_COFFEE_FINISH_BONUS_THRESHOLD) {
+    return { ok: false, reason: 'not-close-enough', state: current, rewardCups: 0 }
+  }
+
+  return {
+    ok: true,
+    state: normalizeGameState({
+      ...current,
+      totalCoffees: current.totalCoffees + BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+    }),
+    rewardCups: BREWED_COFFEE_FINISH_BONUS_AMOUNT,
   }
 }
 

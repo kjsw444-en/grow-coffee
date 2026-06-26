@@ -2,6 +2,8 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { BREWED_COFFEE_HELP, DRUNK_COFFEE_HELP } from '../game/coffeeCurrencyHelp';
 import {
   BREWED_COFFEE_DRINK_OPTIONS,
+  BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+  BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
   BREWED_COFFEE_RATE_NOTICE,
   getBrewedCoffeeDrinkCupHint,
   getBrewedCoffeePointReward,
@@ -43,8 +45,10 @@ type GrowthPanelProps = {
   isPassivelyAccruing?: boolean;
   sellBatchLabel?: string;
   onSellBatch?: (cupCount: number) => void;
+  onClaimFinishBonus?: () => void;
   sellDisabled?: boolean;
   sellPending?: boolean;
+  claimingFinishBonus?: boolean;
   attendance?: AttendanceUiStats | null;
   onClaimAttendanceDaily?: () => void;
   onClaimAttendanceStreak?: () => void;
@@ -71,8 +75,10 @@ function GrowthPanelComponent({
   isPassivelyAccruing = false,
   sellBatchLabel,
   onSellBatch,
+  onClaimFinishBonus,
   sellDisabled = false,
   sellPending = false,
+  claimingFinishBonus = false,
   attendance = null,
   onClaimAttendanceDaily,
   onClaimAttendanceStreak,
@@ -105,6 +111,12 @@ function GrowthPanelComponent({
   const sellCupHint = getBrewedCoffeeDrinkCupHint(totalCoffees);
   const sellCupBlocked = totalCoffees < MIN_BREWED_COFFEE_DRINK;
   const sellBlockedBubbleText = `${MIN_BREWED_COFFEE_DRINK.toLocaleString('ko-KR')}잔 이상부터 가능`;
+  const cashoutRemaining = Math.max(0, MIN_BREWED_COFFEE_DRINK - totalCoffees);
+  const cashoutProgressPercent = Math.min(100, (totalCoffees / MIN_BREWED_COFFEE_DRINK) * 100);
+  const finishBonusAvailable =
+    Boolean(onClaimFinishBonus) &&
+    totalCoffees >= BREWED_COFFEE_FINISH_BONUS_THRESHOLD &&
+    totalCoffees < MIN_BREWED_COFFEE_DRINK;
 
   const handlePickDrink = (cupCount: number) => {
     setDrinkPickerOpen(false);
@@ -341,6 +353,43 @@ function GrowthPanelComponent({
       {waterHint && <span className="growth-panel__water-hint">{waterHint}</span>}
       {onSellBatch && (
         <>
+          <div
+            className={`growth-panel__cashout-progress${cashoutRemaining === 0 ? ' growth-panel__cashout-progress--ready' : ''}`}
+            aria-label={
+              cashoutRemaining === 0
+                ? '내린 커피 마시기 가능'
+                : `내린 커피 마시기까지 ${cashoutRemaining}잔 남음`
+            }
+          >
+            <div className="growth-panel__cashout-head">
+              <span className="growth-panel__cashout-title">
+                내린 커피 마시기까지
+              </span>
+              <strong className="growth-panel__cashout-remaining">
+                {cashoutRemaining === 0 ? '가능!' : `${cashoutRemaining.toLocaleString('ko-KR')}잔 남음`}
+              </strong>
+            </div>
+            <div className="growth-panel__cashout-track" aria-hidden="true">
+              <div className="growth-panel__cashout-fill" style={{ width: `${cashoutProgressPercent}%` }} />
+            </div>
+            {totalCoffees >= 40 && cashoutRemaining > 0 && (
+              <p className="growth-panel__cashout-note">
+                조금만 더 모으면 첫 커피값을 받을 수 있어요.
+              </p>
+            )}
+            {finishBonusAvailable && (
+              <button
+                type="button"
+                className="growth-panel__finish-bonus-btn"
+                disabled={claimingFinishBonus || sellDisabled || sellPending}
+                onClick={onClaimFinishBonus}
+              >
+                {claimingFinishBonus
+                  ? '받는 중…'
+                  : `마지막 부스트 +${BREWED_COFFEE_FINISH_BONUS_AMOUNT}잔`}
+              </button>
+            )}
+          </div>
           <div ref={sellWrapRef} className="growth-panel__sell-wrap" onClick={handleSellWrapClick}>
             {sellBlockedBubble && (
               <div className="growth-panel__sell-bubble" role="tooltip">

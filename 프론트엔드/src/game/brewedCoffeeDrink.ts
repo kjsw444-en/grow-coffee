@@ -1,5 +1,11 @@
-import { SELL_BATCH_REWARD, SELL_BATCH_SIZE } from './constants';/** 내린 커피 마시기 — 선택 가능 잔 수 (백엔드 constants.js 와 동기화) */
-export const BREWED_COFFEE_DRINK_OPTIONS = [50, 100, 1000] as const;
+import {
+  BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+  BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
+  SELL_BATCH_REWARD,
+  SELL_BATCH_SIZE,
+} from './constants';/** 내린 커피 마시기 — 선택 가능 잔 수 (백엔드 constants.js 와 동기화) */
+export const BREWED_COFFEE_DRINK_OPTIONS = [50, 100, 500, 1000, 2350] as const;
+export { BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD };
 
 export type BrewedCoffeeDrinkOption = (typeof BREWED_COFFEE_DRINK_OPTIONS)[number];
 

@@ -107,6 +107,8 @@ export function CoffeeGame() {
     reset,
     watchAd,
     grantTutorialWaterRefill,
+    claimBrewedCoffeeFinishBonus,
+    claimingFinishBonus,
     sellBatch,
     sellingBatch,
     claimAttendanceDaily,
@@ -145,6 +147,7 @@ export function CoffeeGame() {
     holdElapsedSec,
     holdRemainingSec,
     lastEarned,
+    harvestReward,
     loggingIn,
     authMessage,
     loginWithToss,
@@ -189,6 +192,7 @@ export function CoffeeGame() {
   const user = toAuthUser(session);
   const catDialogueCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const catDialogueRawRef = useRef<string | null>(null);
+  const harvestRewardStopSoundKeyRef = useRef<number | null>(null);
 
   const stopCatDialogueCycle = useCallback(() => {
     if (catDialogueCycleRef.current !== null) {
@@ -217,6 +221,13 @@ export function CoffeeGame() {
   }, [showSceneDialogue, stopCatDialogueCycle]);
 
   useEffect(() => () => stopCatDialogueCycle(), [stopCatDialogueCycle]);
+
+  useEffect(() => {
+    if (!harvestReward || harvestReward.cups == null) return;
+    if (harvestRewardStopSoundKeyRef.current === harvestReward.key) return;
+    harvestRewardStopSoundKeyRef.current = harvestReward.key;
+    play('slotStop');
+  }, [harvestReward, play]);
 
   const syncOnboardingUi = useCallback(() => {
     const next = getOnboardingUiState();
@@ -705,8 +716,11 @@ export function CoffeeGame() {
 
   const handleDrinkTap = useCallback(() => {
     completeDrink();
-    void unlock().then(() => buttonSound());
-  }, [buttonSound, completeDrink, unlock]);
+    void unlock().then(() => {
+      play('slotRoll');
+      return buttonSound();
+    });
+  }, [buttonSound, completeDrink, play, unlock]);
 
   const handleWatchAd = useCallback(() => {
     void watchAd();
@@ -741,6 +755,11 @@ export function CoffeeGame() {
     [buttonSound, sellBatch, unlock],
   );
 
+  const handleClaimFinishBonus = useCallback(() => {
+    void claimBrewedCoffeeFinishBonus();
+    void unlock().then(() => buttonSound());
+  }, [buttonSound, claimBrewedCoffeeFinishBonus, unlock]);
+
   const waterHint = useMemo(
     () =>
       formatWaterPanelHint({
@@ -762,6 +781,45 @@ export function CoffeeGame() {
     [balanceRules.passiveGrowthPerSecond, passiveCupStats],
   );
 
+  const passiveCoffeePanelStats = useMemo(
+    () => ({
+      earned: passiveCupStats.cupsReceived,
+      max: passiveCupStats.maxCups,
+      remainder: passiveCupStats.remainder,
+      cupFillPercent: passiveCupStats.cupFillPercent,
+      complete: passiveCupStats.complete,
+      canClaim: passiveCupStats.canClaim,
+      canReactivate: passiveCupStats.canReactivate,
+      reactivateUsedToday: passiveCupStats.reactivateUsedToday,
+    }),
+    [
+      passiveCupStats.canClaim,
+      passiveCupStats.canReactivate,
+      passiveCupStats.complete,
+      passiveCupStats.cupFillPercent,
+      passiveCupStats.cupsReceived,
+      passiveCupStats.maxCups,
+      passiveCupStats.reactivateUsedToday,
+      passiveCupStats.remainder,
+    ],
+  );
+
+  const handleClaimPassiveCoffee = useCallback(() => {
+    void claimPassiveCoffee();
+  }, [claimPassiveCoffee]);
+
+  const handleReactivatePassiveCoffee = useCallback(() => {
+    void reactivatePassiveCoffee();
+  }, [reactivatePassiveCoffee]);
+
+  const handleClaimAttendanceDaily = useCallback(() => {
+    void claimAttendanceDaily();
+  }, [claimAttendanceDaily]);
+
+  const handleClaimAttendanceStreak = useCallback(() => {
+    void claimAttendanceStreak();
+  }, [claimAttendanceStreak]);
+
   const attendanceStats = useMemo(() => getAttendanceUiStats(state), [state]);
 
   const drinkStage = useMemo(
@@ -769,19 +827,31 @@ export function CoffeeGame() {
     [displayGrowth, isHolding, state.growth],
   );
 
-  const tutorialPlantProps = tutorialActive
-    ? {
-        needsAd: false,
-        showWatchAdButton: false,
-        growActionSlot: readyToDrink || isDrinkCommitting ? ('drink' as const) : ('water' as const),
-        canUseGrowHold: !readyToDrink && !isDrinkCommitting,
-      }
-    : {
-        needsAd,
-        showWatchAdButton,
-        growActionSlot,
-        canUseGrowHold,
-      };
+  const tutorialPlantProps = useMemo(
+    () =>
+      tutorialActive
+        ? {
+            needsAd: false,
+            showWatchAdButton: false,
+            growActionSlot: readyToDrink || isDrinkCommitting ? ('drink' as const) : ('water' as const),
+            canUseGrowHold: !readyToDrink && !isDrinkCommitting,
+          }
+        : {
+            needsAd,
+            showWatchAdButton,
+            growActionSlot,
+            canUseGrowHold,
+          },
+    [
+      canUseGrowHold,
+      growActionSlot,
+      isDrinkCommitting,
+      needsAd,
+      readyToDrink,
+      showWatchAdButton,
+      tutorialActive,
+    ],
+  );
 
   return (
     <div className="game">
@@ -840,6 +910,7 @@ export function CoffeeGame() {
               onOpenDailyGame={openDailyGame}
               onOpenShop={openShop}
               sceneDialogue={sceneDialogue}
+              harvestReward={harvestReward}
             />
 
             {drinkStage && (
@@ -860,18 +931,9 @@ export function CoffeeGame() {
               percentGrowth={state.growth}
               totalCoffees={state.totalCoffees}
               emptiedCoffeeCups={state.spentCoffeeCups}
-              passiveCoffee={{
-                earned: passiveCupStats.cupsReceived,
-                max: passiveCupStats.maxCups,
-                remainder: passiveCupStats.remainder,
-                cupFillPercent: passiveCupStats.cupFillPercent,
-                complete: passiveCupStats.complete,
-                canClaim: passiveCupStats.canClaim,
-                canReactivate: passiveCupStats.canReactivate,
-                reactivateUsedToday: passiveCupStats.reactivateUsedToday,
-              }}
-              onClaimPassiveCoffee={() => void claimPassiveCoffee()}
-              onReactivatePassiveCoffee={() => void reactivatePassiveCoffee()}
+              passiveCoffee={passiveCoffeePanelStats}
+              onClaimPassiveCoffee={handleClaimPassiveCoffee}
+              onReactivatePassiveCoffee={handleReactivatePassiveCoffee}
               claimingPassiveCoffee={claimingPassiveCoffee}
               reactivatingPassiveCoffee={reactivatingPassiveCoffee}
               claimSyncBlocked={false}
@@ -884,12 +946,14 @@ export function CoffeeGame() {
                 passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
               }
               sellBatchLabel="내린 커피 마시기"
-              onSellBatch={(cupCount) => void handleSellBatch(cupCount)}
+              onSellBatch={handleSellBatch}
+              onClaimFinishBonus={handleClaimFinishBonus}
+              claimingFinishBonus={claimingFinishBonus}
               sellDisabled={dailyPointCapReached || sellingBatch || isHolding || actionSyncing}
               sellPending={sellingBatch}
               attendance={attendanceStats}
-              onClaimAttendanceDaily={() => void claimAttendanceDaily()}
-              onClaimAttendanceStreak={() => void claimAttendanceStreak()}
+              onClaimAttendanceDaily={handleClaimAttendanceDaily}
+              onClaimAttendanceStreak={handleClaimAttendanceStreak}
               claimingAttendanceDaily={claimingAttendanceDaily}
               claimingAttendanceStreak={claimingAttendanceStreak}
             />

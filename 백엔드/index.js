@@ -29,6 +29,7 @@ import {
   requireUser,
 } from './middleware.js'
 import {
+  applyClaimBrewedCoffeeFinishBonus,
   applyClaimPassiveCoffee,
   applyClaimAttendanceDaily,
   applyClaimAttendanceStreakBonus,
@@ -51,7 +52,7 @@ import {
   applyDailyLoginRouletteRespinWithClientReward,
 } from './dailyLoginRoulette.js'
 import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
-import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE } from './constants.js'
+import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE } from './constants.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
   exchangeTossAuthorizationCode,
@@ -424,6 +425,37 @@ app.post('/api/game/share-reward', requireUser, async (req, res) => {
       ok: true,
       state,
       rewardAmount: result.rewardAmount,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+    res.json(payload)
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/brewed-coffee-finish-bonus', requireUser, async (req, res) => {
+  try {
+    const current = await getGameState(req.userId)
+    const result = applyClaimBrewedCoffeeFinishBonus(current)
+
+    if (!result.ok) {
+      const messages = {
+        'already-ready': `${SELL_BATCH_SIZE}잔을 채웠어요. 내린 커피 마시기를 눌러 주세요.`,
+        'not-close-enough': `${BREWED_COFFEE_FINISH_BONUS_THRESHOLD}잔부터 마지막 +${BREWED_COFFEE_FINISH_BONUS_AMOUNT}잔을 받을 수 있어요.`,
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '마지막 부스트를 받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    const payload = await attachPlayerRank(req.userId, {
+      ok: true,
+      state,
+      rewardCups: result.rewardCups,
       passiveGrowthPreview: previewPassiveGrowth(state),
     })
     res.json(payload)

@@ -54,9 +54,9 @@ export function sceneDialogueForGrowthComplete(mode: import('./constants').HoldM
 
 
 
-export function sceneDialogueForDrink() {
+export function sceneDialogueForDrink(cups = 1) {
 
-  return formatSceneDialogue('커피를 마셨어요! 내린 커피 +1');
+  return formatSceneDialogue(`커피를 마셨어요! 내린 커피 +${cups}`);
 
 }
 

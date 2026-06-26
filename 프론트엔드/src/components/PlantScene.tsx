@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSound } from '../audio/SoundProvider';
 import {
   COFFEE_COMPLETE_BG_SRC,
@@ -66,6 +66,7 @@ type PlantSceneProps = {
   onOpenDailyGame?: (gameId: DailyGameId) => void;
   onOpenShop?: () => void;
   sceneDialogue?: string | null;
+  harvestReward?: { cups: number | null; key: number } | null;
 };
 
 function PlantSceneComponent({
@@ -101,6 +102,7 @@ function PlantSceneComponent({
   onOpenDailyGame,
   onOpenShop,
   sceneDialogue,
+  harvestReward,
 }: PlantSceneProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wasDrinkStageRef = useRef(false);
@@ -150,6 +152,10 @@ function PlantSceneComponent({
   const drinkVideoSrc = playback?.video ?? null;
   const showWateringCan =
     isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showAdSlot;
+  const harvestRewardStopY =
+    harvestReward?.cups == null
+      ? 0
+      : -28 * Math.max(0, Math.min(4, Math.floor(harvestReward.cups) - 1));
 
   const markVideoBroken = useCallback(
     (current: CoffeePlayback | null) => {
@@ -302,6 +308,39 @@ function PlantSceneComponent({
             )
           ) : (
             <img className="plant-scene__bg" src={bgSrc} alt="창가 배경" />
+          )}
+          {harvestReward && (
+            <div
+              key={harvestReward.key}
+              className={`game__harvest-reward-pop${harvestReward.cups == null ? ' game__harvest-reward-pop--rolling' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="game__harvest-reward-title">수확 보너스</span>
+              <span className="game__harvest-reward-roll" aria-hidden="true">
+                {[0, 1, 2].map((reel) => (
+                  <span
+                    key={reel}
+                    className="game__harvest-reward-reel"
+                    style={
+                      harvestReward.cups == null
+                        ? undefined
+                        : ({ '--slot-stop-y': `${harvestRewardStopY}px` } as CSSProperties)
+                    }
+                  >
+                    {[1, 2, 3, 4, 5, 1, 2, 3, 4, 5].map((cup, index) => (
+                      <span key={`${cup}-${index}`}>{cup}</span>
+                    ))}
+                  </span>
+                ))}
+              </span>
+              <strong className="game__harvest-reward-cups">
+                {harvestReward.cups == null ? '...' : `+${harvestReward.cups}잔`}
+              </strong>
+              <span className="game__harvest-reward-caption">
+                {harvestReward.cups == null ? '수확량 확인 중!' : '내린 커피 획득!'}
+              </span>
+            </div>
           )}
           {!showDrinkVideo && (
             <div className="plant-scene__top-stack">

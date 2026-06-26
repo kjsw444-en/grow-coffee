@@ -423,6 +423,19 @@ export async function claimMinigameReward(missionKey: string, rewardSlot: 'free'
   }>
 }
 
+export async function claimBrewedCoffeeFinishBonusGame() {
+  return request('/api/game/brewed-coffee-finish-bonus', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<{
+    ok: true
+    state: GameState
+    rewardCups: number
+    playerRank?: number | null
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
 export async function watchAdGame() {
   return request('/api/game/watch-ad', { method: 'POST', body: '{}' }) as Promise<{
     ok: true

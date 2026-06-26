@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiRequestError,
+  claimBrewedCoffeeFinishBonusGame,
   claimPassiveCoffeeGame,
   claimMinigameReward as claimMinigameRewardApi,
   claimDailyLoginRouletteGame,
@@ -36,6 +37,8 @@ import { initPlayerSession, isTossInApp, loginWithTossSession } from '../service
 import { DEFAULT_DISPLAY_NAME } from './mockData';
 import {
   BREWED_COFFEE_DRINK_OPTIONS,
+  BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+  BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
   getBrewedCoffeePointReward,
 } from './brewedCoffeeDrink';
 import {
@@ -117,7 +120,6 @@ import { usePassiveGrowthTick } from './usePassiveGrowthTick';
 import { canClaimShareRewardToday } from './shareRewardQuota';
 import { runShareRewardFlow, shareRewardStatusMessage } from '../services/shareReward';
 import {
-  applyAttendanceFromTreeHarvest,
   applyClaimAttendanceDailyReward,
   applyClaimAttendanceStreakBonus,
   mergeAttendanceFromServer,
@@ -252,6 +254,12 @@ function isWaterCooldownError(err: unknown): err is ApiRequestError {
 
 const HOLD_UI_COMMIT_MS = 80;
 const DISPLAY_GROWTH_MIN_DELTA = 1 / 10 ** GROWTH_DISPLAY_DECIMALS;
+const HARVEST_REWARD_ROLL_MS = 1000;
+const HARVEST_REWARD_RESULT_MS = 1200;
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const { tutorialBypassQuota = false } = options;
@@ -263,6 +271,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastEarned, setLastEarned] = useState<number | null>(null);
+  const [harvestReward, setHarvestReward] = useState<{ cups: number | null; key: number } | null>(null);
   const [tapBurst, setTapBurst] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [holdMode, setHoldMode] = useState<HoldMode>('water');
@@ -272,6 +281,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const [watchingAd, setWatchingAd] = useState(false);
   const [sharingReward, setSharingReward] = useState(false);
   const [sellingBatch, setSellingBatch] = useState(false);
+  const [claimingFinishBonus, setClaimingFinishBonus] = useState(false);
   const [claimingAttendanceDaily, setClaimingAttendanceDaily] = useState(false);
   const [claimingAttendanceStreak, setClaimingAttendanceStreak] = useState(false);
   const [actionSyncing, setActionSyncing] = useState(false);
@@ -289,7 +299,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const [reactivatingPassiveCoffee, setReactivatingPassiveCoffee] = useState(false);
   const [sceneDialogue, setSceneDialogue] = useState<string | null>(null);
   const [reviewPreviewStatus, setReviewPreviewStatus] = useState<string | null>(null);
-  const [passiveClock, setPassiveClock] = useState(0);
 
   const holdStartRef = useRef<number | null>(null);
   const holdDurationRef = useRef(0);
@@ -312,6 +321,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const holdPreflightRef = useRef(false);
   const sceneDialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayGrowthFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const harvestRewardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const harvestRewardKeyRef = useRef(0);
   const lastDisplayGrowthCommitAtRef = useRef(0);
   const lastCommittedDisplayRef = useRef(0);
   const testQueueRef = useRef(Promise.resolve());
@@ -377,6 +388,35 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     }, SCENE_DIALOGUE_IDLE_MS);
   }, []);
 
+  const startHarvestRewardRoll = useCallback(() => {
+    harvestRewardKeyRef.current += 1;
+    setHarvestReward({ cups: null, key: harvestRewardKeyRef.current });
+
+    if (harvestRewardTimerRef.current !== null) {
+      clearTimeout(harvestRewardTimerRef.current);
+      harvestRewardTimerRef.current = null;
+    }
+  }, []);
+
+  const showHarvestReward = useCallback((cups: number) => {
+    const safeCups = Math.max(1, Math.floor(Number(cups) || 1));
+    let key = harvestRewardKeyRef.current;
+    if (key <= 0) {
+      harvestRewardKeyRef.current += 1;
+      key = harvestRewardKeyRef.current;
+    }
+    harvestRewardKeyRef.current = key;
+    setHarvestReward({ cups: safeCups, key });
+
+    if (harvestRewardTimerRef.current !== null) {
+      clearTimeout(harvestRewardTimerRef.current);
+    }
+    harvestRewardTimerRef.current = setTimeout(() => {
+      harvestRewardTimerRef.current = null;
+      setHarvestReward(null);
+    }, HARVEST_REWARD_RESULT_MS);
+  }, []);
+
   const hideSceneDialogue = useCallback(() => {
     if (sceneDialogueTimerRef.current !== null) {
       clearTimeout(sceneDialogueTimerRef.current);
@@ -417,10 +457,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     },
     [commitDisplayGrowth],
   );
-
-  const bumpPassiveClock = useCallback(() => {
-    setPassiveClock((value) => value + 1);
-  }, []);
 
   const applyPassiveAccrual = useCallback((next: GameState) => {
     stateRef.current = next;
@@ -824,18 +860,25 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const commitDrink = useCallback(async (before: GameState, epoch: number) => {
     try {
-      const result = await drinkGame();
-      applyAuthoritativeState({ ...result.state, growth: 0 }, { epoch });
+      startHarvestRewardRoll();
+      const [result] = await Promise.all([
+        drinkGame(),
+        wait(HARVEST_REWARD_ROLL_MS),
+      ]);
       if (result.playerRank != null) {
         updatePlayerRank(result.playerRank);
       }
       setLastEarned(result.lastEarned);
       setActionError(null);
-      let dialogue = sceneDialogueForDrink();
+      const earnedCups = Math.max(1, Math.floor(Number(result.lastEarned) || 1));
+      showHarvestReward(earnedCups);
+      let dialogue = sceneDialogueForDrink(earnedCups);
       if (result.attendanceGoalJustMet) {
         dialogue = sceneDialogueForAttendanceGoal(dialogue);
       }
       showSceneDialogue(dialogue);
+      await wait(HARVEST_REWARD_RESULT_MS);
+      applyAuthoritativeState({ ...result.state, growth: 0 }, { epoch });
       triggerTapBurst();
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
@@ -845,13 +888,14 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       }
       const message = err instanceof Error ? err.message : '커피 마시기에 실패했습니다.';
       setActionError(message);
+      setHarvestReward(null);
       showSceneDialogue(message);
     } finally {
       syncingRef.current = false;
       setIsDrinkCommitting(false);
       setActionSyncing(false);
     }
-  }, [applyAuthoritativeState, showSceneDialogue, triggerTapBurst, updatePlayerRank]);
+  }, [applyAuthoritativeState, showHarvestReward, showSceneDialogue, startHarvestRewardRoll, triggerTapBurst, updatePlayerRank]);
 
   const completeDrink = useCallback(() => {
     if (syncingRef.current) return;
@@ -872,19 +916,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     setActionError(null);
     resetHoldUi();
 
-    const attendanceResult = applyAttendanceFromTreeHarvest(before);
-    const optimistic = {
-      ...before,
-      growth: 0,
-      totalCoffees: before.totalCoffees + 1,
-      ...attendanceResult.attendance,
-    };
-    stateRef.current = optimistic;
-    setState(optimistic);
-    commitDisplayGrowth(0, true);
-
     void commitDrink(before, stateEpochRef.current);
-  }, [commitDisplayGrowth, commitDrink, loading, resetHoldUi, showSceneDialogue]);
+  }, [commitDrink, loading, resetHoldUi, showSceneDialogue]);
 
   const runTestBump = useCallback(async () => {
     const prev = stateRef.current;
@@ -977,14 +1010,12 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       try {
         const result = await devBumpPassiveGame();
         applyAuthoritativeState(result.state, { trustServer: true, epoch });
-        bumpPassiveClock();
         setPassiveClaimFeedback(null);
         showSceneDialogue('테스트: 방치 커피 게이지 +100% (서버 반영)');
         return;
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
           applyAuthoritativeState(err.state, { trustServer: true, epoch });
-          bumpPassiveClock();
         }
         const message = err instanceof Error ? err.message : '방치 커피 테스트 충전에 실패했습니다.';
         setPassiveClaimFeedback({
@@ -1005,9 +1036,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       growthAccrualSyncedAt: new Date().toISOString(),
     };
     applyAuthoritativeState(next);
-    bumpPassiveClock();
     showSceneDialogue('테스트: 방치 커피 게이지 +100%');
-  }, [applyAuthoritativeState, bumpPassiveClock, loading, isHolding, showSceneDialogue]);
+  }, [applyAuthoritativeState, loading, isHolding, showSceneDialogue]);
 
   const testSetTotalCoffees = useCallback(async (totalCoffees = 1000) => {
     if (!import.meta.env.DEV) return;
@@ -1091,13 +1121,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const resetState = normalizeLoadedState(buildResetState(stateRef.current));
     applyAuthoritativeState(resetState, { trustServer: true, epoch });
     resetDailyGameSave();
-    bumpPassiveClock();
 
     try {
       if (currentSession.userId && currentSession.source !== 'mock') {
         const result = await resetGame();
         applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
-        bumpPassiveClock();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '초기화에 실패했습니다.';
@@ -1106,7 +1134,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       syncingRef.current = false;
       setActionSyncing(false);
     }
-  }, [applyAuthoritativeState, bumpPassiveClock, hideSceneDialogue, resetHoldUi]);
+  }, [applyAuthoritativeState, hideSceneDialogue, resetHoldUi]);
 
   const purchaseVariant = useCallback(
     async (slug: string) => {
@@ -1575,7 +1603,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     if (!currentSession?.userId) {
       applyAuthoritativeState(preview.state, { trustServer: true, epoch });
       setLastEarned(preview.lastEarned);
-      bumpPassiveClock();
       triggerTapBurst();
       setPassiveClaimFeedback({
         tone: 'success',
@@ -1592,7 +1619,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const syncedBefore = stateRef.current;
     applyAuthoritativeState(preview.state, { trustServer: true, epoch });
     setLastEarned(preview.lastEarned);
-    bumpPassiveClock();
 
     try {
       const result = await claimPassiveCoffeeGame();
@@ -1601,7 +1627,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         updatePlayerRank(result.playerRank);
       }
       setLastEarned(result.lastEarned);
-      bumpPassiveClock();
       triggerTapBurst();
       setPassiveClaimFeedback({
         tone: 'success',
@@ -1616,7 +1641,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       } else {
         applyAuthoritativeState(syncedBefore, { trustServer: true, epoch });
       }
-      bumpPassiveClock();
       const message = err instanceof Error ? err.message : '방치 커피 받기에 실패했습니다.';
       setPassiveClaimFeedback({ tone: 'error', text: message });
       setActionError(message);
@@ -1628,7 +1652,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   }, [
     applyAuthoritativeState,
     beginPassiveClaimUi,
-    bumpPassiveClock,
     claimingPassiveCoffee,
     releasePassiveClaimUi,
     showSceneDialogue,
@@ -1653,7 +1676,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       try {
         const fresh = await fetchGameState();
         applyAuthoritativeState(fresh, { trustServer: true, epoch });
-        bumpPassiveClock();
       } catch {
         // 로컬 상태로 진행
       }
@@ -1685,7 +1707,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
       if (!currentSession?.userId) {
         applyAuthoritativeState(preview.state, { trustServer: true, epoch });
-        bumpPassiveClock();
         showSceneDialogue(sceneDialogueForPassiveReactivate());
         return true;
       }
@@ -1696,16 +1717,13 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       try {
         const result = await reactivatePassiveCoffeeGame();
         applyAuthoritativeState(result.state, { trustServer: true, epoch });
-        bumpPassiveClock();
         showSceneDialogue(sceneDialogueForPassiveReactivate());
         return true;
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
           applyAuthoritativeState(err.state, { trustServer: true, epoch });
-          bumpPassiveClock();
         } else {
           applyAuthoritativeState(before, { trustServer: true, epoch });
-          bumpPassiveClock();
         }
         const message = err instanceof Error ? err.message : '방치 커피 재활성에 실패했습니다.';
         setActionError(message);
@@ -1720,7 +1738,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     }
   }, [
     applyAuthoritativeState,
-    bumpPassiveClock,
     claimingPassiveCoffee,
     reactivatingPassiveCoffee,
     showSceneDialogue,
@@ -1812,6 +1829,82 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       setActionSyncing(false);
     }
   }, [applyAuthoritativeState, claimingAttendanceStreak, showSceneDialogue]);
+
+  const claimBrewedCoffeeFinishBonus = useCallback(async () => {
+    if (claimingFinishBonus || watchingAd || syncingRef.current) {
+      showSceneDialogue('잠시만 기다려 주세요…');
+      return false;
+    }
+
+    const before = stateRef.current;
+    if (before.totalCoffees >= 50) {
+      showSceneDialogue('50잔을 채웠어요. 내린 커피 마시기를 눌러 주세요.');
+      return false;
+    }
+
+    if (before.totalCoffees < BREWED_COFFEE_FINISH_BONUS_THRESHOLD) {
+      const need = BREWED_COFFEE_FINISH_BONUS_THRESHOLD - before.totalCoffees;
+      showSceneDialogue(`${need.toLocaleString('ko-KR')}잔만 더 모으면 마지막 부스트를 받을 수 있어요.`);
+      return false;
+    }
+
+    const currentSession = sessionRef.current;
+    if (!currentSession?.userId) {
+      const message = getServerUnavailableMessage();
+      setActionError(message);
+      showSceneDialogue(message);
+      return false;
+    }
+
+    syncingRef.current = true;
+    setClaimingFinishBonus(true);
+    setActionSyncing(true);
+    setWatchingAd(true);
+    setActionError(null);
+
+    try {
+      const rewarded = await watchRewardedAd('coffee-finish-bonus');
+      setWatchingAd(false);
+
+      if (!rewarded) {
+        showSceneDialogue('부스트를 완료하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        return false;
+      }
+
+      stateEpochRef.current += 1;
+      const epoch = stateEpochRef.current;
+      const optimistic = {
+        ...before,
+        totalCoffees: before.totalCoffees + BREWED_COFFEE_FINISH_BONUS_AMOUNT,
+      };
+      stateRef.current = optimistic;
+      setState(optimistic);
+
+      const result = await claimBrewedCoffeeFinishBonusGame();
+      applyAuthoritativeState(result.state, { epoch });
+      if (result.playerRank != null) {
+        updatePlayerRank(result.playerRank);
+      }
+      showSceneDialogue(`마지막 부스트! 내린 커피 +${result.rewardCups}잔`);
+      return true;
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.state) {
+        applyAuthoritativeState(err.state);
+      } else {
+        stateRef.current = before;
+        setState(before);
+      }
+      const message = err instanceof Error ? err.message : '마지막 부스트를 받을 수 없어요.';
+      setActionError(message);
+      showSceneDialogue(message);
+      return false;
+    } finally {
+      syncingRef.current = false;
+      setClaimingFinishBonus(false);
+      setWatchingAd(false);
+      setActionSyncing(false);
+    }
+  }, [applyAuthoritativeState, claimingFinishBonus, showSceneDialogue, updatePlayerRank, watchingAd]);
 
   const sellBatch = useCallback(async (cupCount: number) => {
     const batchSize = Math.floor(Number(cupCount) || 0);
@@ -1939,7 +2032,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       state.passiveCoffeesClaimed,
     ) && !claimingPassiveCoffee && !reactivatingPassiveCoffee,
     onPassiveUpdate: applyPassiveAccrual,
-    onTick: bumpPassiveClock,
   });
 
   useEffect(() => {
@@ -1957,7 +2049,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     }
 
     prevPassiveCanClaimRef.current = stats.canClaim;
-  }, [balanceRules, passiveClock, showSceneDialogue, state]);
+  }, [balanceRules, showSceneDialogue, state]);
 
   useEffect(
     () => () => {
@@ -1970,6 +2062,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       }
       if (displayGrowthFlushTimerRef.current !== null) {
         clearTimeout(displayGrowthFlushTimerRef.current);
+      }
+      if (harvestRewardTimerRef.current !== null) {
+        clearTimeout(harvestRewardTimerRef.current);
       }
     },
     [clearHoldTimer],
@@ -2091,6 +2186,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     reset,
     watchAd,
     grantTutorialWaterRefill,
+    claimBrewedCoffeeFinishBonus,
+    claimingFinishBonus,
     sellBatch,
     sellingBatch,
     claimAttendanceDaily,
@@ -2121,9 +2218,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     reactivatingPassiveCoffee,
     actionSyncing,
     passiveActive,
-    passiveClock,
     holdMode,
     lastEarned,
+    harvestReward,
     tapBurst,
     isHolding,
     holdProgress,

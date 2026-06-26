@@ -155,6 +155,22 @@ class SoundEngine {
         this.chord([440, 554, 659], 0.32, 0.13);
         window.setTimeout(() => this.play('coin'), 120);
         break;
+      case 'slotRoll':
+        [0, 90, 180, 270, 360, 450, 540, 630, 720, 810].forEach((delay, index) => {
+          window.setTimeout(() => {
+            this.tone(520 + (index % 5) * 55, 0.035, {
+              volume: 0.07,
+              type: 'square',
+              attack: 0.004,
+              release: 0.025,
+            });
+          }, delay);
+        });
+        break;
+      case 'slotStop':
+        this.tone(740, 0.08, { volume: 0.11, type: 'triangle', release: 0.06 });
+        window.setTimeout(() => this.tone(1046, 0.1, { volume: 0.1, type: 'triangle' }), 80);
+        break;
       case 'coin':
         this.tone(988, 0.12, { volume: 0.12, type: 'triangle' });
         this.tone(1318, 0.1, { volume: 0.08, release: 0.1 });

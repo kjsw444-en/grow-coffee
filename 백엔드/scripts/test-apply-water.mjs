@@ -41,14 +41,14 @@ test('커피 마시기 — 내린 커피 +1, spentCoffeeCups·lifetimeDrunkCoffe
     dailyPassiveGrowth: 130,
     passiveDayKey: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
   }
-  const result = applyDrink(state)
+  const result = applyDrink(state, { randomValue: 0 })
   assert.equal(result.ok, true)
   assert.equal(result.state.totalCoffees, 3)
   assert.equal(result.state.spentCoffeeCups, 5)
   assert.equal(result.state.lifetimeDrunkCoffees, 5)
   assert.equal(result.state.money, 100)
   assert.equal(result.state.growth, 0)
-  assert.equal(result.lastEarned, null)
+  assert.equal(result.lastEarned, 1)
 })
 
 test('성장 100%여도 방치 누적(dailyPassiveGrowth)은 계속 증가', () => {
@@ -66,7 +66,7 @@ test('성장 100%여도 방치 누적(dailyPassiveGrowth)은 계속 증가', () 
   assert.ok(next.dailyPassiveGrowth >= 99, `expected ~100 passive, got ${next.dailyPassiveGrowth}`)
 })
 
-test('50잔 마시기 — totalCoffees -50, spentCoffeeCups +50, money +235', () => {
+test('50잔 마시기 — totalCoffees -50, spentCoffeeCups +50, money +100', () => {
   const state = {
     ...initialGameState,
     totalCoffees: 52,
@@ -77,16 +77,29 @@ test('50잔 마시기 — totalCoffees -50, spentCoffeeCups +50, money +235', ()
   assert.equal(result.state.totalCoffees, 2)
   assert.equal(result.state.spentCoffeeCups, 50)
   assert.equal(result.state.lifetimeDrunkCoffees, 50)
-  assert.equal(result.state.money, 235)
+  assert.equal(result.state.money, SELL_BATCH_REWARD)
 })
 
-test('1000잔 마시기 — money +4700', () => {
+test('1000잔 마시기 — money +2000', () => {
   const state = {
     ...initialGameState,
     totalCoffees: 1000,
     money: 0,
   }
   const result = applySellBatch(state, 1000)
+  assert.equal(result.ok, true)
+  assert.equal(result.state.money, 2000)
+  assert.equal(result.dailyCapJustReached, false)
+  assert.equal(result.state.redeemed, false)
+})
+
+test('2350잔 마시기 — money +4700', () => {
+  const state = {
+    ...initialGameState,
+    totalCoffees: 2350,
+    money: 0,
+  }
+  const result = applySellBatch(state, 2350)
   assert.equal(result.ok, true)
   assert.equal(result.state.money, 4700)
   assert.equal(result.dailyCapJustReached, true)
@@ -126,7 +139,7 @@ test('방치는 커피나무 growth와 분리 — dailyPassiveGrowth만 증가',
   state = settlePassiveGrowth(state)
   assert.ok(state.dailyPassiveGrowth >= 100, 'passive should accrue to 100%+')
   assert.equal(state.growth, 0, 'passive must not change tree growth')
-  assert.equal(applyDrink(state).ok, false, 'tree drink requires watering, not passive')
+  assert.equal(applyDrink(state, { randomValue: 0 }).ok, false, 'tree drink requires watering, not passive')
 })
 
 test('방치 커피 — 100% 충전 후 받기 버튼으로만 내린 커피 +1', () => {

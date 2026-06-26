@@ -8,9 +8,18 @@ export const GOAL_AMOUNT = 4700
 export const GROWTH_PER_WATER = 25
 export const SELL_PRICE = 47
 export const SELL_BATCH_SIZE = 50
-export const SELL_BATCH_REWARD = 235
+export const SELL_BATCH_REWARD = 100
+export const BREWED_COFFEE_FINISH_BONUS_THRESHOLD = 48
+export const BREWED_COFFEE_FINISH_BONUS_AMOUNT = 2
 /** 내린 커피 마시기 — 선택 가능 잔 수 */
-export const BREWED_COFFEE_DRINK_OPTIONS = [50, 100, 1000]
+export const BREWED_COFFEE_DRINK_OPTIONS = [50, 100, 500, 1000, 2350]
+export const TREE_HARVEST_REWARD_TABLE = [
+  { cups: 1, weight: 70 },
+  { cups: 2, weight: 20 },
+  { cups: 3, weight: 7 },
+  { cups: 4, weight: 2 },
+  { cups: 5, weight: 1 },
+]
 
 export function getBrewedCoffeePointReward(cupCount) {
   const cups = Math.max(0, Math.floor(Number(cupCount) || 0))

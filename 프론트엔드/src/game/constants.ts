@@ -1,7 +1,9 @@
 export const GOAL_AMOUNT = 4700;
 export const SELL_PRICE = 47;
 export const SELL_BATCH_SIZE = 50;
-export const SELL_BATCH_REWARD = 235;
+export const SELL_BATCH_REWARD = 100;
+export const BREWED_COFFEE_FINISH_BONUS_THRESHOLD = 48;
+export const BREWED_COFFEE_FINISH_BONUS_AMOUNT = 2;
 export { BREWED_COFFEE_DRINK_OPTIONS, getBrewedCoffeePointReward } from './brewedCoffeeDrink';
 export const GROWTH_PER_WATER = 25;
 
@@ -17,8 +19,8 @@ export const PASSIVE_GROWTH_PER_MINUTE = 5;
 export const PASSIVE_MINUTES_PER_CUP = 100 / PASSIVE_GROWTH_PER_MINUTE;
 export const PASSIVE_GROWTH_PER_SECOND = PASSIVE_GROWTH_PER_MINUTE / 60;
 export const DAILY_PASSIVE_GROWTH_CAP = 200;
-/** 방치 성장 UI 갱신 주기(ms) */
-export const PASSIVE_DISPLAY_TICK_MS = 250;
+/** 방치 성장 UI 갱신 주기(ms) — 상시 리렌더 비용을 낮추기 위해 1초 단위로 표시 */
+export const PASSIVE_DISPLAY_TICK_MS = 1000;
 /** 성장률 React 반영 최소 간격(ms) — 과도한 리렌더 방지 */
 export const DISPLAY_GROWTH_COMMIT_MS = 200;
 /** 커피나무 성장률 표시 — 물주기 25% 단위라 정수만 */

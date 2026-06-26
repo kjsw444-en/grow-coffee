@@ -12,13 +12,11 @@ export function usePassiveGrowthTick({
   balanceRules,
   passiveActive,
   onPassiveUpdate,
-  onTick,
 }: {
   stateRef: MutableRefObject<GameState>;
   balanceRules: BalanceRules;
   passiveActive: boolean;
   onPassiveUpdate: (next: GameState) => void;
-  onTick?: () => void;
 }) {
   const runTick = useCallback(() => {
     const current = stateRef.current;
@@ -32,7 +30,6 @@ export function usePassiveGrowthTick({
         current.passiveCoffeesClaimed,
       )
     ) {
-      onTick?.();
       return;
     }
 
@@ -42,8 +39,7 @@ export function usePassiveGrowthTick({
       onPassiveUpdate(result.next);
     }
 
-    onTick?.();
-  }, [balanceRules, onPassiveUpdate, onTick, stateRef]);
+  }, [balanceRules, onPassiveUpdate, stateRef]);
 
   useEffect(() => {
     if (!passiveActive) return;

@@ -83,19 +83,23 @@ test('tree-harvest — 7일 연속 시 보너스 대기, streak 유지', () => {
   assert.equal(result.attendance.attendanceStreakBonusPending, true)
 })
 
-test('applyDrink — 수확 시 내린 커피 1잔만 추가', () => {
-  const result = applyDrink({
-    ...initialGameState,
-    growth: 100,
-    totalCoffees: 4,
-    attendanceDayKey: today,
-    attendanceCupsToday: 0,
-    attendanceStreak: 0,
-    attendanceLastGoalDayKey: '',
-  })
+test('applyDrink — 수확 시 확률 보상만큼 내린 커피 추가', () => {
+  const result = applyDrink(
+    {
+      ...initialGameState,
+      growth: 100,
+      totalCoffees: 4,
+      attendanceDayKey: today,
+      attendanceCupsToday: 0,
+      attendanceStreak: 0,
+      attendanceLastGoalDayKey: '',
+    },
+    { randomValue: 0.98 },
+  )
 
   assert.equal(result.ok, true)
-  assert.equal(result.state.totalCoffees, 5)
+  assert.equal(result.lastEarned, 4)
+  assert.equal(result.state.totalCoffees, 8)
 })
 
 test('일일 출석 보상 — 5잔 수동 수령', () => {

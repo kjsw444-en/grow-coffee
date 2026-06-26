@@ -9,6 +9,8 @@ export type SfxId =
   | 'waterCancel'
   | 'growth'
   | 'harvest'
+  | 'slotRoll'
+  | 'slotStop'
   | 'coin'
   | 'win'
   | 'error'
