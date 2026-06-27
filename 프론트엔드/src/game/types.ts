@@ -76,15 +76,8 @@ export type GameState = {
   ritualMissionRouletteDone: boolean;
   ritualFertilizerCharges: number;
   ritualBonusRouletteSpins: number;
-  /** 오늘의 커피 추천 — 일일 키 (KST en-CA) */
-  recommendCoffeeDayKey: string;
-  recommendCoffeePrimaryId: string;
-  recommendCoffeeRerollId: string;
+  /** 오늘의 추천 「한번 더」 사용일 (KST en-CA) */
   recommendCoffeeRerollDayKey: string;
-  /** 오늘의 저녁 추천 — 일일 키 (KST en-CA) */
-  recommendDinnerDayKey: string;
-  recommendDinnerPrimaryId: string;
-  recommendDinnerRerollId: string;
   recommendDinnerRerollDayKey: string;
 };
 
@@ -141,12 +134,6 @@ export const initialState: GameState = {
   ritualMissionRouletteDone: false,
   ritualFertilizerCharges: 0,
   ritualBonusRouletteSpins: 0,
-  recommendCoffeeDayKey: '',
-  recommendCoffeePrimaryId: '',
-  recommendCoffeeRerollId: '',
   recommendCoffeeRerollDayKey: '',
-  recommendDinnerDayKey: '',
-  recommendDinnerPrimaryId: '',
-  recommendDinnerRerollId: '',
   recommendDinnerRerollDayKey: '',
 };

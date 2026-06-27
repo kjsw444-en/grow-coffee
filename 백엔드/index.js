@@ -912,7 +912,7 @@ app.get('/api/recommend/today', requireUser, async (req, res) => {
     }
 
     const state = await getGameState(req.userId)
-    const recommend = buildRecommendTodayView(state, kind)
+    const recommend = buildRecommendTodayView(state, req.userId, kind)
 
     res.json({
       ok: true,
@@ -939,9 +939,7 @@ app.post('/api/recommend/reroll', requireUser, async (req, res) => {
 
     if (!result.ok) {
       const messages = {
-        'day-mismatch': '오늘 추천을 다시 불러와 주세요.',
         'reroll-used': '오늘은 이미 다른 메뉴를 추천받았어요.',
-        'menu-missing': '추천 메뉴를 불러오지 못했어요.',
       }
       res.status(400).json({
         ok: false,
@@ -958,7 +956,7 @@ app.post('/api/recommend/reroll', requireUser, async (req, res) => {
       kind,
       menuId: result.menuId,
       previousId: result.previousId,
-      recommend: buildRecommendTodayView(state, kind),
+      recommend: buildRecommendTodayView(state, req.userId, kind),
     })
   } catch (error) {
     handleApiError(res, error)

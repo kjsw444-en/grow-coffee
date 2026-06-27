@@ -1,6 +1,3 @@
-import { getOrCreateDailyPrimaryId, getRecommendDailyState, pickRandomOtherItem } from './recommendDaily';
-import { getTodayKey } from './dailyGameStorage';
-
 export type DinnerMenuId =
   | 'jeyuk-bokkeum'
   | 'samgyeopsal'
@@ -97,34 +94,6 @@ export const DINNER_RECOMMENDATIONS: DinnerRecommendation[] = [
   },
 ];
 
-const MENU_IDS = DINNER_RECOMMENDATIONS.map((item) => item.id);
-
-export function getTodayDinnerRecommendationId(dateKey = getTodayKey()) {
-  return getOrCreateDailyPrimaryId('dinner', MENU_IDS, dateKey) as DinnerMenuId;
-}
-
 export function getDinnerRecommendationById(id: DinnerMenuId) {
   return DINNER_RECOMMENDATIONS.find((item) => item.id === id) ?? DINNER_RECOMMENDATIONS[0];
-}
-
-export function getTodayDinnerRecommendation(dateKey = getTodayKey()) {
-  const id = getTodayDinnerRecommendationId(dateKey);
-  return getDinnerRecommendationById(id);
-}
-
-export function getActiveDinnerRecommendation(dateKey = getTodayKey()) {
-  const daily = getRecommendDailyState('dinner', dateKey);
-  const primary = getTodayDinnerRecommendation(dateKey);
-
-  if (daily.rerollUsed && daily.rerollId) {
-    const rerolled = DINNER_RECOMMENDATIONS.find((item) => item.id === daily.rerollId);
-    if (rerolled) return rerolled;
-  }
-
-  return primary;
-}
-
-export function rerollDinnerRecommendation(dateKey = getTodayKey()) {
-  const current = getActiveDinnerRecommendation(dateKey);
-  return pickRandomOtherItem(DINNER_RECOMMENDATIONS, current.id);
 }

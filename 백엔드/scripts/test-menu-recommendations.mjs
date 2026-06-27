@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import {
   applyRecommendReroll,
   buildRecommendTodayView,
+  getPrimaryMenuId,
   normalizeRecommendKind,
-  resolveMenuRecommendations,
 } from '../menuRecommendations.js'
 import { initialGameState } from '../constants.js'
 import { getTodayKey } from '../waterQuota.js'
@@ -17,38 +17,34 @@ function testNormalizeKind() {
   assert.equal(normalizeRecommendKind('lunch'), null)
 }
 
-function testResolveIsDeterministic() {
-  const first = resolveMenuRecommendations(USER, initialGameState, TODAY)
-  const second = resolveMenuRecommendations(USER, first.state, TODAY)
-
-  assert.equal(first.changed, true)
-  assert.equal(second.changed, false)
-  assert.ok(first.state.recommendCoffeePrimaryId)
-  assert.ok(first.state.recommendDinnerPrimaryId)
-  assert.equal(
-    first.state.recommendCoffeePrimaryId,
-    second.state.recommendCoffeePrimaryId,
-  )
+function testPrimaryIsDeterministic() {
+  const first = getPrimaryMenuId(USER, 'coffee', TODAY)
+  const second = getPrimaryMenuId(USER, 'coffee', TODAY)
+  assert.ok(first)
+  assert.equal(first, second)
 }
 
 function testTodayViewAndReroll() {
-  const resolved = resolveMenuRecommendations(USER, initialGameState, TODAY).state
-  const coffeeView = buildRecommendTodayView(resolved, 'coffee', TODAY)
+  const coffeeView = buildRecommendTodayView(initialGameState, USER, 'coffee', TODAY)
 
-  assert.equal(coffeeView.activeId, resolved.recommendCoffeePrimaryId)
+  assert.equal(coffeeView.activeId, coffeeView.primaryId)
   assert.equal(coffeeView.canReroll, true)
 
-  const reroll = applyRecommendReroll(resolved, USER, 'coffee', TODAY)
+  const reroll = applyRecommendReroll(initialGameState, USER, 'coffee', TODAY)
   assert.equal(reroll.ok, true)
-  assert.notEqual(reroll.menuId, coffeeView.activeId)
+  assert.notEqual(reroll.menuId, coffeeView.primaryId)
 
-  const afterReroll = applyRecommendReroll(reroll.state, USER, 'coffee', TODAY)
-  assert.equal(afterReroll.ok, false)
-  assert.equal(afterReroll.reason, 'reroll-used')
+  const afterView = buildRecommendTodayView(reroll.state, USER, 'coffee', TODAY)
+  assert.equal(afterView.activeId, reroll.menuId)
+  assert.equal(afterView.canReroll, false)
+
+  const again = applyRecommendReroll(reroll.state, USER, 'coffee', TODAY)
+  assert.equal(again.ok, false)
+  assert.equal(again.reason, 'reroll-used')
 }
 
 testNormalizeKind()
-testResolveIsDeterministic()
+testPrimaryIsDeterministic()
 testTodayViewAndReroll()
 
 console.log('test-menu-recommendations: ok')

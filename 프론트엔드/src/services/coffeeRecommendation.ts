@@ -1,6 +1,3 @@
-import { getOrCreateDailyPrimaryId, getRecommendDailyState, pickRandomOtherItem } from './recommendDaily';
-import { getTodayKey } from './dailyGameStorage';
-
 export type CoffeeMenuId =
   | 'iced-americano'
   | 'cafe-latte'
@@ -97,34 +94,6 @@ export const COFFEE_RECOMMENDATIONS: CoffeeRecommendation[] = [
   },
 ];
 
-const MENU_IDS = COFFEE_RECOMMENDATIONS.map((item) => item.id);
-
 export function getCoffeeRecommendationById(id: CoffeeMenuId) {
   return COFFEE_RECOMMENDATIONS.find((item) => item.id === id) ?? COFFEE_RECOMMENDATIONS[0];
-}
-
-export function getTodayCoffeeRecommendationId(dateKey = getTodayKey()): CoffeeMenuId {
-  return getOrCreateDailyPrimaryId('coffee', MENU_IDS, dateKey) as CoffeeMenuId;
-}
-
-export function getTodayCoffeeRecommendation(dateKey = getTodayKey()) {
-  const id = getTodayCoffeeRecommendationId(dateKey);
-  return getCoffeeRecommendationById(id);
-}
-
-export function getActiveCoffeeRecommendation(dateKey = getTodayKey()) {
-  const daily = getRecommendDailyState('coffee', dateKey);
-  const primary = getTodayCoffeeRecommendation(dateKey);
-
-  if (daily.rerollUsed && daily.rerollId) {
-    const rerolled = COFFEE_RECOMMENDATIONS.find((item) => item.id === daily.rerollId);
-    if (rerolled) return rerolled;
-  }
-
-  return primary;
-}
-
-export function rerollCoffeeRecommendation(dateKey = getTodayKey()) {
-  const current = getActiveCoffeeRecommendation(dateKey);
-  return pickRandomOtherItem(COFFEE_RECOMMENDATIONS, current.id);
 }
