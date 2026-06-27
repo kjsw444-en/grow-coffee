@@ -96,6 +96,18 @@
   vertical-align: top;
 }
 
+/* 저녁 메뉴 PNG 상단 여백 → 커피 추천 카드와 동일한 비율·간격 */
+.recommend-buttons__col:nth-child(2) .recommend-buttons__menu-panel .recommend-menu-card--image {
+  aspect-ratio: 976 / 396;
+  overflow: hidden;
+}
+
+.recommend-buttons__col:nth-child(2) .recommend-buttons__menu-panel .recommend-menu-card__image {
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+}
+
 .recommend-buttons__menu-panel .recommend-menu-card__text {
   right: 4%;
   width: 54%;

@@ -54,6 +54,7 @@ import {
   settleDailyPoint,
 } from './dailyPoint.js'
 import { normalizeDailyRitual } from './dailyRitual.js'
+import { normalizeMenuRecommendations } from './menuRecommendations.js'
 import {
   consumeRitualFertilizerCharge,
   getRitualWaterGrowthDelta,
@@ -139,6 +140,7 @@ export function normalizeGameState(raw) {
       raw?.dailyLoginRouletteRespinDayKey ?? raw?.daily_login_roulette_respin_day_key ?? '',
     ),
     ...normalizeDailyRitual(raw),
+    ...normalizeMenuRecommendations(raw),
   }
 }
 

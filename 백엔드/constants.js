@@ -101,4 +101,12 @@ export const initialGameState = {
   ritualMissionRouletteDone: false,
   ritualFertilizerCharges: 0,
   ritualBonusRouletteSpins: 0,
+  recommendCoffeeDayKey: '',
+  recommendCoffeePrimaryId: '',
+  recommendCoffeeRerollId: '',
+  recommendCoffeeRerollDayKey: '',
+  recommendDinnerDayKey: '',
+  recommendDinnerPrimaryId: '',
+  recommendDinnerRerollId: '',
+  recommendDinnerRerollDayKey: '',
 }

@@ -536,6 +536,39 @@ export async function respinDailyLoginRouletteGame(previousRewardCups: number, d
   }>
 }
 
+export type RecommendTodayView = {
+  kind: 'coffee' | 'dinner'
+  dayKey: string
+  primaryId: string
+  activeId: string
+  canReroll: boolean
+  rerollUsed: boolean
+}
+
+export async function fetchRecommendToday(kind: 'coffee' | 'dinner') {
+  return request(`/api/recommend/today?kind=${kind}`) as Promise<{
+    ok: true
+    state: GameState
+    kind: 'coffee' | 'dinner'
+    menuId: string
+    recommend: RecommendTodayView
+  }>
+}
+
+export async function rerollRecommendGame(kind: 'coffee' | 'dinner') {
+  return request('/api/recommend/reroll', {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    kind: 'coffee' | 'dinner'
+    menuId: string
+    previousId: string
+    recommend: RecommendTodayView
+  }>
+}
+
 export async function claimMinigameReward(missionKey: string, rewardSlot: 'free' | 'ad' = 'free') {
   return request('/api/game/minigame-reward', {
     method: 'POST',

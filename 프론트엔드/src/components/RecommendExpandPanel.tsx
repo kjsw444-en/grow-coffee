@@ -1,4 +1,4 @@
-import type { RecommendKind } from '../services/recommendDaily';
+import type { RecommendKind } from '../services/recommendServer';
 import type { RecommendMenuItem } from '../services/recommendTypes';
 import { RecommendMenuCard } from './RecommendMenuCard';
 import './RecommendButtons.css';
@@ -28,7 +28,7 @@ export function RecommendExpandPanel({
           disabled={rerollLoading}
           onClick={onReroll}
         >
-          {rerollLoading ? '리워드 광고 준비 중…' : '한번 더'}
+          {rerollLoading ? '불러오는 중…' : '한번 더'}
         </button>
         {rerollNotice ? (
           <p className="recommend-buttons__reroll-notice" role="status">

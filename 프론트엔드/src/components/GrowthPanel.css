@@ -323,6 +323,48 @@
   letter-spacing: -0.02em;
 }
 
+.growth-panel__passive-gauge-percent--live {
+  display: inline-block;
+  transform-origin: right center;
+  color: #4a8038;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(127, 191, 90, 0.42);
+  animation: growth-panel-passive-percent-live-pulse 0.85s ease-in-out infinite;
+}
+
+.growth-panel__passive-gauge-percent--live.growth-panel__passive-gauge-percent--tick {
+  animation: growth-panel-passive-percent-tick 0.26s ease-out;
+}
+
+@keyframes growth-panel-passive-percent-live-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 6px rgba(127, 191, 90, 0.3);
+  }
+
+  50% {
+    transform: scale(1.06);
+    text-shadow: 0 0 14px rgba(127, 191, 90, 0.62);
+  }
+}
+
+@keyframes growth-panel-passive-percent-tick {
+  0% {
+    transform: scale(1);
+  }
+
+  35% {
+    transform: scale(1.12);
+    color: #3d6b2c;
+    text-shadow: 0 0 16px rgba(127, 191, 90, 0.78);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 .growth-panel__passive-stat--ready .growth-panel__passive-gauge-percent {
   color: #4a7038;
   font-weight: 800;
@@ -1060,6 +1102,7 @@
   .growth-panel__attendance-reward-btn:not(:disabled),
   .growth-panel__attendance-reward-btn--streak:not(:disabled),
   .growth-panel__percent--live,
+  .growth-panel__passive-gauge-percent--live,
   .growth-panel__bar-fill--live {
     animation: none;
   }

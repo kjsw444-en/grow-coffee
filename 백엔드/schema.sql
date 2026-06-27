@@ -171,3 +171,13 @@ alter table public.game_states add column if not exists ritual_mission_minigame_
 alter table public.game_states add column if not exists ritual_mission_roulette_done boolean not null default false;
 alter table public.game_states add column if not exists ritual_fertilizer_charges integer not null default 0 check (ritual_fertilizer_charges >= 0);
 alter table public.game_states add column if not exists ritual_bonus_roulette_spins integer not null default 0 check (ritual_bonus_roulette_spins >= 0);
+
+-- 오늘의 커피/저녁 추천 (KST en-CA)
+alter table public.game_states add column if not exists recommend_coffee_day_key text not null default '';
+alter table public.game_states add column if not exists recommend_coffee_primary_id text not null default '';
+alter table public.game_states add column if not exists recommend_coffee_reroll_id text not null default '';
+alter table public.game_states add column if not exists recommend_coffee_reroll_day_key text not null default '';
+alter table public.game_states add column if not exists recommend_dinner_day_key text not null default '';
+alter table public.game_states add column if not exists recommend_dinner_primary_id text not null default '';
+alter table public.game_states add column if not exists recommend_dinner_reroll_id text not null default '';
+alter table public.game_states add column if not exists recommend_dinner_reroll_day_key text not null default '';

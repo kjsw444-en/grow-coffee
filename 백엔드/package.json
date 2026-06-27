@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "node scripts/test-passive-coffee-flow.mjs && node scripts/test-water-quota.mjs && node scripts/test-share-reward.mjs && node scripts/test-drink-purchase.mjs && node scripts/test-apply-water.mjs && node scripts/test-minigame-reward.mjs && node scripts/test-ranking-sync.mjs && node scripts/test-attendance.mjs && node scripts/test-daily-login-roulette.mjs"
+    "test": "node scripts/test-passive-coffee-flow.mjs && node scripts/test-water-quota.mjs && node scripts/test-share-reward.mjs && node scripts/test-drink-purchase.mjs && node scripts/test-apply-water.mjs && node scripts/test-minigame-reward.mjs && node scripts/test-ranking-sync.mjs && node scripts/test-attendance.mjs && node scripts/test-daily-login-roulette.mjs && node scripts/test-menu-recommendations.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

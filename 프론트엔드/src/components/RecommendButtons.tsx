@@ -6,22 +6,15 @@ import {
   RECOMMEND_COFFEE_IMG,
   RECOMMEND_DINNER_IMG,
 } from '../game/constants';
+import { COFFEE_RECOMMENDATIONS, type CoffeeRecommendation } from '../services/coffeeRecommendation';
+import { DINNER_RECOMMENDATIONS, type DinnerRecommendation } from '../services/dinnerRecommendation';
 import {
-  getActiveCoffeeRecommendation,
-  rerollCoffeeRecommendation,
-  type CoffeeRecommendation,
-} from '../services/coffeeRecommendation';
-import {
-  getActiveDinnerRecommendation,
-  rerollDinnerRecommendation,
-  type DinnerRecommendation,
-} from '../services/dinnerRecommendation';
-import {
-  saveRecommendReroll,
+  loadRecommendToday,
+  rerollRecommendToday,
   type RecommendKind,
-} from '../services/recommendDaily';
+} from '../services/recommendServer';
+import { ApiRequestError } from '../services/api';
 import { formatSceneDialogue } from '../game/sceneDialogue';
-import { getTodayKey } from '../services/dailyGameStorage';
 import { hasSeenShopHeartbeatToday, markShopHeartbeatSeenToday } from '../services/shopHeartbeat';
 import { watchRewardedAd } from '../services/rewardedAd';
 import { ComicSeriesInlineList } from './ComicSeriesInlineList';
@@ -51,8 +44,9 @@ function RecommendButtonsComponent({
   slotBelowShop,
 }: RecommendButtonsProps) {
   const [expandKind, setExpandKind] = useState<ExpandKind>(null);
-  const [coffeeItem, setCoffeeItem] = useState<CoffeeRecommendation>(() => getActiveCoffeeRecommendation());
-  const [dinnerItem, setDinnerItem] = useState<DinnerRecommendation>(() => getActiveDinnerRecommendation());
+  const [coffeeItem, setCoffeeItem] = useState<CoffeeRecommendation>(COFFEE_RECOMMENDATIONS[0]);
+  const [dinnerItem, setDinnerItem] = useState<DinnerRecommendation>(DINNER_RECOMMENDATIONS[0]);
+  const [recommendLoading, setRecommendLoading] = useState<RecommendKind | null>(null);
   const [shopCalm, setShopCalm] = useState(() => hasSeenShopHeartbeatToday());
   const [shopBubbleVisible, setShopBubbleVisible] = useState(false);
   const [rerollLoading, setRerollLoading] = useState<RecommendKind | null>(null);
@@ -83,6 +77,28 @@ function RecommendButtonsComponent({
     };
   }, [onOpenShop, shopCalm]);
 
+  const loadRecommendPanel = useCallback(async (kind: RecommendKind) => {
+    setRecommendLoading(kind);
+    setRerollNotice((prev) => ({ ...prev, [kind]: undefined }));
+
+    try {
+      const result = await loadRecommendToday(kind);
+      if (kind === 'coffee') {
+        setCoffeeItem(result.item as CoffeeRecommendation);
+      } else {
+        setDinnerItem(result.item as DinnerRecommendation);
+      }
+    } catch (error) {
+      const message =
+        error instanceof ApiRequestError
+          ? error.message
+          : '추천 메뉴를 불러오지 못했어요.';
+      setRerollNotice((prev) => ({ ...prev, [kind]: message }));
+    } finally {
+      setRecommendLoading(null);
+    }
+  }, []);
+
   const toggleExpand = async (kind: 'coffee' | 'dinner' | 'manga' | 'game') => {
     await buttonSound();
 
@@ -91,17 +107,11 @@ function RecommendButtonsComponent({
       return;
     }
 
-    if (kind === 'coffee' || kind === 'dinner') {
-      setRerollNotice((prev) => ({ ...prev, [kind]: undefined }));
-    }
-
-    if (kind === 'coffee') {
-      setCoffeeItem(getActiveCoffeeRecommendation());
-    } else if (kind === 'dinner') {
-      setDinnerItem(getActiveDinnerRecommendation());
-    }
-
     setExpandKind(kind);
+
+    if (kind === 'coffee' || kind === 'dinner') {
+      await loadRecommendPanel(kind);
+    }
   };
 
   const handleReroll = useCallback(
@@ -124,18 +134,18 @@ function RecommendButtonsComponent({
           return;
         }
 
-        const dateKey = getTodayKey();
-
+        const result = await rerollRecommendToday(kind);
         if (kind === 'coffee') {
-          const next = rerollCoffeeRecommendation(dateKey);
-          saveRecommendReroll('coffee', next.id, dateKey);
-          setCoffeeItem(next);
-          return;
+          setCoffeeItem(result.item as CoffeeRecommendation);
+        } else {
+          setDinnerItem(result.item as DinnerRecommendation);
         }
-
-        const next = rerollDinnerRecommendation(dateKey);
-        saveRecommendReroll('dinner', next.id, dateKey);
-        setDinnerItem(next);
+      } catch (error) {
+        const message =
+          error instanceof ApiRequestError
+            ? error.message
+            : '다른 메뉴를 추천받지 못했어요.';
+        setRerollNotice((prev) => ({ ...prev, [kind]: message }));
       } finally {
         setRerollLoading(null);
       }
@@ -193,7 +203,7 @@ function RecommendButtonsComponent({
             <RecommendExpandPanel
               item={coffeeItem}
               label="오늘의 커피 추천"
-              rerollLoading={rerollLoading === 'coffee'}
+              rerollLoading={rerollLoading === 'coffee' || recommendLoading === 'coffee'}
               rerollNotice={rerollNotice.coffee ?? null}
               onReroll={() => void handleReroll('coffee')}
             />
@@ -259,7 +269,7 @@ function RecommendButtonsComponent({
             <RecommendExpandPanel
               item={dinnerItem}
               label="오늘의 저녁 추천"
-              rerollLoading={rerollLoading === 'dinner'}
+              rerollLoading={rerollLoading === 'dinner' || recommendLoading === 'dinner'}
               rerollNotice={rerollNotice.dinner ?? null}
               onReroll={() => void handleReroll('dinner')}
             />

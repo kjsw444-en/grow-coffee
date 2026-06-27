@@ -3,6 +3,7 @@ import { initialGameState } from './constants.js'
 import { normalizeGameState, sanitizeLoadedGameState } from './gameLogic.js'
 import { settlePassiveGrowth } from './passiveGrowth.js'
 import { resolveDailyRitual, normalizeDailyRitual } from './dailyRitual.js'
+import { resolveMenuRecommendations, normalizeMenuRecommendations } from './menuRecommendations.js'
 import { getTodayKey } from './waterQuota.js'
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from './supabase.js'
 import { patchLocalDb, readLocalDb } from './store.js'
@@ -30,7 +31,12 @@ const GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE = `${GAME_STATE_COLUMNS_WITH_POINT}
 const RITUAL_STATE_COLUMNS =
   'ritual_day_key, ritual_fortune_id, ritual_fortune_revealed, ritual_fortune_progress, ritual_fortune_claimed, ritual_gift_opened, ritual_gift_id, ritual_mission_1_id, ritual_mission_2_id, ritual_mission_3_id, ritual_mission_1_done, ritual_mission_2_done, ritual_mission_3_done, ritual_mission_claimed, ritual_mission_harvest_count, ritual_mission_minigame_done, ritual_mission_roulette_done, ritual_fertilizer_charges, ritual_bonus_roulette_spins'
 
+const RECOMMEND_STATE_COLUMNS =
+  'recommend_coffee_day_key, recommend_coffee_primary_id, recommend_coffee_reroll_id, recommend_coffee_reroll_day_key, recommend_dinner_day_key, recommend_dinner_primary_id, recommend_dinner_reroll_id, recommend_dinner_reroll_day_key'
+
 const GAME_STATE_COLUMNS_WITH_RITUAL = `${GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE}, ${RITUAL_STATE_COLUMNS}`
+
+const GAME_STATE_COLUMNS_WITH_RECOMMEND = `${GAME_STATE_COLUMNS_WITH_RITUAL}, ${RECOMMEND_STATE_COLUMNS}`
 
 const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_CORE}, passive_coffees_claimed`
 const GAME_STATE_COLUMNS_WITH_SHARE_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_NO_DAILY_RANKING}, share_reward_day_key`
@@ -40,6 +46,8 @@ const GAME_STATE_COLUMNS_WITH_POINT_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WIT
 const GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_POINT_NO_DAILY_RANKING}, daily_login_roulette_day_key, daily_login_roulette_reward_cups, daily_login_roulette_respin_day_key`
 
 const GAME_STATE_COLUMNS_WITH_RITUAL_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE_NO_DAILY_RANKING}, ${RITUAL_STATE_COLUMNS}`
+
+const GAME_STATE_COLUMNS_WITH_RECOMMEND_NO_DAILY_RANKING = `${GAME_STATE_COLUMNS_WITH_RITUAL_NO_DAILY_RANKING}, ${RECOMMEND_STATE_COLUMNS}`
 
 const GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY = `${GAME_STATE_COLUMNS_LEGACY_CORE}, passive_coffees_claimed`
 const GAME_STATE_COLUMNS_WITH_SHARE_LEGACY = `${GAME_STATE_COLUMNS_WITH_PASSIVE_CLAIM_LEGACY}, share_reward_day_key`
@@ -135,6 +143,11 @@ function isMissingRitualColumnError(error) {
   return message.includes('ritual_')
 }
 
+function isMissingRecommendColumnError(error) {
+  const message = String(error?.message ?? '')
+  return message.includes('recommend_coffee_') || message.includes('recommend_dinner_')
+}
+
 function warnMissingPassiveColumnOnce() {
   console.warn(
     'game_states.passive_coffees_claimed 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
@@ -177,6 +190,12 @@ function warnMissingRitualColumnOnce() {
   )
 }
 
+function warnMissingRecommendColumnOnce() {
+  console.warn(
+    'game_states 오늘의 추천(recommend) 컬럼 없음 — 백엔드/schema.sql 마이그레이션 SQL을 Supabase에서 실행해 주세요.',
+  )
+}
+
 let warnedPassiveColumn = false
 let warnedShareColumn = false
 let warnedReactivateColumn = false
@@ -184,6 +203,7 @@ let warnedAttendanceColumn = false
 let warnedPointDayKeyColumn = false
 let warnedDailyLoginRouletteColumn = false
 let warnedRitualColumn = false
+let warnedRecommendColumn = false
 let warnedLifetimeDrunkColumn = false
 let warnedLifetimeBrewedColumn = false
 let warnedDailyBrewedSpentColumn = false
@@ -289,6 +309,22 @@ function stripRitualColumns(row) {
   return rest
 }
 
+function stripRecommendColumns(row) {
+  if (!('recommend_coffee_day_key' in row)) return row
+  const {
+    recommend_coffee_day_key: _coffeeDayKey,
+    recommend_coffee_primary_id: _coffeePrimaryId,
+    recommend_coffee_reroll_id: _coffeeRerollId,
+    recommend_coffee_reroll_day_key: _coffeeRerollDayKey,
+    recommend_dinner_day_key: _dinnerDayKey,
+    recommend_dinner_primary_id: _dinnerPrimaryId,
+    recommend_dinner_reroll_id: _dinnerRerollId,
+    recommend_dinner_reroll_day_key: _dinnerRerollDayKey,
+    ...rest
+  } = row
+  return rest
+}
+
 function mapProfileRow(row) {
   return {
     userId: row.id,
@@ -379,6 +415,14 @@ function mapGameRow(row) {
     ritualMissionRouletteDone: Boolean(row.ritual_mission_roulette_done),
     ritualFertilizerCharges: Number(row.ritual_fertilizer_charges ?? 0),
     ritualBonusRouletteSpins: Number(row.ritual_bonus_roulette_spins ?? 0),
+    recommendCoffeeDayKey: String(row.recommend_coffee_day_key ?? ''),
+    recommendCoffeePrimaryId: String(row.recommend_coffee_primary_id ?? ''),
+    recommendCoffeeRerollId: String(row.recommend_coffee_reroll_id ?? ''),
+    recommendCoffeeRerollDayKey: String(row.recommend_coffee_reroll_day_key ?? ''),
+    recommendDinnerDayKey: String(row.recommend_dinner_day_key ?? ''),
+    recommendDinnerPrimaryId: String(row.recommend_dinner_primary_id ?? ''),
+    recommendDinnerRerollId: String(row.recommend_dinner_reroll_id ?? ''),
+    recommendDinnerRerollDayKey: String(row.recommend_dinner_reroll_day_key ?? ''),
   })
 }
 
@@ -914,12 +958,22 @@ function toGameRow(state) {
     ritual_mission_roulette_done: current.ritualMissionRouletteDone,
     ritual_fertilizer_charges: current.ritualFertilizerCharges,
     ritual_bonus_roulette_spins: current.ritualBonusRouletteSpins,
+    recommend_coffee_day_key: current.recommendCoffeeDayKey,
+    recommend_coffee_primary_id: current.recommendCoffeePrimaryId,
+    recommend_coffee_reroll_id: current.recommendCoffeeRerollId,
+    recommend_coffee_reroll_day_key: current.recommendCoffeeRerollDayKey,
+    recommend_dinner_day_key: current.recommendDinnerDayKey,
+    recommend_dinner_primary_id: current.recommendDinnerPrimaryId,
+    recommend_dinner_reroll_id: current.recommendDinnerRerollId,
+    recommend_dinner_reroll_day_key: current.recommendDinnerRerollDayKey,
   }
 
   return row
 }
 
 const GAME_STATE_SELECT_VARIANTS = [
+  GAME_STATE_COLUMNS_WITH_RECOMMEND,
+  GAME_STATE_COLUMNS_WITH_RECOMMEND_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_RITUAL,
   GAME_STATE_COLUMNS_WITH_RITUAL_NO_DAILY_RANKING,
   GAME_STATE_COLUMNS_WITH_DAILY_ROULETTE,
@@ -941,6 +995,7 @@ const GAME_STATE_SELECT_VARIANTS = [
 
 function isMissingGameStateColumnError(error) {
   return (
+    isMissingRecommendColumnError(error) ||
     isMissingRitualColumnError(error) ||
     isMissingDailyLoginRouletteColumnError(error) ||
     isMissingPointDayKeyColumnError(error) ||
@@ -958,6 +1013,12 @@ function warnMissingGameStateColumnOnce(error) {
   if (isMissingRitualColumnError(error) && !warnedRitualColumn) {
     warnedRitualColumn = true
     warnMissingRitualColumnOnce()
+    return
+  }
+
+  if (isMissingRecommendColumnError(error) && !warnedRecommendColumn) {
+    warnedRecommendColumn = true
+    warnMissingRecommendColumnOnce()
     return
   }
 
@@ -1016,6 +1077,10 @@ function warnMissingGameStateColumnOnce(error) {
 }
 
 function stripMissingGameStateColumns(error, payload) {
+  if (isMissingRecommendColumnError(error)) {
+    return stripRecommendColumns(payload)
+  }
+
   if (isMissingRitualColumnError(error)) {
     return stripRitualColumns(payload)
   }
@@ -1192,6 +1257,53 @@ async function resolveAndPersistDailyRitual(userId, state) {
   return saveGameState(userId, resolved)
 }
 
+function saveRecommendOverlay(userId, state) {
+  patchLocalDb((db) => {
+    db.recommendOverlays ??= {}
+    db.recommendOverlays[userId] = normalizeMenuRecommendations(state)
+  })
+}
+
+function clearStaleRecommendOverlay(userId, today = getTodayKey()) {
+  patchLocalDb((db) => {
+    const overlay = db.recommendOverlays?.[userId]
+    const coffeeDay = overlay?.recommendCoffeeDayKey ?? ''
+    const dinnerDay = overlay?.recommendDinnerDayKey ?? ''
+    if ((coffeeDay && coffeeDay !== today) || (dinnerDay && dinnerDay !== today)) {
+      delete db.recommendOverlays[userId]
+    }
+  })
+}
+
+function mergeRecommendOverlay(userId, state) {
+  clearStaleRecommendOverlay(userId)
+  const overlay = readLocalDb().recommendOverlays?.[userId]
+  if (!overlay) {
+    return state
+  }
+
+  return { ...state, ...normalizeMenuRecommendations(overlay) }
+}
+
+async function resolveAndPersistMenuRecommendations(userId, state) {
+  const resolved = resolveMenuRecommendations(userId, state, getTodayKey())
+  const before = normalizeMenuRecommendations(state)
+  const after = normalizeMenuRecommendations(resolved.state)
+
+  const needsSave =
+    resolved.changed ||
+    before.recommendCoffeeDayKey !== after.recommendCoffeeDayKey ||
+    before.recommendDinnerDayKey !== after.recommendDinnerDayKey ||
+    (!before.recommendCoffeePrimaryId && after.recommendCoffeePrimaryId) ||
+    (!before.recommendDinnerPrimaryId && after.recommendDinnerPrimaryId)
+
+  if (!needsSave) {
+    return { ...state, ...after }
+  }
+
+  return saveGameState(userId, resolved.state)
+}
+
 async function settleAndPersistPassiveGrowth(userId, raw) {
   const loaded = sanitizeLoadedGameState(raw ?? initialGameState)
   const settled = settlePassiveGrowth(loaded)
@@ -1207,7 +1319,10 @@ export async function getGameState(userId) {
   if (!isSupabaseAdminConfigured()) {
     const db = readLocalDb()
     const afterPassive = await settleAndPersistPassiveGrowth(userId, db.gameStates[userId])
-    return resolveAndPersistDailyRitual(userId, mergeRitualOverlay(userId, afterPassive))
+    const withRecommend = mergeRecommendOverlay(userId, afterPassive)
+    const withRitual = mergeRitualOverlay(userId, withRecommend)
+    const afterRitual = await resolveAndPersistDailyRitual(userId, withRitual)
+    return resolveAndPersistMenuRecommendations(userId, afterRitual)
   }
 
   const supabase = getSupabaseAdmin()
@@ -1228,12 +1343,16 @@ export async function getGameState(userId) {
     }
 
     const seeded = resolveDailyRitual(userId, { ...initialGameState }, getTodayKey())
-    return resolveAndPersistDailyRitual(userId, settlePassiveGrowth(seeded))
+    const withRecommend = resolveMenuRecommendations(userId, seeded, getTodayKey()).state
+    const afterRitual = await resolveAndPersistDailyRitual(userId, settlePassiveGrowth(withRecommend))
+    return resolveAndPersistMenuRecommendations(userId, afterRitual)
   }
 
   const afterPassive = await settleAndPersistPassiveGrowth(userId, mapGameRow(data))
-  const withRitual = mergeRitualOverlay(userId, afterPassive)
-  return resolveAndPersistDailyRitual(userId, withRitual)
+  const withRecommend = mergeRecommendOverlay(userId, afterPassive)
+  const withRitual = mergeRitualOverlay(userId, withRecommend)
+  const afterRitual = await resolveAndPersistDailyRitual(userId, withRitual)
+  return resolveAndPersistMenuRecommendations(userId, afterRitual)
 }
 
 export async function saveGameState(userId, state, options = {}) {
@@ -1251,6 +1370,7 @@ export async function saveGameState(userId, state, options = {}) {
       }
       db.gameStates[userId] = next
       saveRitualOverlay(userId, next)
+      saveRecommendOverlay(userId, next)
     })
     return next
   }
@@ -1286,6 +1406,7 @@ export async function saveGameState(userId, state, options = {}) {
   }
 
   saveRitualOverlay(userId, next)
+  saveRecommendOverlay(userId, next)
 
   return next
 }

@@ -75,6 +75,11 @@ import {
   applyDevResetDailyRitual,
   applyDevSetDailyRitualFortune,
 } from './dailyRitualDev.js'
+import {
+  applyRecommendReroll,
+  buildRecommendTodayView,
+  normalizeRecommendKind,
+} from './menuRecommendations.js'
 import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
 import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE } from './constants.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
@@ -892,6 +897,68 @@ app.post('/api/ritual/missions/claim', requireUser, async (req, res) => {
       state,
       rewardCups: result.rewardCups,
       ritual: buildRitualTodayView(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.get('/api/recommend/today', requireUser, async (req, res) => {
+  try {
+    const kind = normalizeRecommendKind(req.query?.kind)
+    if (!kind) {
+      res.status(400).json({ ok: false, message: '추천 종류를 확인할 수 없어요.' })
+      return
+    }
+
+    const state = await getGameState(req.userId)
+    const recommend = buildRecommendTodayView(state, kind)
+
+    res.json({
+      ok: true,
+      state,
+      kind,
+      recommend,
+      menuId: recommend.activeId,
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/recommend/reroll', requireUser, async (req, res) => {
+  try {
+    const kind = normalizeRecommendKind(req.body?.kind)
+    if (!kind) {
+      res.status(400).json({ ok: false, message: '추천 종류를 확인할 수 없어요.' })
+      return
+    }
+
+    const current = await getGameState(req.userId)
+    const result = applyRecommendReroll(current, req.userId, kind)
+
+    if (!result.ok) {
+      const messages = {
+        'day-mismatch': '오늘 추천을 다시 불러와 주세요.',
+        'reroll-used': '오늘은 이미 다른 메뉴를 추천받았어요.',
+        'menu-missing': '추천 메뉴를 불러오지 못했어요.',
+      }
+      res.status(400).json({
+        ok: false,
+        message: messages[result.reason] || '다른 메뉴를 추천받을 수 없어요.',
+        state: result.state,
+      })
+      return
+    }
+
+    const state = await saveGameState(req.userId, result.state)
+    res.json({
+      ok: true,
+      state,
+      kind,
+      menuId: result.menuId,
+      previousId: result.previousId,
+      recommend: buildRecommendTodayView(state, kind),
     })
   } catch (error) {
     handleApiError(res, error)
