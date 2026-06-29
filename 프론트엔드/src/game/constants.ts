@@ -21,10 +21,11 @@ export const PASSIVE_GROWTH_PER_SECOND = PASSIVE_GROWTH_PER_MINUTE / 60;
 export const DAILY_PASSIVE_GROWTH_CAP = 200;
 /** 방치 성장 UI 갱신 주기(ms) — 게이지·%가 촤르륵 오르도록 자주 갱신 */
 export const PASSIVE_DISPLAY_TICK_MS = 120;
-/** 성장률 React 반영 최소 간격(ms) — 물주기 중 숫자·게이지가 눈에 보이게 */
-export const DISPLAY_GROWTH_COMMIT_MS = 80;
-/** 커피나무 성장률 표시 — 물주기 25% 단위라 정수만 */
-export const TREE_GROWTH_DISPLAY_DECIMALS = 2;
+/** 성장률 React 반영 최소 간격(ms) — 물주기 중 게이지·숫자 동기화 */
+export const DISPLAY_GROWTH_COMMIT_MS = 50;
+/** 커피나무 성장률 표시 — 물주기 중 1자리, 확정 시 정수 */
+export const TREE_GROWTH_DISPLAY_DECIMALS = 1;
+export const TREE_GROWTH_IDLE_DECIMALS = 0;
 /** 방치 커피 게이지 표시 소수 자릿수 */
 export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 마시기 mp4 프리로드 시작 성장률(%) — 첫 물주기 직후부터 버퍼링 */
@@ -32,13 +33,21 @@ export const DRINK_VIDEO_PRELOAD_GROWTH_MIN = 25;
 /** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 
-/** 물 주기 꾹 누르기 시간 (초) — 매번 3~4초 랜덤 */
-export const HOLD_MIN_SEC = 3;
-export const HOLD_MAX_SEC = 4;
-export const HOLD_DURATION_LABEL = `${HOLD_MIN_SEC}~${HOLD_MAX_SEC}초`;
+/** 물 주기 꾹 누르기 시간 (초) */
+export const HOLD_MIN_SEC = 2;
+export const HOLD_MAX_SEC = 2;
+export const HOLD_DURATION_LABEL =
+  HOLD_MIN_SEC === HOLD_MAX_SEC
+    ? `${HOLD_MIN_SEC}초`
+    : `${HOLD_MIN_SEC}~${HOLD_MAX_SEC}초`;
 
-export const PLANT_BG_SRC = '/plant-bg.png';
-/** 커피 완성 단계(75~99%) 배경 — 473×1024 */
+/** 1~2단계(0~50%) 창가·물뜨개 배경 */
+export const PLANT_BG_EARLY_SRC = '/plant-bg-early.png?v=1';
+/** 3단계(50~75%) 성장 배경 */
+export const PLANT_BG_MID_SRC = '/plant-bg-complete.png?v=2';
+/** @deprecated PLANT_BG_EARLY_SRC 사용 */
+export const PLANT_BG_SRC = PLANT_BG_EARLY_SRC;
+/** 4단계(75~99%) 카페 배경 — 473×1024 */
 export const COFFEE_COMPLETE_BG_SRC = '/images/plant/coffee-complete-bg.png?v=3';
 export const WATERING_CAN_SRC = '/images/plant/watering-can.png?v=12';
 /** 커피냥 버튼 캐릭터 */

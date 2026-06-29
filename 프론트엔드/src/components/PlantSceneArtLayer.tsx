@@ -1,15 +1,18 @@
 import { memo, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useButtonSound } from '../audio/SoundProvider';
-import {
-  COFFEE_COMPLETE_BG_SRC,
-  PLANT_BG_SRC,
-} from '../game/constants';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
 import {
   getActiveCoffeePlayback,
   type SelectedCoffeeSlug,
 } from '../game/hiddenCoffeeVariants';
-import { formatWon, getStage, isCoffeeStage, isDrinkStage } from '../game/utils';
+import {
+  formatWon,
+  getPlantBackgroundSrc,
+  getPlantStageGrowth,
+  getStage,
+  isCoffeeStage,
+  isDrinkStage,
+} from '../game/utils';
 import { CatBonusButton } from './CatBonusButton';
 import { RecommendButtons } from './RecommendButtons';
 import { SceneDialogueBox } from './SceneDialogueBox';
@@ -67,18 +70,19 @@ function PlantSceneArtLayerComponent({
   slotBelowShop,
 }: PlantSceneArtLayerProps) {
   const buttonSound = useButtonSound();
-  const stage = getStage(plantGrowth);
+  const stageGrowth = getPlantStageGrowth(plantGrowth);
+  const stage = getStage(stageGrowth);
   const drinkStage = isDrinkStage(plantGrowth);
-  const coffeeStage = isCoffeeStage(plantGrowth) && !drinkStage;
-  const showCoffeeVariant = isCoffeeStage(plantGrowth) || drinkStage;
+  const coffeeStage = isCoffeeStage(stageGrowth) && !drinkStage;
+  const showCoffeeVariant = isCoffeeStage(stageGrowth) || drinkStage;
   const storedPlayback = useMemo((): ReturnType<typeof getActiveCoffeePlayback> | null => {
     if (!showCoffeeVariant) return null;
-    return getActiveCoffeePlayback(plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants);
-  }, [showCoffeeVariant, plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants]);
+    return getActiveCoffeePlayback(stageGrowth, selectedCoffeeVariant, ownedCoffeeVariants);
+  }, [showCoffeeVariant, stageGrowth, selectedCoffeeVariant, ownedCoffeeVariants]);
 
   const plantImageSrc = coffeeStage && storedPlayback ? storedPlayback.image : stage.image;
   const plantImageKey = coffeeStage && storedPlayback ? storedPlayback.id : stage.min;
-  const bgSrc = coffeeStage ? COFFEE_COMPLETE_BG_SRC : PLANT_BG_SRC;
+  const bgSrc = getPlantBackgroundSrc(stageGrowth);
   const harvestRewardStopY =
     harvestReward?.cups == null
       ? 0

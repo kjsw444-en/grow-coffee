@@ -1,9 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { formatTreeGrowthPercent, getStage, getStageGrowthRange } from '../game/utils';
+import {
+  formatTreeGaugePercent,
+  getStage,
+  getStageGrowthRange,
+  getTreeGaugeGrowth,
+} from '../game/utils';
 
 type GrowthPanelTreeSectionProps = {
   growth: number;
-  labelGrowth: number;
   stageGrowth: number;
   barLive: boolean;
   passiveHint?: string | null;
@@ -14,7 +18,6 @@ type GrowthPanelTreeSectionProps = {
 
 function GrowthPanelTreeSectionComponent({
   growth,
-  labelGrowth,
   stageGrowth,
   barLive,
   passiveHint,
@@ -23,28 +26,29 @@ function GrowthPanelTreeSectionComponent({
   ritualGiftDescription,
 }: GrowthPanelTreeSectionProps) {
   const stage = getStage(stageGrowth);
-  const barWidth = Math.min(100, Math.max(0, growth));
-  const prevLabelGrowthRef = useRef(labelGrowth);
+  const gaugeGrowth = getTreeGaugeGrowth(growth);
+  const barWidth = gaugeGrowth;
+  const prevGaugeGrowthRef = useRef(gaugeGrowth);
   const [percentTick, setPercentTick] = useState(false);
   const [giftTipOpen, setGiftTipOpen] = useState(false);
   const giftTipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!barLive) {
-      prevLabelGrowthRef.current = labelGrowth;
+      prevGaugeGrowthRef.current = gaugeGrowth;
       setPercentTick(false);
       return;
     }
 
-    if (Math.abs(labelGrowth - prevLabelGrowthRef.current) < 0.005) {
+    if (Math.abs(gaugeGrowth - prevGaugeGrowthRef.current) < 0.005) {
       return;
     }
 
-    prevLabelGrowthRef.current = labelGrowth;
+    prevGaugeGrowthRef.current = gaugeGrowth;
     setPercentTick(true);
     const timer = window.setTimeout(() => setPercentTick(false), 260);
     return () => window.clearTimeout(timer);
-  }, [barLive, labelGrowth]);
+  }, [barLive, gaugeGrowth]);
 
   useEffect(() => {
     if (!giftTipOpen) return;
@@ -71,7 +75,7 @@ function GrowthPanelTreeSectionComponent({
         <span
           className={`growth-panel__percent${barLive ? ' growth-panel__percent--live' : ''}${percentTick ? ' growth-panel__percent--tick' : ''}`}
         >
-          {formatTreeGrowthPercent(labelGrowth)}
+          {formatTreeGaugePercent(gaugeGrowth, barLive)}
         </span>
         {ritualGiftLabel && ritualGiftDescription && (
           <div ref={giftTipRef} className="growth-panel__ritual-gift-wrap">

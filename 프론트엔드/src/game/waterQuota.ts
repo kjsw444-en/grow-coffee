@@ -1,4 +1,5 @@
 import type { GameState } from './types';
+import { HOLD_DURATION_LABEL } from './constants';
 import { isReadyToDrinkGrowth } from './growthHold';
 import { roundGrowth } from './passiveGrowth';
 import { getRefillActionLabel, isCoffeeStage } from './utils';
@@ -137,11 +138,11 @@ export function formatWaterPanelHint({
   }
 
   if (waterStatus.freeAvailable) {
-    return `오늘 첫 물주기 · 버튼 3초 꾹 누르기 (75%)`;
+    return `오늘 첫 물주기 · 버튼 ${HOLD_DURATION_LABEL} 꾹 누르기`;
   }
 
   if (waterStatus.adWaterCredits > 0) {
-    return `물주기 가능 · 버튼 3초 꾹 누르기 (75%)`;
+    return `물주기 가능 · 버튼 ${HOLD_DURATION_LABEL} 꾹 누르기`;
   }
 
   return null;

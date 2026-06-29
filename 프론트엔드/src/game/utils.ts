@@ -1,18 +1,36 @@
 import {
+  COFFEE_COMPLETE_BG_SRC,
   COFFEE_STAGE_MIN,
   DRINK_STAGE_MIN,
   GROWTH_DISPLAY_DECIMALS,
   GROWTH_PER_WATER,
   PASSIVE_GROWTH_DISPLAY_DECIMALS,
+  PLANT_BG_EARLY_SRC,
+  PLANT_BG_MID_SRC,
   STAGES,
   TREE_GROWTH_DISPLAY_DECIMALS,
+  TREE_GROWTH_IDLE_DECIMALS,
 } from './constants';
+import { PRE_DRINK_DISPLAY_MAX } from './growthHold';
 import { roundGrowth } from './passiveGrowth';
 
 const STAGES_DESC = [...STAGES].reverse();
 
 export function getStage(growth: number) {
   return STAGES_DESC.find((stage) => growth >= stage.min) ?? STAGES[0];
+}
+
+/** 물주기 4단계 배경 — 0~50 / 50~75 / 75~99 */
+export function getPlantBackgroundSrc(growth: number) {
+  const value = roundGrowth(Math.min(100, Math.max(0, growth)));
+  if (value >= COFFEE_STAGE_MIN) return COFFEE_COMPLETE_BG_SRC;
+  if (value >= 50) return PLANT_BG_MID_SRC;
+  return PLANT_BG_EARLY_SRC;
+}
+
+/** 식물 단계·배경 판정용 성장률 */
+export function getPlantStageGrowth(growth: number) {
+  return roundGrowth(Math.min(PRE_DRINK_DISPLAY_MAX, Math.max(0, growth)));
 }
 
 export function getStageGrowthRange(stage: (typeof STAGES)[number]) {
@@ -53,17 +71,29 @@ export function formatGrowthPercent(growth: number) {
   return `${value.toFixed(GROWTH_DISPLAY_DECIMALS)}%`;
 }
 
-/** 커피나무 성장률 — 소수 2자리, 물주기 중에는 displayGrowth와 함께 서서히 상승 */
-export function formatTreeGrowthPercent(
-  growth: number,
-  decimals = TREE_GROWTH_DISPLAY_DECIMALS,
-) {
-  const value = roundGrowth(Math.min(100, Math.max(0, growth)));
-  if (value >= 100) {
-    return decimals > 0 ? `100.${'0'.repeat(decimals)}%` : '100%';
+/** 게이지·숫자 라벨 공통 클램프 */
+export function getTreeGaugeGrowth(growth: number) {
+  return roundGrowth(Math.min(100, Math.max(0, growth)));
+}
+
+/** 게이지 바 너비·% 라벨 — 같은 값·같은 반올림 */
+export function formatTreeGaugePercent(growth: number, live = false) {
+  const value = getTreeGaugeGrowth(growth);
+  if (value >= 100) return '100%';
+
+  if (live) {
+    return `${value.toFixed(TREE_GROWTH_DISPLAY_DECIMALS)}%`;
   }
 
-  return `${value.toFixed(decimals)}%`;
+  return `${value.toFixed(TREE_GROWTH_IDLE_DECIMALS)}%`;
+}
+
+/** 커피나무 성장률 — 대사·툴팁 등 */
+export function formatTreeGrowthPercent(
+  growth: number,
+  decimals = TREE_GROWTH_IDLE_DECIMALS,
+) {
+  return formatTreeGaugePercent(growth, decimals > 0);
 }
 
 /** 확정 성장치를 25% 단위로 맞춤 — UI·표시용 */

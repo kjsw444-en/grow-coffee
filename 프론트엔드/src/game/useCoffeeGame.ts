@@ -49,6 +49,7 @@ import {
   DISPLAY_GROWTH_COMMIT_MS,
   GOAL_AMOUNT,
   GROWTH_DISPLAY_DECIMALS,
+  GROWTH_PER_WATER,
   randomWaterDurationSec,
 } from './constants';
 import {
@@ -64,6 +65,7 @@ import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
   previewHoldDisplayGrowth,
+  reconcileLegacyServerGrowth,
   resolveWaterSyncGrowth,
   sanitizeGrowthForWaters,
 } from './growthHold';
@@ -158,7 +160,10 @@ function normalizeLoadedState(raw: GameState) {
   );
   const normalized: GameState = {
     ...raw,
-    growth: sanitizeGrowthForWaters(raw.growth ?? 0),
+    growth: reconcileLegacyServerGrowth(
+      sanitizeGrowthForWaters(raw.growth ?? 0),
+      totalWaters,
+    ),
     money: readCount(raw, 'money', 'money'),
     totalCoffees: readCount(raw, 'totalCoffees', 'total_coffees'),
     totalWaters,
@@ -585,10 +590,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const applyStateWithPreview = useCallback(
     (raw: GameState, holdStartGrowth?: number, epoch?: number) => {
-      const growth =
-        holdStartGrowth !== undefined
-          ? resolveWaterSyncGrowth(holdStartGrowth, raw.growth)
-          : raw.growth;
+      let growth = raw.growth;
+      if (holdStartGrowth !== undefined) {
+        const beforeCharges = stateRef.current.ritualFertilizerCharges ?? 0;
+        const afterCharges = raw.ritualFertilizerCharges ?? 0;
+        const usedFertilizer = afterCharges < beforeCharges;
+        growth = resolveWaterSyncGrowth(holdStartGrowth, raw.growth, {
+          maxDelta: usedFertilizer
+            ? roundGrowth(GROWTH_PER_WATER * 1.3)
+            : GROWTH_PER_WATER,
+        });
+      }
       return applyAuthoritativeState(
         {
           ...raw,
@@ -2197,7 +2209,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     readyToDrink,
     isDrinkCommitting,
     state,
-    visualGrowth: isHolding ? state.growth : displayGrowth,
+    visualGrowth: displayGrowth,
   });
   const showWatchAdButton = growActionSlot === 'ad';
   const passiveActive =

@@ -8,14 +8,14 @@ function test(name, fn) {
   console.log(`ok: ${name}`)
 }
 
-test('첫 물주기 후 75% — 커피 한잔(광고) 후 내리기', () => {
+test('첫 물주기 후 25% — 광고 후 다음 물주기', () => {
   const state = { ...initialGameState, growth: 0 }
   assert.equal(canWaterToday(state), true)
   assert.equal(needsAdForWater(state), false)
 
   const first = applyWater(state)
   assert.equal(first.ok, true)
-  assert.equal(first.state.growth, 75)
+  assert.equal(first.state.growth, 25)
   assert.equal(first.state.watersToday, 1)
   assert.equal(canWaterToday(first.state), false)
   assert.equal(needsAdForWater(first.state), true)
@@ -43,8 +43,8 @@ test('75%에서 광고 후 내리기 1회 → 100%', () => {
   assert.equal(result.state.watersToday, 2)
 })
 
-test('광고 후 다음 사이클 물주기 가능', () => {
-  let state = { ...initialGameState, growth: 0, watersToday: 2, waterDayKey: '2026-06-20' }
+test('광고 후 다음 사이클 물주기 — 25%씩 성장', () => {
+  let state = { ...initialGameState, growth: 25, watersToday: 2, waterDayKey: '2026-06-20' }
 
   const ad = applyWatchAd(state)
   assert.equal(ad.ok, true)
@@ -53,7 +53,7 @@ test('광고 후 다음 사이클 물주기 가능', () => {
 
   const second = applyWater(ad.state)
   assert.equal(second.ok, true)
-  assert.equal(second.state.growth, 75)
+  assert.equal(second.state.growth, 50)
   assert.equal(second.state.watersToday, 3)
   assert.equal(second.state.adWaterCredits, 0)
 })

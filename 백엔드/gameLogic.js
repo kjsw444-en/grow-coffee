@@ -144,13 +144,28 @@ export function normalizeGameState(raw) {
   }
 }
 
+function reconcileLegacyServerGrowth(growth, totalWaters) {
+  const value = clampGrowth(growth)
+  if (value <= 0 || value >= 100) return value
+
+  const waters = Math.max(0, Math.floor(Number(totalWaters ?? 0)))
+  if (waters <= 0) return value
+
+  const cycleGrowth = (((waters - 1) % 4) + 1) * GROWTH_PER_WATER
+  if (value > cycleGrowth + 0.01) {
+    return cycleGrowth
+  }
+
+  return value
+}
+
 /** DB/부트스트랩 로드 시 — growth 0~100%만 보정 */
 export function sanitizeLoadedGameState(raw) {
   const normalized = withSettledDailyPoint(normalizeGameState(raw))
 
   return {
     ...normalized,
-    growth: clampGrowth(normalized.growth),
+    growth: reconcileLegacyServerGrowth(normalized.growth, normalized.totalWaters),
   }
 }
 
@@ -162,14 +177,9 @@ function withSettledDailyPoint(state, now = new Date()) {
   return settleDailyPoint(withSettledPassive(state, now), now)
 }
 
-const COFFEE_STAGE_MIN = 75
-
 function getHoldWaterGrowthDelta(state) {
   const growth = roundGrowth(state.growth)
   if (growth >= 100) return 0
-  if (growth < COFFEE_STAGE_MIN) {
-    return COFFEE_STAGE_MIN - growth
-  }
   return getRitualWaterGrowthDelta(state, GROWTH_PER_WATER)
 }
 

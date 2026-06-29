@@ -10,10 +10,6 @@ import './GrowthPanel.css';
 
 type GrowthPanelProps = {
   growth: number;
-  /** 물주기 중 holdProgress 기반 실시간 미리보기 — 바·숫자가 버튼 링과 동기화 */
-  holdPreviewGrowth?: number | null;
-  /** 숫자 라벨 — 물주기 확정치(25% 단위). 바 애니메이션과 분리 */
-  percentGrowth?: number;
   totalCoffees: number;
   emptiedCoffeeCups: number;
   passiveCoffee?: PassiveCoffeeStat | null;
@@ -46,8 +42,6 @@ type GrowthPanelProps = {
 
 function GrowthPanelComponent({
   growth,
-  holdPreviewGrowth = null,
-  percentGrowth,
   totalCoffees,
   emptiedCoffeeCups,
   passiveCoffee = null,
@@ -77,8 +71,6 @@ function GrowthPanelComponent({
   claimingAttendanceDaily = false,
   claimingAttendanceStreak = false,
 }: GrowthPanelProps) {
-  const treeGrowth = holdPreviewGrowth ?? growth;
-  const labelGrowth = percentGrowth ?? treeGrowth;
   const barLive = Boolean(isWatering);
 
   return (
@@ -98,9 +90,8 @@ function GrowthPanelComponent({
         />
       )}
       <GrowthPanelTreeSection
-        growth={treeGrowth}
-        labelGrowth={labelGrowth}
-        stageGrowth={treeStageGrowth ?? labelGrowth}
+        growth={growth}
+        stageGrowth={treeStageGrowth ?? growth}
         barLive={barLive}
         passiveHint={passiveHint}
         waterHint={waterHint}

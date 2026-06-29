@@ -1355,10 +1355,9 @@ export function CoffeeGame() {
     ],
   );
 
-  const drinkStage = useMemo(
-    () => isDrinkStage(isHolding ? state.growth : displayGrowth),
-    [displayGrowth, isHolding, state.growth],
-  );
+  const treePanelGrowth = getRitualEffectiveGrowth(state, displayGrowth);
+  const treeWatering = isHolding && (holdMode === 'water' || holdMode === 'brew');
+  const drinkStage = useMemo(() => isDrinkStage(displayGrowth), [displayGrowth]);
 
   const tutorialPlantProps = useMemo(
     () =>
@@ -1414,7 +1413,7 @@ export function CoffeeGame() {
             )}
             <PlantScene
               growth={displayGrowth}
-              plantGrowth={getRitualEffectiveGrowth(state, isHolding ? state.growth : displayGrowth)}
+              plantGrowth={getRitualEffectiveGrowth(state, displayGrowth)}
               selectedCoffeeVariant={state.selectedCoffeeVariant}
               ownedCoffeeVariants={state.ownedCoffeeVariants}
               isWatering={isHolding}
@@ -1489,12 +1488,7 @@ export function CoffeeGame() {
             )}
 
             <GrowthPanel
-              growth={
-                isHolding && (holdMode === 'water' || holdMode === 'brew')
-                  ? displayGrowth
-                  : state.growth
-              }
-              percentGrowth={state.growth}
+              growth={treePanelGrowth}
               totalCoffees={state.totalCoffees}
               emptiedCoffeeCups={state.spentCoffeeCups}
               passiveCoffee={passiveCoffeePanelStats}
@@ -1507,16 +1501,13 @@ export function CoffeeGame() {
               passiveClaimFeedback={passiveClaimFeedback}
               waterHint={waterHint}
               passiveHint={passiveHint}
-              isWatering={isHolding && (holdMode === 'water' || holdMode === 'brew')}
+              isWatering={treeWatering}
               isPassivelyAccruing={
                 passiveActive && !passiveCupStats.canClaim && !passiveCupStats.complete
               }
               ritualGiftLabel={openedRitualGiftLabel}
               ritualGiftDescription={openedRitualGiftDescription}
-              treeStageGrowth={getRitualEffectiveGrowth(
-                state,
-                isHolding && (holdMode === 'water' || holdMode === 'brew') ? displayGrowth : state.growth,
-              )}
+              treeStageGrowth={treePanelGrowth}
               sellBatchLabel="내린 커피 마시기"
               onSellBatch={handleSellBatch}
               onClaimFinishBonus={handleClaimFinishBonus}
