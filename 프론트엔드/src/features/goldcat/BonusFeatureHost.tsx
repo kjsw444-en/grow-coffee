@@ -134,6 +134,13 @@ export function BonusFeatureHost({
     [onGrantMinigameReward, rewardMission],
   );
 
+  useLayoutEffect(() => {
+    if (!view) return;
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    overlay.scrollTop = overlayScrollRef.current;
+  }, [message, view]);
+
   if (!view) return null;
 
   function handleCloseAll() {
@@ -216,12 +223,6 @@ export function BonusFeatureHost({
       );
     }
   }
-
-  useLayoutEffect(() => {
-    const overlay = overlayRef.current;
-    if (!overlay) return;
-    overlay.scrollTop = overlayScrollRef.current;
-  }, [message]);
 
   return (
     <div

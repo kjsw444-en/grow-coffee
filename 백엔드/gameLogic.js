@@ -162,6 +162,17 @@ function withSettledDailyPoint(state, now = new Date()) {
   return settleDailyPoint(withSettledPassive(state, now), now)
 }
 
+const COFFEE_STAGE_MIN = 75
+
+function getHoldWaterGrowthDelta(state) {
+  const growth = roundGrowth(state.growth)
+  if (growth >= 100) return 0
+  if (growth < COFFEE_STAGE_MIN) {
+    return COFFEE_STAGE_MIN - growth
+  }
+  return getRitualWaterGrowthDelta(state, GROWTH_PER_WATER)
+}
+
 export function applyWater(state) {
   const current = withSettledPassive(state)
 
@@ -174,7 +185,7 @@ export function applyWater(state) {
   }
 
   const nextQuota = consumeWaterQuota(current)
-  const waterDelta = getRitualWaterGrowthDelta(current, GROWTH_PER_WATER)
+  const waterDelta = getHoldWaterGrowthDelta(current)
   let next = {
     ...current,
     ...nextQuota,
@@ -377,11 +388,15 @@ export function applyDrink(state, options = {}) {
 
   const attendanceResult = applyAttendanceFromTreeHarvest(current)
   const rewardCups = pickTreeHarvestRewardCups(options.randomValue ?? Math.random())
+  const quota = normalizeWaterQuota(current)
 
   let next = {
     ...current,
     growth: getRitualPostDrinkGrowth(current),
     growthAccrualSyncedAt: new Date().toISOString(),
+    waterDayKey: quota.waterDayKey,
+    watersToday: 0,
+    adWaterCredits: quota.adWaterCredits,
     ...grantBrewedCoffeeFields(current, rewardCups),
     ...attendanceResult.attendance,
   }

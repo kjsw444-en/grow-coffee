@@ -1,6 +1,7 @@
 import type { GameState } from './types';
-import { getRefillActionLabel, isCoffeeStage, isDrinkStage } from './utils';
-
+import { isReadyToDrinkGrowth } from './growthHold';
+import { roundGrowth } from './passiveGrowth';
+import { getRefillActionLabel, isCoffeeStage } from './utils';
 export function getTodayKey(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
@@ -29,13 +30,17 @@ export function canWaterToday(state: GameState) {
   return quota.watersToday === 0 || quota.adWaterCredits > 0;
 }
 
-/** 물주기·내리기 1회 사용 후, 광고 전 */
+/** 물주기·내리기 1회 사용 후, 광고 전 — 100% 마시기 단계 제외 */
 export function needsAdForWater(state: GameState) {
   const quota = normalizeWaterQuota(state);
+  const growth = roundGrowth(state.growth);
+  if (isReadyToDrinkGrowth(growth)) {
+    return false;
+  }
   return quota.watersToday > 0 && quota.adWaterCredits === 0;
 }
 
-/** 물주기·내리기 꾹 누르기 가능 — 광고 슬롯이 아닐 때만 */
+/** 물주기·내리기 꾹 누르기 가능 */
 export function canUseGrowHold(state: GameState) {
   return canWaterToday(state) && !needsAdForWater(state);
 }
@@ -88,12 +93,12 @@ export function mergeWaterQuotaFromServer(
 export function getWaterStatus(state: GameState) {
   const quota = normalizeWaterQuota(state);
   const freeAvailable = quota.watersToday === 0;
-  const needsAd = quota.watersToday > 0 && quota.adWaterCredits === 0;
+  const needsAd = needsAdForWater(state);
 
   return {
     ...quota,
     freeAvailable,
-    canWater: freeAvailable || quota.adWaterCredits > 0,
+    canWater: canWaterToday(state),
     needsAd,
     canUseGrowHold: canUseGrowHold(state),
   };
@@ -132,11 +137,11 @@ export function formatWaterPanelHint({
   }
 
   if (waterStatus.freeAvailable) {
-    return `오늘 첫 ${actionLabel} · 아래 버튼 꾹 누르기 (+25%)`;
+    return `오늘 첫 물주기 · 버튼 3초 꾹 누르기 (75%)`;
   }
 
   if (waterStatus.adWaterCredits > 0) {
-    return `${actionLabel} 가능 · 아래 버튼 꾹 누르기 (+25%)`;
+    return `물주기 가능 · 버튼 3초 꾹 누르기 (75%)`;
   }
 
   return null;
@@ -154,9 +159,15 @@ export function getGrowActionSlot({
   state: GameState;
   visualGrowth?: number;
 }): GrowActionSlot {
-  if (readyToDrink || isDrinkCommitting) return 'drink';
-  const growthForStage = visualGrowth ?? state.growth;
-  if (isDrinkStage(growthForStage)) return 'drink';
+  const growth = visualGrowth ?? state.growth;
+  if (
+    readyToDrink ||
+    isDrinkCommitting ||
+    isReadyToDrinkGrowth(state.growth) ||
+    isReadyToDrinkGrowth(growth)
+  ) {
+    return 'drink';
+  }
   if (needsAdForWater(state)) return 'ad';
   return 'water';
 }

@@ -21,10 +21,11 @@ import {
   resetCatRouletteGuideForToday,
 } from '../services/catGuideStorage';
 import { getAttendanceUiStats, getTodayKey } from '../game/attendance';
-import { formatPassivePanelHint, formatPassiveTimeRemainingLabel, getPassiveUiStats } from '../game/passiveGrowth';
+import { formatPassivePanelHint, formatPassiveTimeRemainingLabel, getPassiveUiStats, roundGrowth } from '../game/passiveGrowth';
 import { formatWaterPanelHint } from '../game/waterQuota';
 import { randomCatNudgeDialogue, sceneDialogueForBonusRouletteNudge, sceneDialogueForDailyRitualFortuneNudge, sceneDialogueForDailyRouletteNudge, sceneDialogueForRevealedFortune, sceneDialogueForReviewPriming } from '../game/sceneDialogue';
 import { useCoffeeGame } from '../game/useCoffeeGame';
+import { useDrinkVideoPreload } from '../game/useDrinkVideoPreload';
 import { REVIEW_TRIGGER_LABELS, REVIEW_TRIGGERS, isReviewPreviewEnabled, scheduleReviewPrompt } from '../services/reviewPrompt';
 import {
   isRankingTop3PromotionMockEnabled,
@@ -190,6 +191,16 @@ export function CoffeeGame() {
     resetReviewTestStore,
     reviewPreviewStatus,
   } = useCoffeeGame({ tutorialBypassQuota: tutorialActive });
+
+  const drinkVideoPreloadGrowth = Math.max(
+    roundGrowth(state.growth),
+    roundGrowth(displayGrowth),
+  );
+  useDrinkVideoPreload(
+    drinkVideoPreloadGrowth,
+    state.selectedCoffeeVariant,
+    state.ownedCoffeeVariants,
+  );
 
   const [showSettings, setShowSettings] = useState(false);
   const [showShop, setShowShop] = useState(false);

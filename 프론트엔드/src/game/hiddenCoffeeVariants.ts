@@ -198,16 +198,10 @@ export function normalizeSelectedCoffeeVariant(
   return DEFAULT_COFFEE_VARIANT_SLUG;
 }
 
-export function getActiveCoffeePlayback(
-  growth: number,
+export function resolveCoffeePlayback(
   selectedSlug: SelectedCoffeeSlug | null | undefined,
   owned: readonly CoffeeVariantSlug[],
-): CoffeePlayback | null {
-  const COFFEE_VARIANT_GROWTH_MIN = 75;
-  if (growth < COFFEE_VARIANT_GROWTH_MIN) {
-    return null;
-  }
-
+): CoffeePlayback {
   const slug = selectedSlug ?? DEFAULT_COFFEE_VARIANT_SLUG;
 
   if (isHiddenCoffeeVariantSlug(slug) && isHiddenCoffeeUnlocked(slug, owned)) {
@@ -237,6 +231,19 @@ export function getActiveCoffeePlayback(
     image: fallback.image,
     video: fallback.video,
   };
+}
+
+export function getActiveCoffeePlayback(
+  growth: number,
+  selectedSlug: SelectedCoffeeSlug | null | undefined,
+  owned: readonly CoffeeVariantSlug[],
+): CoffeePlayback | null {
+  const COFFEE_VARIANT_GROWTH_MIN = 75;
+  if (growth < COFFEE_VARIANT_GROWTH_MIN) {
+    return null;
+  }
+
+  return resolveCoffeePlayback(selectedSlug, owned);
 }
 
 export function getNextCoffeePlaybackFallback(

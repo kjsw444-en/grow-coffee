@@ -4,12 +4,13 @@ type WatchAdButtonProps = {
   growth: number;
   disabled?: boolean;
   loading?: boolean;
+  loadingLabel?: string;
   embedded?: boolean;
   onWatchAd: () => void;
 };
 
-export function WatchAdButton({ growth, disabled, loading, onWatchAd }: WatchAdButtonProps) {
-  const label = loading ? '준비 중…' : getRefillActionLabel(growth);
+export function WatchAdButton({ growth, disabled, loading, loadingLabel, onWatchAd }: WatchAdButtonProps) {
+  const label = loading ? (loadingLabel ?? '광고 보는 중…') : getRefillActionLabel(growth);
 
   return (
     <button

@@ -1,4 +1,14 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ForwardedRef } from 'react';
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ForwardedRef,
+} from 'react';
 import { useSound } from '../audio/SoundProvider';
 import { COFFEE_COMPLETE_BG_SRC, DRINK_VIDEO_VOLUME } from '../game/constants';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
@@ -23,6 +33,12 @@ type PlantDrinkVideoLayerProps = {
   fallbackBgSrc?: string;
 };
 
+const DRINK_LOADING_LINES = [
+  '곧 바리스타가 나와요…',
+  '따뜻한 라떼 준비 중이에요 ☕',
+  '조금만 기다려 주세요',
+] as const;
+
 function PlantDrinkVideoLayerComponent(
   {
     active,
@@ -41,6 +57,8 @@ function PlantDrinkVideoLayerComponent(
   const unlockedRef = useRef(unlocked);
   unlockedRef.current = unlocked;
   const [blockedVideoSlugs, setBlockedVideoSlugs] = useState<SelectedCoffeeSlug[]>([]);
+  const [videoReady, setVideoReady] = useState(false);
+  const [loadingLineIndex, setLoadingLineIndex] = useState(0);
 
   const drinkStage = isDrinkStage(plantGrowth);
   const showCoffeeVariant = drinkStage || plantGrowth >= 75;
@@ -57,6 +75,7 @@ function PlantDrinkVideoLayerComponent(
     : null;
 
   const drinkVideoSrc = playback?.video ?? null;
+  const loadingLine = DRINK_LOADING_LINES[loadingLineIndex % DRINK_LOADING_LINES.length];
 
   useEffect(() => {
     if (!storedPlayback) return;
@@ -67,6 +86,19 @@ function PlantDrinkVideoLayerComponent(
     if (!playback || playback.id === storedPlayback?.id) return;
     preloadCoffeePlayback(playback);
   }, [playback, storedPlayback?.id]);
+
+  useEffect(() => {
+    setVideoReady(false);
+    setLoadingLineIndex(0);
+  }, [drinkVideoSrc, active]);
+
+  useEffect(() => {
+    if (!active || videoReady) return undefined;
+    const id = window.setInterval(() => {
+      setLoadingLineIndex((prev) => (prev + 1) % DRINK_LOADING_LINES.length);
+    }, 2800);
+    return () => window.clearInterval(id);
+  }, [active, videoReady]);
 
   const markVideoBroken = useCallback(
     (current: CoffeePlayback | null) => {
@@ -145,6 +177,15 @@ function PlantDrinkVideoLayerComponent(
 
   useImperativeHandle(ref, () => ({ unmute: unmuteDrinkVideo }), [unmuteDrinkVideo]);
 
+  const markVideoReady = useCallback(() => {
+    setVideoReady(true);
+  }, []);
+
+  const cycleLoadingLine = useCallback(() => {
+    if (videoReady) return;
+    setLoadingLineIndex((prev) => (prev + 1) % DRINK_LOADING_LINES.length);
+  }, [videoReady]);
+
   useEffect(() => {
     if (!active || !drinkVideoSrc) return undefined;
 
@@ -160,9 +201,17 @@ function PlantDrinkVideoLayerComponent(
       void playDrinkVideo(unlockedRef.current);
     };
 
-    const onLoadedData = () => startOnce();
-    const onCanPlay = () => startOnce();
-    const onCanPlayThrough = () => startOnce();
+    const onLoadedData = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        markVideoReady();
+      }
+      startOnce();
+    };
+    const onCanPlay = () => {
+      markVideoReady();
+      startOnce();
+    };
+    const onPlaying = () => markVideoReady();
     const onError = () => {
       if (cancelled) return;
       markVideoBroken(playback);
@@ -170,11 +219,12 @@ function PlantDrinkVideoLayerComponent(
 
     video.addEventListener('loadeddata', onLoadedData);
     video.addEventListener('canplay', onCanPlay);
-    video.addEventListener('canplaythrough', onCanPlayThrough);
+    video.addEventListener('playing', onPlaying);
     video.addEventListener('error', onError);
 
     video.load();
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      markVideoReady();
       startOnce();
     }
 
@@ -182,38 +232,63 @@ function PlantDrinkVideoLayerComponent(
       cancelled = true;
       video.removeEventListener('loadeddata', onLoadedData);
       video.removeEventListener('canplay', onCanPlay);
-      video.removeEventListener('canplaythrough', onCanPlayThrough);
+      video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onError);
       video.pause();
     };
-  }, [active, drinkVideoSrc, playback, markVideoBroken, playDrinkVideo]);
+  }, [active, drinkVideoSrc, playback, markVideoBroken, markVideoReady, playDrinkVideo]);
 
   if (!active) {
     return null;
   }
 
   if (!drinkVideoSrc) {
-    return <img className="plant-scene__bg" src={fallbackBgSrc} alt="창가 배경" />;
+    return (
+      <div className="plant-scene__drink-media">
+        <img className="plant-scene__bg plant-scene__bg--fallback" src={fallbackBgSrc} alt="창가 배경" />
+      </div>
+    );
   }
 
   return (
-    <video
-      key={drinkVideoSrc}
-      ref={videoRef}
-      className="plant-scene__bg plant-scene__bg--video"
-      src={drinkVideoSrc}
-      playsInline
-      muted
-      autoPlay
-      preload="auto"
-      aria-label="커피마시기"
-      onPointerDown={() => {
-        void unmuteDrinkVideo();
-      }}
-      onClick={() => {
-        void unmuteDrinkVideo();
-      }}
-    />
+    <div className="plant-scene__drink-media" aria-busy={!videoReady}>
+      <button
+        type="button"
+        className={`plant-scene__drink-skeleton${videoReady ? ' plant-scene__drink-skeleton--hidden' : ''}`}
+        aria-label="커피마시기 영상 준비 중"
+        aria-live="polite"
+        onClick={cycleLoadingLine}
+      >
+        <span className="plant-scene__drink-skeleton-shimmer" aria-hidden="true" />
+        <span className="plant-scene__drink-skeleton-cup" aria-hidden="true">
+          ☕
+        </span>
+        <span className="plant-scene__drink-skeleton-text">{loadingLine}</span>
+        <span className="plant-scene__drink-skeleton-hint">탭하면 다음 안내를 볼 수 있어요</span>
+      </button>
+      <video
+        key={drinkVideoSrc}
+        ref={videoRef}
+        className={`plant-scene__bg plant-scene__bg--video${videoReady ? ' plant-scene__bg--video-ready' : ''}`}
+        src={drinkVideoSrc}
+        playsInline
+        muted
+        autoPlay
+        preload="auto"
+        aria-label="커피마시기"
+        onPointerDown={() => {
+          if (!videoReady) {
+            cycleLoadingLine();
+            return;
+          }
+          void unmuteDrinkVideo();
+        }}
+        onClick={() => {
+          if (!videoReady) return;
+          void unmuteDrinkVideo();
+        }}
+      />
+    </div>
   );
 }
 

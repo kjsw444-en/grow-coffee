@@ -51,11 +51,13 @@ function readAttendanceFields(raw: GameState) {
 export function normalizeAttendance(raw: GameState, today = getTodayKey()) {
   const current = readAttendanceFields(raw);
   const { attendanceDayKey: dayKey } = current;
-  let {
+  const {
     attendanceCupsToday: harvestsToday,
-    attendanceStreak: streak,
     attendanceLastGoalDayKey: lastGoalDayKey,
     attendanceDailyClaimDayKey: dailyClaimDayKey,
+  } = current;
+  let {
+    attendanceStreak: streak,
     attendanceStreakBonusPending: streakBonusPending,
   } = current;
 

@@ -25,9 +25,10 @@ export function getBrewedCoffeePointReward(cupCount) {
   const cups = Math.max(0, Math.floor(Number(cupCount) || 0))
   return Math.floor(cups * (SELL_BATCH_REWARD / SELL_BATCH_SIZE))
 }
-export const HOLD_MIN_SEC = 3
-export const HOLD_MAX_SEC = 4
-export const ACTION_COOLDOWN_MS = HOLD_MIN_SEC * 1000
+export const HOLD_MIN_SEC = 2
+export const HOLD_MAX_SEC = 2
+/** 연속 /water 방지 — 홀드 완료 후 1회만 호출되므로 짧게 유지 */
+export const ACTION_COOLDOWN_MS = 400
 
 /** 햇빛 방치 — 1분당 5%, 20분 = 100%, 하루 최대 2잔(200%) */
 export const PASSIVE_GROWTH_PER_MINUTE = 5

@@ -1,6 +1,6 @@
 import type { DailyGameId } from '../../services/dailyGamePick';
 
-const MINIGAME_COVER_VERSION = 2;
+const MINIGAME_COVER_VERSION = 3;
 
 export type MinigameCoverMeta = {
   src: string;

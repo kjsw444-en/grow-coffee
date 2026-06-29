@@ -27,6 +27,8 @@ export const DISPLAY_GROWTH_COMMIT_MS = 80;
 export const TREE_GROWTH_DISPLAY_DECIMALS = 2;
 /** 방치 커피 게이지 표시 소수 자릿수 */
 export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 2;
+/** 마시기 mp4 프리로드 시작 성장률(%) — 첫 물주기 직후부터 버퍼링 */
+export const DRINK_VIDEO_PRELOAD_GROWTH_MIN = 25;
 /** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 
@@ -37,11 +39,11 @@ export const HOLD_DURATION_LABEL = `${HOLD_MIN_SEC}~${HOLD_MAX_SEC}초`;
 
 export const PLANT_BG_SRC = '/plant-bg.png';
 /** 커피 완성 단계(75~99%) 배경 — 473×1024 */
-export const COFFEE_COMPLETE_BG_SRC = '/images/plant/coffee-complete-bg.png?v=2';
-export const WATERING_CAN_SRC = '/images/plant/watering-can.png?v=11';
+export const COFFEE_COMPLETE_BG_SRC = '/images/plant/coffee-complete-bg.png?v=3';
+export const WATERING_CAN_SRC = '/images/plant/watering-can.png?v=12';
 /** 커피냥 버튼 캐릭터 */
-export const CAT_BUTTON_SRC = '/images/cat-button.png?v=5';
-export const CAT_BUTTON_PRESSED_SRC = '/images/cat-button-pressed.png?v=1';
+export const CAT_BUTTON_SRC = '/images/cat-button.png?v=6';
+export const CAT_BUTTON_PRESSED_SRC = '/images/cat-button-pressed.png?v=2';
 /** 커피마시기 단계(100%) — 커피 종류별 영상 (이미지와 슬러그로 매칭) */
 export { COFFEE_DRINK_LINES, COFFEE_VARIANTS, type CoffeeDrinkLine, type CoffeeDrinkLineId, type CoffeeVariant, type CoffeeVariantGender, type CoffeeVariantSlug } from './coffeeVariants';
 import { COFFEE_VARIANTS } from './coffeeVariants';
@@ -57,17 +59,17 @@ export const COFFEE_STAGE_MIN = 75;
 /** 커피마시기 단계(100%) — 카페 배경 전환 */
 export const DRINK_STAGE_MIN = 100;
 
-export const PLANT_SEED_SRC = '/images/plant/plant-seed.png?v=5';
-export const PLANT_SPROUT_SRC = '/images/plant/plant-sprout.png?v=5';
-export const PLANT_BEAN_SRC = '/images/plant/plant-bean.png?v=5';
-export const PLANT_COFFEE_SRC = '/images/plant/plant-complete.png?v=5';
+export const PLANT_SEED_SRC = '/images/plant/plant-seed.png?v=6';
+export const PLANT_SPROUT_SRC = '/images/plant/plant-sprout.png?v=6';
+export const PLANT_BEAN_SRC = '/images/plant/plant-bean.png?v=6';
+export const PLANT_COFFEE_SRC = '/images/plant/plant-complete.png?v=6';
 export const PLANT_DRINK_SRC = PLANT_COFFEE_SRC;
 
 /** 상단 추천 버튼 이미지 — PNG로 교체 가능 */
 export const RECOMMEND_BTN_WIDTH = 153;
 export const RECOMMEND_BTN_HEIGHT = 85;
-export const RECOMMEND_COFFEE_IMG = '/images/recommend/today-coffee.png?v=1';
-export const RECOMMEND_DINNER_IMG = '/images/recommend/today-dinner.png?v=2';
+export const RECOMMEND_COFFEE_IMG = '/images/recommend/today-coffee.png?v=2';
+export const RECOMMEND_DINNER_IMG = '/images/recommend/today-dinner.png?v=3';
 
 export const STAGES = [
   { min: 0, label: '씨앗', emoji: '🫘', image: PLANT_SEED_SRC },

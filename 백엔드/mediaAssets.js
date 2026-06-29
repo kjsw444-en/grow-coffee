@@ -3,10 +3,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** 캐릭터 커피 마시기 영상 캐시 버전 — 교체 시 +1 */
-export const COFFEE_VIDEO_VERSION = 9
+export const COFFEE_VIDEO_VERSION = 12
 
 /** 히든 커플 영상 캐시 버전 — 교체 시 +1 */
-export const HIDDEN_VIDEO_VERSION = 4
+export const HIDDEN_VIDEO_VERSION = 5
 
 const VIDEO_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public', 'videos')
 

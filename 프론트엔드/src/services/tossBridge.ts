@@ -13,7 +13,7 @@ import {
 import { DEFAULT_BALANCE_RULES } from '../game/passiveGrowth'
 import { DEFAULT_DISPLAY_NAME } from '../game/mockData'
 
-export const TOSS_APP_NAME = 'grow-coffee'
+export const TOSS_APP_NAME = 'coffeegrow'
 
 export async function loginWithTossSession(displayName: string): Promise<PlayerSession> {
   const { authorizationCode, referrer } = await appLogin()

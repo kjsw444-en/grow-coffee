@@ -1,6 +1,6 @@
 import { comicSeriesList } from '../features/goldcat/data/storyComics';
 
-const ONBOARDING_IMAGE_VERSION = 3;
+const ONBOARDING_IMAGE_VERSION = 4;
 
 function onboardingImage(path: string) {
   return `${path}?v=${ONBOARDING_IMAGE_VERSION}`;

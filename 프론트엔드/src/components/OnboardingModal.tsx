@@ -78,7 +78,7 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
             이전
           </button>
           <button type="button" className="onboarding__cta" onClick={goNext}>
-            {isLast ? '튜토리얼 시작' : '다음'}
+            {isLast ? '시작하기' : '다음'}
           </button>
         </div>
       </div>

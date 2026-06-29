@@ -99,7 +99,7 @@ export function formatDrunkCoffeePurchaseCost(
   return `마신 커피 ${amount.toLocaleString('ko-KR')}잔`;
 }
 
-const COFFEE_IMAGE_VERSION = 5;
+const COFFEE_IMAGE_VERSION = 6;
 
 const SLUG_TO_LINE = new Map<CoffeeVariantSlug, CoffeeDrinkLine>(
   COFFEE_DRINK_LINES.flatMap((line) => [

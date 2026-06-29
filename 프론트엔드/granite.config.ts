@@ -1,7 +1,7 @@
 import { defineConfig } from '@apps-in-toss/web-framework/config';
 
 export default defineConfig({
-  appName: 'grow-coffee',
+  appName: 'coffeegrow',
   brand: {
     displayName: '커피 키우기',
     primaryColor: '#6F4E37',
