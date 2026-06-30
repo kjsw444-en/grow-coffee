@@ -1241,7 +1241,12 @@ function mergeRitualOverlay(userId, state) {
   }
 
   if (ritualProgressScore(fromOverlay) > ritualProgressScore(fromDb)) {
-    return { ...state, ...fromOverlay }
+    const authoritativeGiftId = fromDb.ritualGiftId || fromOverlay.ritualGiftId
+    return {
+      ...state,
+      ...fromOverlay,
+      ritualGiftId: authoritativeGiftId,
+    }
   }
 
   return state
@@ -1283,7 +1288,8 @@ export async function getGameState(userId) {
   if (!isSupabaseAdminConfigured()) {
     const db = readLocalDb()
     const afterPassive = await settleAndPersistPassiveGrowth(userId, db.gameStates[userId])
-    return resolveAndPersistDailyRitual(userId, mergeRitualOverlay(userId, afterPassive))
+    const resolved = resolveDailyRitual(userId, afterPassive, getTodayKey())
+    return resolveAndPersistDailyRitual(userId, mergeRitualOverlay(userId, resolved))
   }
 
   const supabase = getSupabaseAdmin()
@@ -1308,7 +1314,8 @@ export async function getGameState(userId) {
   }
 
   const afterPassive = await settleAndPersistPassiveGrowth(userId, mapGameRow(data))
-  const withRitual = mergeRitualOverlay(userId, afterPassive)
+  const resolved = resolveDailyRitual(userId, afterPassive, getTodayKey())
+  const withRitual = mergeRitualOverlay(userId, resolved)
   return resolveAndPersistDailyRitual(userId, withRitual)
 }
 

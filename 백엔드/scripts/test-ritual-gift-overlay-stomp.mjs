@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict'
-import { patchLocalDb, readLocalDb } from '../store.js'
-import { getGameState, saveGameState } from '../db.js'
-import { applyRitualFortuneReveal, applyRitualGiftOpen } from '../dailyRitual.js'
+import { patchLocalDb } from '../store.js'
+import { getGameState } from '../db.js'
+import { ritualSeed } from '../dailyRitual.js'
+import { pickRitualGiftId } from '../dailyRitualGifts.js'
 import { initialGameState } from '../constants.js'
 import { getTodayKey } from '../waterQuota.js'
 
-const userId = 'test-ritual-overlay-user'
 const today = getTodayKey()
+
+let userId = 'test-ritual-gift-overlay-stomp'
+let expectedGiftId = pickRitualGiftId(ritualSeed(userId, today, 'gift'))
+if (expectedGiftId === 'GIFT_ROULETTE') {
+  userId = 'test-ritual-gift-overlay-stomp-alt'
+  expectedGiftId = pickRitualGiftId(ritualSeed(userId, today, 'gift'))
+}
+
+assert.notEqual(
+  expectedGiftId,
+  'GIFT_ROULETTE',
+  'could not find a seeded non-roulette gift for overlay stomp test',
+)
 
 patchLocalDb((db) => {
   delete db.gameStates[userId]
@@ -17,11 +30,11 @@ patchLocalDb((db) => {
     ritualFortuneId: 'DAILY_GIFT',
     ritualFortuneRevealed: false,
     ritualGiftOpened: false,
-    ritualGiftId: 'GIFT_COFFEE_2',
+    ritualGiftId: '',
   }
 })
 
-// DB에는 ritual 진행 없음, overlay에만 fortune revealed 저장된 상황 시뮬레이션
+// Stale overlay had a different gift locked in from an old session.
 patchLocalDb((db) => {
   db.ritualOverlays ??= {}
   db.ritualOverlays[userId] = {
@@ -31,7 +44,7 @@ patchLocalDb((db) => {
     ritualFortuneProgress: 0,
     ritualFortuneClaimed: false,
     ritualGiftOpened: false,
-    ritualGiftId: 'GIFT_COFFEE_2',
+    ritualGiftId: 'GIFT_ROULETTE',
     ritualMission1Id: 'M_HARVEST_2',
     ritualMission2Id: 'M_MINIGAME_ANY',
     ritualMission3Id: 'M_ROULETTE',
@@ -48,11 +61,16 @@ patchLocalDb((db) => {
 })
 
 const loaded = await getGameState(userId)
-assert.equal(loaded.ritualFortuneRevealed, true, 'overlay fortune revealed should merge on load')
-assert.equal(loaded.ritualGiftId, 'GIFT_COFFEE_2')
 
-const gift = applyRitualGiftOpen(loaded, userId, today)
-assert.equal(gift.ok, true, 'gift open should succeed after overlay merge')
-assert.equal(gift.state.ritualGiftOpened, true)
+assert.equal(
+  loaded.ritualGiftId,
+  expectedGiftId,
+  'resolved daily gift should win over stale overlay gift id',
+)
+assert.equal(
+  loaded.ritualFortuneRevealed,
+  false,
+  'stale overlay progress is dropped when gift id conflicts',
+)
 
-console.log('test-ritual-overlay: passed')
+console.log('test-ritual-gift-overlay-stomp: passed', { expectedGiftId })

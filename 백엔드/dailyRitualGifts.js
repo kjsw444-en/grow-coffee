@@ -56,7 +56,8 @@ export function pickRitualGiftId(seed) {
     weight: RITUAL_GIFT_DEFINITIONS[id].weight,
   }))
   const total = items.reduce((sum, item) => sum + item.weight, 0)
-  let roll = ((seed % 10000) / 10000) * total
+  const normalized = Number(seed) >>> 0
+  let roll = (normalized / 0x100000000) * total
 
   for (const item of items) {
     roll -= item.weight
