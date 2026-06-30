@@ -350,6 +350,10 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+export type SellBatchOutcome =
+  | { ok: true; popupMessage: string }
+  | { ok: false };
+
 export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const { tutorialBypassQuota = false } = options;
   const [session, setSession] = useState<PlayerSession | null>(null);
@@ -2354,11 +2358,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     }
   }, [applyAuthoritativeState, claimingFinishBonus, showSceneDialogue, updatePlayerRank, watchingAd]);
 
-  const sellBatch = useCallback(async (cupCount: number) => {
+  const sellBatch = useCallback(async (cupCount: number): Promise<SellBatchOutcome> => {
     const batchSize = Math.floor(Number(cupCount) || 0);
     if (!BREWED_COFFEE_DRINK_OPTIONS.includes(batchSize as (typeof BREWED_COFFEE_DRINK_OPTIONS)[number])) {
       showSceneDialogue('선택한 잔 수를 사용할 수 없어요.');
-      return false;
+      return { ok: false };
     }
 
     const reward = getBrewedCoffeePointReward(batchSize);
@@ -2369,33 +2373,33 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         : getServerUnavailableMessage();
       setActionError(message);
       showSceneDialogue(message);
-      return false;
+      return { ok: false };
     }
 
     if (syncingRef.current) {
       const message = '다른 동작을 처리 중이에요. 잠시 후 다시 시도해 주세요.';
       showSceneDialogue(message);
-      return false;
+      return { ok: false };
     }
 
     const before = settleDailyPoint(stateRef.current);
     if (hasReachedDailyPointCap(before)) {
       showSceneDialogue(sceneDialogueForDailyPointCap());
-      return false;
+      return { ok: false };
     }
 
     if (before.totalCoffees < batchSize) {
       const message = `내린 커피 ${batchSize.toLocaleString('ko-KR')}잔이 필요해요.`;
       setActionError(message);
       showSceneDialogue(message);
-      return false;
+      return { ok: false };
     }
 
     const room = getDailyPointRoom(before);
     const actualReward = Math.min(reward, room);
     if (actualReward <= 0) {
       showSceneDialogue(sceneDialogueForDailyPointCap());
-      return false;
+      return { ok: false };
     }
 
     syncingRef.current = true;
@@ -2442,22 +2446,21 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         applyAuthoritativeState(promotion.state, { epoch });
       }
 
+      let popupMessage: string;
       if (capReached) {
-        showSceneDialogue(sceneDialogueForDailyPointCap());
+        popupMessage = sceneDialogueForDailyPointCap();
         void scheduleReviewPrompt({
           trigger: 'daily-point-cap',
           onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
         });
       } else if (brewed200Reached) {
-        showSceneDialogue(sceneDialogueForBrewedSpent200(result.state.lifetimeBrewedSpent ?? 0));
+        popupMessage = sceneDialogueForBrewedSpent200(result.state.lifetimeBrewedSpent ?? 0);
       } else if (promotion.ok) {
-        showSceneDialogue(
-          sceneDialogueForSellBatchWithPromotion(batchSize, earned, promotion.message),
-        );
+        popupMessage = sceneDialogueForSellBatchWithPromotion(batchSize, earned, promotion.message);
       } else if (!promotion.skipped) {
-        showSceneDialogue(sceneDialogueForSellBatchPromotionFailed(batchSize, earned));
+        popupMessage = sceneDialogueForSellBatchPromotionFailed(batchSize, earned);
       } else {
-        showSceneDialogue(sceneDialogueForSellBatch(batchSize, earned));
+        popupMessage = sceneDialogueForSellBatch(batchSize, earned);
       }
 
       if (brewed200Reached) {
@@ -2466,7 +2469,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           onPrime: (copy) => showSceneDialogue(sceneDialogueForReviewPriming(copy)),
         });
       }
-      return true;
+      return { ok: true, popupMessage };
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
         applyAuthoritativeState(err.state, { epoch });
@@ -2478,7 +2481,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const message = err instanceof Error ? err.message : '내린 커피 마시기에 실패했습니다.';
       setActionError(message);
       showSceneDialogue(message);
-      return false;
+      return { ok: false };
     } finally {
       syncingRef.current = false;
       setSellingBatch(false);

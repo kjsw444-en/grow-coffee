@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { attachBannerToElement, type BannerVariant } from '../services/bannerAd';
+import { attachBannerToElement, initBannerAds, type BannerVariant } from '../services/bannerAd';
 import './AdBannerSlot.css';
 
 type AdBannerSlotProps = {
@@ -8,6 +8,9 @@ type AdBannerSlotProps = {
   bannerShape?: 'card' | 'expanded';
 };
 
+const ATTACH_RETRY_MS = 600;
+const MAX_ATTACH_ATTEMPTS = 8;
+
 export function AdBannerSlot({ variant, className, bannerShape = 'card' }: AdBannerSlotProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -15,9 +18,44 @@ export function AdBannerSlot({ variant, className, bannerShape = 'card' }: AdBan
     const container = containerRef.current;
     if (!container) return;
 
-    const destroy = attachBannerToElement(container, variant, { bannerShape });
+    initBannerAds();
+
+    let destroyed: (() => void) | null = null;
+    let retryTimer: number | null = null;
+    let attempts = 0;
+
+    const cleanup = () => {
+      if (retryTimer != null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      destroyed?.();
+      destroyed = null;
+    };
+
+    const tryAttach = () => {
+      destroyed?.();
+      destroyed = null;
+
+      const destroy = attachBannerToElement(container, variant, { bannerShape });
+      if (destroy) {
+        destroyed = destroy;
+        return;
+      }
+
+      attempts += 1;
+      if (attempts >= MAX_ATTACH_ATTEMPTS) {
+        return;
+      }
+
+      retryTimer = window.setTimeout(tryAttach, ATTACH_RETRY_MS);
+    };
+
+    const frame = window.requestAnimationFrame(tryAttach);
+
     return () => {
-      destroy?.();
+      window.cancelAnimationFrame(frame);
+      cleanup();
     };
   }, [variant, bannerShape]);
 

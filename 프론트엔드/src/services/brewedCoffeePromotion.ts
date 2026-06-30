@@ -8,6 +8,9 @@ import {
 import { recordBrewedCoffeePromotionClaim } from './api';
 import { isTossInApp } from './tossBridge';
 
+/** 앱인토스 콘솔 발급 live 프로모션 코드 (env 미설정 시 fallback) */
+export const LIVE_COFFEE_VALUE_PROMOTION_CODE = '01KW0MZGG59G97HV5APWQEDW7J';
+
 export type BrewedCoffeePromotionResult =
   | {
       ok: true;
@@ -22,7 +25,7 @@ export type BrewedCoffeePromotionResult =
   | { ok: false; message: string; skipped?: boolean };
 
 export function getCoffeeValuePromotionCode() {
-  return import.meta.env.VITE_TOSS_COFFEE_VALUE_PROMOTION_CODE?.trim() ?? '';
+  return import.meta.env.VITE_TOSS_COFFEE_VALUE_PROMOTION_CODE?.trim() || LIVE_COFFEE_VALUE_PROMOTION_CODE;
 }
 
 export function isBrewedCoffeePromotionMockEnabled() {

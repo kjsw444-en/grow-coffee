@@ -1,4 +1,4 @@
-export type RewardDialogLogType = 'roulette' | 'fortune';
+export type RewardDialogLogType = 'roulette' | 'fortune' | 'brewed';
 
 export type RewardDialogLogPayload = {
   type: RewardDialogLogType | string;

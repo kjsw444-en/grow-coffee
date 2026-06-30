@@ -12,17 +12,29 @@ function getBannerAdGroupId(variant: BannerVariant) {
   return variant === 'list' ? resolveTextBannerAdGroupId() : resolveImageBannerAdGroupId();
 }
 
-function ensureTossAdsInitialized() {
+function isTossAdsInitializeSupported() {
+  try {
+    return TossAds.initialize.isSupported?.() !== false;
+  } catch {
+    return false;
+  }
+}
+
+export function ensureTossAdsInitialized() {
   if (tossAdsInitialized) return;
-  if (TossAds.initialize.isSupported?.() !== true) return;
+  if (!isTossAdsInitializeSupported()) return;
 
   TossAds.initialize({});
   tossAdsInitialized = true;
 }
 
+export function initBannerAds() {
+  ensureTossAdsInitialized();
+}
+
 export function isBannerAdSupported() {
   try {
-    return TossAds.attachBanner.isSupported?.() === true;
+    return TossAds.attachBanner.isSupported?.() !== false;
   } catch {
     return false;
   }

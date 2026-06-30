@@ -11,4 +11,6 @@
 .ad-banner-slot--list {
   min-height: 96px;
   margin: 0;
+  position: relative;
+  z-index: 1;
 }
