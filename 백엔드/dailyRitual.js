@@ -111,11 +111,24 @@ function createFreshDailyRitual(userId, state, today) {
 export function resolveDailyRitual(userId, state, today = getTodayKey()) {
   const merged = { ...state, ...normalizeDailyRitual(state) }
 
-  if (merged.ritualDayKey === today && merged.ritualGiftId) {
-    return ensureMissionIds(merged)
+  if (merged.ritualDayKey !== today) {
+    return createFreshDailyRitual(userId, state, today)
   }
 
-  return createFreshDailyRitual(userId, state, today)
+  let next = ensureMissionIds(merged)
+
+  if (!next.ritualFortuneId) {
+    next = { ...next, ritualFortuneId: RITUAL_DAILY_FORTUNE_ID }
+  }
+
+  if (!next.ritualGiftId && userId) {
+    next = {
+      ...next,
+      ritualGiftId: pickRitualGiftId(ritualSeed(userId, today, 'gift')),
+    }
+  }
+
+  return next
 }
 
 export function ritualDayChanged(before, after) {

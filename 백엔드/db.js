@@ -1197,6 +1197,12 @@ function saveRitualOverlay(userId, state) {
   })
 }
 
+export function clearRitualOverlay(userId) {
+  patchLocalDb((db) => {
+    delete db.ritualOverlays?.[userId]
+  })
+}
+
 function clearStaleRitualOverlay(userId, today = getTodayKey()) {
   patchLocalDb((db) => {
     const overlay = db.ritualOverlays?.[userId]
@@ -1215,6 +1221,25 @@ function mergeRitualOverlay(userId, state) {
 
   const fromDb = normalizeDailyRitual(state)
   const fromOverlay = normalizeDailyRitual(overlay)
+
+  if (
+    fromDb.ritualDayKey &&
+    fromOverlay.ritualDayKey &&
+    fromOverlay.ritualDayKey !== fromDb.ritualDayKey
+  ) {
+    clearRitualOverlay(userId)
+    return state
+  }
+
+  if (
+    fromDb.ritualGiftId &&
+    fromOverlay.ritualGiftId &&
+    fromDb.ritualGiftId !== fromOverlay.ritualGiftId
+  ) {
+    clearRitualOverlay(userId)
+    return state
+  }
+
   if (ritualProgressScore(fromOverlay) > ritualProgressScore(fromDb)) {
     return { ...state, ...fromOverlay }
   }
@@ -1229,10 +1254,15 @@ async function resolveAndPersistDailyRitual(userId, state) {
 
   const needsSave =
     before.ritualDayKey !== after.ritualDayKey ||
+    before.ritualGiftId !== after.ritualGiftId ||
     (!before.ritualFortuneId && after.ritualFortuneId)
 
   if (!needsSave) {
     return { ...state, ...after }
+  }
+
+  if (before.ritualDayKey !== after.ritualDayKey || before.ritualGiftId !== after.ritualGiftId) {
+    clearRitualOverlay(userId)
   }
 
   return saveGameState(userId, resolved)

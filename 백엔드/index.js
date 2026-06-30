@@ -4,6 +4,7 @@ import express from 'express'
 import path from 'node:path'
 import fs from 'node:fs'
 import {
+  clearRitualOverlay,
   getGameState,
   getLastActionAt,
   getProfileDisplayName,
@@ -353,6 +354,55 @@ app.post('/api/game/dev/set-drunk-coffees', requireUser, async (req, res) => {
       Number(current.lifetimeDrunkCoffees ?? 0),
       spentCoffeeCups,
     )
+    const state = await saveGameState(req.userId, {
+      ...current,
+      spentCoffeeCups,
+      lifetimeDrunkCoffees,
+    })
+    res.json({
+      ok: true,
+      state,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+/** 출시 테스트 — 마신 커피 +1000 (고정) */
+const RELEASE_TEST_ADD_DRUNK_COFFEES = 1000
+
+app.post('/api/game/release-test/add-drunk-coffees', requireUser, async (req, res) => {
+  const amount = RELEASE_TEST_ADD_DRUNK_COFFEES
+
+  try {
+    const current = await getGameState(req.userId)
+    const spentCoffeeCups = current.spentCoffeeCups + amount
+    const lifetimeDrunkCoffees = Math.max(Number(current.lifetimeDrunkCoffees ?? 0), spentCoffeeCups)
+    const state = await saveGameState(req.userId, {
+      ...current,
+      spentCoffeeCups,
+      lifetimeDrunkCoffees,
+    })
+    res.json({
+      ok: true,
+      state,
+      added: amount,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+/** 출시 테스트 — 마신 커피(spentCoffeeCups) 서버 동기화 (로컬 ≥ 서버일 때 상점 구매 전 호출) */
+app.post('/api/game/release-test/sync-spent-coffees', requireUser, async (req, res) => {
+  const targetSpent = Math.max(0, Math.floor(Number(req.body?.spentCoffeeCups ?? 0)))
+
+  try {
+    const current = await getGameState(req.userId)
+    const spentCoffeeCups = Math.max(current.spentCoffeeCups, targetSpent)
+    const lifetimeDrunkCoffees = Math.max(Number(current.lifetimeDrunkCoffees ?? 0), spentCoffeeCups)
     const state = await saveGameState(req.userId, {
       ...current,
       spentCoffeeCups,
@@ -1221,6 +1271,7 @@ app.post('/api/game/reset', requireUser, async (req, res) => {
   try {
     const current = await getGameState(req.userId)
     const result = applyReset(current)
+    clearRitualOverlay(req.userId)
     const state = await saveGameState(req.userId, result.state, { allowTotalCoffeeDecrease: true })
     setLastActionAt(req.userId, 0)
     const displayName = await getProfileDisplayName(req.userId)

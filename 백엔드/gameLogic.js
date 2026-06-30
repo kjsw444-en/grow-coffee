@@ -501,7 +501,6 @@ export function applyRedeem(state) {
 }
 
 export function applyReset(state) {
-  const current = normalizeGameState(state ?? {})
   return {
     ok: true,
     state: normalizeGameState({
@@ -509,9 +508,6 @@ export function applyReset(state) {
       growthAccrualSyncedAt: new Date().toISOString(),
       passiveDayKey: getPassiveDayKey(),
       passiveReactivateDayKey: '',
-      dailyLoginRouletteDayKey: current.dailyLoginRouletteDayKey,
-      dailyLoginRouletteRewardCups: current.dailyLoginRouletteRewardCups,
-      dailyLoginRouletteRespinDayKey: current.dailyLoginRouletteRespinDayKey,
     }),
   }
 }

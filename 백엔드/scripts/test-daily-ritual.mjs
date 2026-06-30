@@ -82,6 +82,50 @@ test('resolveDailyRitual assigns gift for today', () => {
 
 
 
+test('resolveDailyRitual keeps progress when only giftId missing', () => {
+  const state = resolveDailyRitual(
+    userId,
+    {
+      ...initialGameState,
+      ritualDayKey: today,
+      ritualFortuneId: 'DAILY_GIFT',
+      ritualFortuneRevealed: true,
+      ritualGiftOpened: false,
+      ritualGiftId: '',
+    },
+    today,
+  )
+
+  assert.equal(state.ritualFortuneRevealed, true)
+  assert.equal(state.ritualGiftOpened, false)
+  assert.ok(state.ritualGiftId)
+})
+
+
+
+test('resolveDailyRitual rolls a new gift on day change', () => {
+  const yesterday = '2099-01-01'
+  const state = resolveDailyRitual(
+    userId,
+    {
+      ...initialGameState,
+      ritualDayKey: yesterday,
+      ritualFortuneId: 'DAILY_GIFT',
+      ritualFortuneRevealed: true,
+      ritualGiftOpened: true,
+      ritualGiftId: 'GIFT_COFFEE_2',
+    },
+    today,
+  )
+
+  assert.equal(state.ritualDayKey, today)
+  assert.ok(state.ritualGiftId)
+  assert.equal(state.ritualFortuneRevealed, false)
+  assert.equal(state.ritualGiftOpened, false)
+})
+
+
+
 test('fortune reveal copy matches pre-rolled gift (4 variants)', () => {
   for (const giftId of Object.keys(RITUAL_GIFT_DEFINITIONS)) {
     const state = resolveDailyRitual(
