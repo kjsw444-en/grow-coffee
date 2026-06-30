@@ -1,45 +1,14 @@
 import type { GameState } from '../game/types'
 import type { BalanceRules } from '../game/passiveGrowth'
 import { DEFAULT_BALANCE_RULES } from '../game/passiveGrowth'
+import { getApiBase } from './apiBase'
+
+export { getApiBase, getApiBaseForDebug } from './apiBase'
 
 const DEVICE_ID_KEY = 'grow-coffee-device-id'
 const USER_ID_KEY = 'grow-coffee-user-id'
 const SESSION_SOURCE_KEY = 'grow-coffee-session-source'
 const DISPLAY_NAME_KEY = 'grow-coffee-display-name'
-
-const VITE_DEV_PORTS = new Set(['5173', '5174', '4173'])
-
-function getDevBackendBase() {
-  return 'http://127.0.0.1:8787'
-}
-
-export function getApiBase() {
-  const configured = import.meta.env.VITE_API_URL?.trim()
-  if (configured) {
-    return configured.replace(/\/$/, '')
-  }
-
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
-    const { hostname, port } = window.location
-    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
-
-    // Vite dev(5173 등): 같은 출처 /api → vite proxy → 8787 (CORS·PNA 문제 없음)
-    if (isLocalHost && VITE_DEV_PORTS.has(port)) {
-      return ''
-    }
-
-    // Granite shell(8081) 등: 백엔드 직접 연결
-    if (isLocalHost) {
-      return getDevBackendBase()
-    }
-  }
-
-  return ''
-}
-
-export function getApiBaseForDebug() {
-  return getApiBase() || `${typeof window !== 'undefined' ? window.location.origin : ''}/api (proxy)`
-}
 
 export async function fetchBackendHealth(timeoutMs = 3000) {
   const controller = new AbortController()
@@ -307,6 +276,31 @@ export async function devSetTotalCoffees(totalCoffees: number) {
 /** DEV 전용 — 마신 커피(spentCoffeeCups) 잔 수 설정 */
 export async function devSetSpentCoffeeCups(spentCoffeeCups: number) {
   return request('/api/game/dev/set-drunk-coffees', {
+    method: 'POST',
+    body: JSON.stringify({ spentCoffeeCups }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+/** 출시 테스트 — 마신 커피(spentCoffeeCups) 고정량 추가 */
+export async function releaseTestAddDrunkCoffees(amount = 1000) {
+  return request('/api/game/release-test/add-drunk-coffees', {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    added: number
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+/** 출시 테스트 — 마신 커피(spentCoffeeCups) 서버 동기화 */
+export async function releaseTestSyncSpentCoffeeCups(spentCoffeeCups: number) {
+  return request('/api/game/release-test/sync-spent-coffees', {
     method: 'POST',
     body: JSON.stringify({ spentCoffeeCups }),
   }) as Promise<{
@@ -704,6 +698,24 @@ export async function recordRankingTop3PromotionClaim(rewardKey: string) {
     claimed: boolean
     canClaim: boolean
     passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
+export async function recordBrewedCoffeePromotionClaim(payload: {
+  rewardKey: string
+  cupCount: number
+  amount: number
+}) {
+  return request('/api/promotion/brewed-coffee/claim', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{
+    ok: true
+    alreadyClaimed: boolean
+    rewardKey: string | null
+    cupCount: number
+    amount: number
+    state: GameState
   }>
 }
 

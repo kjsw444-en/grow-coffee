@@ -49,11 +49,7 @@ type RankingTop3PromotionResult =
   | { ok: false; message: string };
 
 function getPromotionCode() {
-  return (
-    import.meta.env.VITE_TOSS_RANKING_TOP3_PROMOTION_CODE?.trim() ??
-    import.meta.env.VITE_TOSS_COFFEE_VALUE_PROMOTION_CODE?.trim() ??
-    ''
-  );
+  return import.meta.env.VITE_TOSS_RANKING_TOP3_PROMOTION_CODE?.trim() ?? '';
 }
 
 function getClaimKey(userId: string, rewardDayKey: string) {

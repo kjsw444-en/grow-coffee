@@ -3,6 +3,7 @@ import { patchLocalDb, readLocalDb } from './store.js'
 import { getTodayKey } from './waterQuota.js'
 
 export const COFFEE_VALUE_CLAIM_TYPE = 'coffee-value'
+export const BREWED_COFFEE_PROMOTION_CLAIM_TYPE = 'brewed-coffee'
 export const RANKING_TOP3_CLAIM_TYPE = 'ranking-top3'
 
 function localClaimKey(userId, claimType, dayKey) {
@@ -29,6 +30,44 @@ export async function getPromotionClaim(userId, claimType = COFFEE_VALUE_CLAIM_T
     .eq('user_id', userId)
     .eq('claim_type', claimType)
     .eq('day_key', dayKey)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingPromotionClaimsTable(error)) return null
+    throw error
+  }
+
+  return data
+}
+
+export async function findPromotionClaimByRewardKey(
+  userId,
+  rewardKey,
+  claimType = BREWED_COFFEE_PROMOTION_CLAIM_TYPE,
+) {
+  const safeRewardKey = String(rewardKey ?? '').trim()
+  if (!userId || !safeRewardKey) return null
+
+  if (!isSupabaseAdminConfigured()) {
+    const db = readLocalDb()
+    const claims = db.promotionClaims ?? {}
+    return (
+      Object.values(claims).find(
+        (claim) =>
+          String(claim?.userId ?? claim?.user_id ?? '') === userId &&
+          String(claim?.rewardKey ?? claim?.reward_key ?? '') === safeRewardKey &&
+          String(claim?.claimType ?? claim?.claim_type ?? '') === claimType,
+      ) ?? null
+    )
+  }
+
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('promotion_claims')
+    .select('user_id, claim_type, day_key, reward_key, claimed_at')
+    .eq('user_id', userId)
+    .eq('claim_type', claimType)
+    .eq('reward_key', safeRewardKey)
     .maybeSingle()
 
   if (error) {

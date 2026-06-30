@@ -6,12 +6,15 @@ import {
   claimMinigameReward as claimMinigameRewardApi,
   claimDailyLoginRouletteGame,
   devResetDailyLoginRouletteGame,
+  devResetDailyRitualGame,
   respinDailyLoginRouletteGame,
   claimAttendanceDailyReward as claimAttendanceDailyRewardApi,
   claimAttendanceStreakBonus as claimAttendanceStreakBonusApi,
   devBumpPassiveGame,
   devSetTotalCoffees,
   devSetSpentCoffeeCups,
+  releaseTestAddDrunkCoffees,
+  releaseTestSyncSpentCoffeeCups,
   drinkGame,
   ensureGuestSession,
   fetchGameState,
@@ -30,6 +33,7 @@ import {
 } from '../services/api';
 import type { MissionKey } from '../services/dailyGamePlayQuota';
 import { resetDailyGameSave } from '../services/dailyGameStorage';
+import { claimBrewedCoffeePromotion } from '../services/brewedCoffeePromotion';
 import { showInterstitialAd } from '../services/interstitialAd';
 import { scheduleReviewPrompt, previewReviewPrompt, resetReviewPromptStore, REVIEW_TRIGGER_LABELS, isReviewPreviewEnabled, type ReviewTrigger } from '../services/reviewPrompt';
 import { watchRewardedAd } from '../services/rewardedAd';
@@ -41,7 +45,8 @@ import {
   BREWED_COFFEE_FINISH_BONUS_THRESHOLD,
   getBrewedCoffeePointReward,
 } from './brewedCoffeeDrink';
-import { grantBrewedCoffeeFields } from './brewedCoffeeReceived';
+import { grantBrewedCoffeeFields, mergePreservedSpentCoffeeCups, mergePreservedTotalCoffees } from './brewedCoffeeReceived';
+import { COFFEE_VARIANT_PURCHASE_COST } from './coffeeVariants';
 import {
   type HoldMode,
   COFFEE_STAGE_MIN,
@@ -61,6 +66,7 @@ import {
   hasReachedDailyPointCap,
   settleDailyPoint,
 } from './dailyPoint';
+import { RELEASE_TEST_ADD_DRUNK_COFFEES } from './featureFlags';
 import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
@@ -79,6 +85,8 @@ import {
   sceneDialogueForPassiveReady,
   sceneDialogueForPassiveReactivate,
   sceneDialogueForSellBatch,
+  sceneDialogueForSellBatchWithPromotion,
+  sceneDialogueForSellBatchPromotionFailed,
   sceneDialogueForDailyPointCap,
   sceneDialogueForHiddenCharacterUnlock,
   sceneDialogueForBrewedSpent200,
@@ -139,7 +147,16 @@ export type DailyLoginRouletteOutcome = {
   errorMessage?: string;
 };
 import { markDailyLoginRouletteClaimedLocal, resetDailyLoginRouletteStorage } from '../services/dailyLoginRouletteStorage';
-import { resetCatRouletteGuideForToday } from '../services/catGuideStorage';
+import { hasSeenDailyRouletteSceneDialogueToday, resetCatRouletteGuideForToday } from '../services/catGuideStorage';
+import {
+  buildDrinkClickLogSnapshot,
+  logDrinkClickPhase,
+} from './drinkClickLog';
+import {
+  buildRewardResetLogSnapshot,
+  getDailyFortuneRewardResetStatePatch,
+  getRouletteRewardResetStatePatch,
+} from '../services/rewardReset';
 import {
   getShopPurchaseCount,
   hasCrossedBrewedSpentReviewThreshold,
@@ -323,7 +340,7 @@ function isWaterCooldownError(err: unknown): err is ApiRequestError {
   return err instanceof ApiRequestError && err.status === 429;
 }
 
-const HOLD_UI_COMMIT_MS = 80;
+const HOLD_UI_COMMIT_MS = 32;
 const DISPLAY_GROWTH_MIN_DELTA = 1 / 10 ** GROWTH_DISPLAY_DECIMALS;
 const HARVEST_REWARD_ROLL_MS = 1000;
 const HARVEST_REWARD_RESULT_MS = 1200;
@@ -631,7 +648,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         setBalanceRules(next.balanceRules);
       }
       if (next.state) {
-        applyAuthoritativeState(next.state);
+        const localTotalCoffees = stateRef.current.totalCoffees;
+        const localSpentCoffeeCups = stateRef.current.spentCoffeeCups;
+        applyAuthoritativeState({
+          ...next.state,
+          totalCoffees: mergePreservedTotalCoffees(next.state.totalCoffees, localTotalCoffees),
+          spentCoffeeCups: mergePreservedSpentCoffeeCups(
+            next.state.spentCoffeeCups,
+            localSpentCoffeeCups,
+            0,
+          ),
+        });
       }
       if (next.source === 'mock') {
         setConnectionWarning(
@@ -740,7 +767,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const syncAction = useCallback(
     async (mode: HoldMode) => {
       const currentSession = sessionRef.current;
-      if (!currentSession?.userId || syncingRef.current) {
+      if (!currentSession?.userId) {
         holdSyncCommittedRef.current = false;
         resetHoldUi();
         return;
@@ -750,50 +777,101 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const before = stateRef.current;
       const beforeGrowth = roundGrowth(before.growth);
       const lockedHoldStart = holdStartGrowthRef.current ?? beforeGrowth;
+      const isWaterLike = mode === 'water' || mode === 'brew';
+
+      const applyOptimisticWaterHold = () => {
+        if (!isWaterLike || (!canUseGrowHold(before) && !tutorialBypassQuota)) {
+          return null;
+        }
+
+        const nextGrowth = commitWaterGrowth(lockedHoldStart);
+        if (nextGrowth <= beforeGrowth) {
+          return null;
+        }
+
+        const quotaState = canUseGrowHold(before) ? consumeWaterQuota(before) : before;
+        return {
+          ...quotaState,
+          growth: nextGrowth,
+          totalWaters: before.totalWaters + 1,
+        };
+      };
+
+      const finishWaterDialogue = (growth: number) => {
+        if (needsAdForWater(stateRef.current)) {
+          const refillLabel = getRefillActionLabel(stateRef.current.growth);
+          showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
+          return;
+        }
+
+        const stage = getStage(growth);
+        showSceneDialogue(sceneDialogueForGrowthComplete(mode, stage.label, growth));
+      };
+
+      const optimisticState = applyOptimisticWaterHold();
+      if (optimisticState) {
+        stateRef.current = optimisticState;
+        commitDisplayGrowth(optimisticState.growth, true);
+        setState(optimisticState);
+        triggerTapBurst();
+        resetHoldUi();
+
+        void (async () => {
+          try {
+            const result = await waterGame();
+            if (epoch !== stateEpochRef.current) return;
+            applyWaterServerState(result.state, lockedHoldStart, epoch);
+            setLastEarned(result.lastEarned);
+            finishWaterDialogue(resolveWaterSyncGrowth(lockedHoldStart, result.state.growth));
+          } catch (err) {
+            if (epoch !== stateEpochRef.current) return;
+            if (isWaterCooldownError(err) && err.state) {
+              applyWaterServerState(err.state, lockedHoldStart, epoch);
+              return;
+            }
+            if (err instanceof ApiRequestError && err.state) {
+              applyWaterServerState(err.state, lockedHoldStart, epoch);
+              if (needsAdForWater(err.state)) {
+                const refillLabel = getRefillActionLabel(err.state.growth);
+                showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
+              } else {
+                const growth = roundGrowth(err.state.growth);
+                const stage = getStage(growth);
+                showSceneDialogue(sceneDialogueForGrowthComplete(mode, stage.label, growth));
+              }
+              return;
+            }
+
+            applyAuthoritativeState(before, { epoch });
+            commitDisplayGrowth(lockedHoldStart, true);
+            const message = err instanceof Error ? err.message : '동작 처리에 실패했습니다.';
+            setActionError(message);
+            showSceneDialogue(message);
+          }
+        })();
+        return;
+      }
+
+      if (syncingRef.current) {
+        holdSyncCommittedRef.current = false;
+        resetHoldUi();
+        return;
+      }
+
       syncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
-
-      if (
-        (mode === 'water' || mode === 'brew') &&
-        canUseGrowHold(before)
-      ) {
-        const optimistic = consumeWaterQuota(before);
-        const nextGrowth = commitWaterGrowth(lockedHoldStart);
-
-        if (nextGrowth > beforeGrowth) {
-          const optimisticState = {
-            ...optimistic,
-            growth: nextGrowth,
-            totalWaters: before.totalWaters + 1,
-          };
-          stateRef.current = optimisticState;
-          commitDisplayGrowth(nextGrowth, true);
-          setState(optimisticState);
-          triggerTapBurst();
-        }
-      }
 
       try {
         const result = await waterGame();
         applyWaterServerState(result.state, lockedHoldStart, epoch);
         setLastEarned(result.lastEarned);
         const synced = resolveWaterSyncGrowth(lockedHoldStart, result.state.growth);
-        if (needsAdForWater(stateRef.current)) {
-          const refillLabel = getRefillActionLabel(stateRef.current.growth);
-          showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
-        } else {
-          const stage = getStage(synced);
-          showSceneDialogue(sceneDialogueForGrowthComplete(mode, stage.label, synced));
-        }
+        finishWaterDialogue(synced);
       } catch (err) {
         if (isWaterCooldownError(err) && err.state) {
           applyWaterServerState(err.state, lockedHoldStart, epoch);
-        } else if (
-          (mode === 'water' || mode === 'brew') &&
-          err instanceof ApiRequestError &&
-          err.state
-        ) {
+        } else if (isWaterLike && err instanceof ApiRequestError && err.state) {
           applyWaterServerState(err.state, lockedHoldStart, epoch);
           if (needsAdForWater(err.state)) {
             const refillLabel = getRefillActionLabel(err.state.growth);
@@ -806,7 +884,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         } else {
           applyAuthoritativeState(before, { epoch });
           const revertGrowth =
-            (mode === 'water' || mode === 'brew') && holdStartGrowthRef.current !== null
+            isWaterLike && holdStartGrowthRef.current !== null
               ? holdStartGrowthRef.current
               : before.growth;
           commitDisplayGrowth(revertGrowth, true);
@@ -830,6 +908,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       resetHoldUi,
       showSceneDialogue,
       triggerTapBurst,
+      tutorialBypassQuota,
     ],
   );
 
@@ -851,7 +930,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
     if (holdModeRef.current === 'water' || holdModeRef.current === 'brew') {
       const startGrowth = holdStartGrowthRef.current;
-      if (startGrowth !== null && shouldCommitUi) {
+      if (startGrowth !== null) {
         commitDisplayGrowth(
           previewHoldDisplayGrowth(startGrowth, holdDisplayStartRef.current, progress),
           progress >= 100,
@@ -906,7 +985,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const activeState = stateRef.current;
 
       const authoritativeGrowth = roundGrowth(activeState.growth);
-      const displayStartGrowth = roundGrowth(displayGrowthRef.current);
       if (holdStartRef.current !== null || syncingRef.current) return;
       if (isReadyToDrinkGrowth(activeState.growth)) return;
       if (!canUseGrowHold(activeState) && !tutorialBypassQuota) return;
@@ -919,8 +997,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       holdStartRef.current = performance.now();
       holdProgressRef.current = 0;
       holdStartGrowthRef.current = authoritativeGrowth;
-      holdDisplayStartRef.current = displayStartGrowth;
-      commitDisplayGrowth(displayStartGrowth, true);
+      holdDisplayStartRef.current = authoritativeGrowth;
+      commitDisplayGrowth(authoritativeGrowth, true);
 
       setHoldMode(mode);
       showSceneDialogue(sceneDialogueForHoldStart(mode), false);
@@ -1002,7 +1080,22 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     if (loading) return;
 
     const before = stateRef.current;
-    if (!isReadyToDrinkGrowth(before.growth) && !isReadyToDrinkGrowth(displayGrowthRef.current)) return;
+    const canDrinkCoffee =
+      isReadyToDrinkGrowth(before.growth) && !syncingRef.current && !loading;
+
+    logDrinkClickPhase(
+      'before',
+      buildDrinkClickLogSnapshot(displayGrowthRef.current, before.growth, canDrinkCoffee),
+    );
+
+    if (!isReadyToDrinkGrowth(before.growth)) {
+      logDrinkClickPhase(
+        'after',
+        buildDrinkClickLogSnapshot(displayGrowthRef.current, before.growth, false),
+      );
+      showSceneDialogue('아직 커피가 완성되지 않았어요.');
+      return;
+    }
 
     syncingRef.current = true;
     setIsDrinkCommitting(true);
@@ -1010,7 +1103,16 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     setActionError(null);
     resetHoldUi();
 
-    void commitDrink(before, stateEpochRef.current);
+    void commitDrink(before, stateEpochRef.current).finally(() => {
+      logDrinkClickPhase(
+        'after',
+        buildDrinkClickLogSnapshot(
+          displayGrowthRef.current,
+          stateRef.current.growth,
+          isReadyToDrinkGrowth(stateRef.current.growth),
+        ),
+      );
+    });
   }, [commitDrink, loading, resetHoldUi, showSceneDialogue]);
 
   const runTestBump = useCallback(async () => {
@@ -1197,6 +1299,76 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     showSceneDialogue(`테스트: 마신 커피 ${safeTotal.toLocaleString('ko-KR')}잔`);
   }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
 
+  const releaseTestAddSpentCoffeeCups = useCallback(async (amount = RELEASE_TEST_ADD_DRUNK_COFFEES) => {
+    if (loading || isHolding || syncingRef.current) return;
+
+    const prev = stateRef.current;
+    const addAmount = Math.max(1, Math.floor(amount));
+    const currentSession = sessionRef.current;
+
+    const applyLocalIncrement = () => {
+      const nextSpent = mergePreservedSpentCoffeeCups(prev.spentCoffeeCups, prev.spentCoffeeCups, addAmount);
+      applyAuthoritativeState({
+        ...prev,
+        spentCoffeeCups: nextSpent,
+        lifetimeDrunkCoffees: Math.max(prev.lifetimeDrunkCoffees ?? 0, nextSpent),
+      });
+      showSceneDialogue(`마신 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+    };
+
+    if (currentSession?.userId) {
+      stateEpochRef.current += 1;
+      const epoch = stateEpochRef.current;
+
+      try {
+        const result = await releaseTestAddDrunkCoffees(addAmount);
+        const nextSpent = mergePreservedSpentCoffeeCups(
+          result.state.spentCoffeeCups,
+          prev.spentCoffeeCups,
+          addAmount,
+        );
+        applyAuthoritativeState(
+          {
+            ...result.state,
+            spentCoffeeCups: nextSpent,
+            lifetimeDrunkCoffees: Math.max(
+              Number(result.state.lifetimeDrunkCoffees ?? 0),
+              nextSpent,
+            ),
+          },
+          { trustServer: true, epoch },
+        );
+        showSceneDialogue(`마신 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+        return;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          const nextSpent = mergePreservedSpentCoffeeCups(
+            err.state.spentCoffeeCups,
+            prev.spentCoffeeCups,
+            addAmount,
+          );
+          applyAuthoritativeState(
+            {
+              ...err.state,
+              spentCoffeeCups: nextSpent,
+              lifetimeDrunkCoffees: Math.max(
+                Number(err.state.lifetimeDrunkCoffees ?? 0),
+                nextSpent,
+              ),
+            },
+            { trustServer: true, epoch },
+          );
+          showSceneDialogue(`마신 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+          return;
+        }
+        applyLocalIncrement();
+        return;
+      }
+    }
+
+    applyLocalIncrement();
+  }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
+
   const reset = useCallback(async () => {
     const currentSession = sessionRef.current;
     if (!currentSession) return;
@@ -1212,14 +1384,21 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     syncingRef.current = true;
     setActionSyncing(true);
 
-    const resetState = normalizeLoadedState(buildResetState(stateRef.current));
+    const rewardResetPatch = {
+      ...getRouletteRewardResetStatePatch(),
+      ...getDailyFortuneRewardResetStatePatch(),
+    };
+    const resetState = normalizeLoadedState({ ...buildResetState(), ...rewardResetPatch });
     applyAuthoritativeState(resetState, { trustServer: true, epoch });
     resetDailyGameSave();
 
     try {
       if (currentSession.userId && currentSession.source !== 'mock') {
         const result = await resetGame();
-        applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
+        applyAuthoritativeState(
+          normalizeLoadedState({ ...result.state, ...rewardResetPatch }),
+          { trustServer: true, epoch },
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '초기화에 실패했습니다.';
@@ -1234,14 +1413,45 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     async (slug: string) => {
       if (syncingRef.current) return;
       const epoch = stateEpochRef.current;
-      const beforeOwned = stateRef.current.ownedCoffeeVariants;
+      const before = stateRef.current;
+      const beforeOwned = before.ownedCoffeeVariants;
+      const localSpent = Math.max(0, Number(before.spentCoffeeCups ?? 0));
       syncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
 
       try {
+        const currentSession = sessionRef.current;
+        if (
+          currentSession?.userId &&
+          currentSession.source !== 'mock' &&
+          localSpent >= COFFEE_VARIANT_PURCHASE_COST
+        ) {
+          const syncResult = await releaseTestSyncSpentCoffeeCups(localSpent);
+          applyAuthoritativeState(
+            {
+              ...syncResult.state,
+              spentCoffeeCups: mergePreservedSpentCoffeeCups(
+                syncResult.state.spentCoffeeCups,
+                localSpent,
+                0,
+              ),
+            },
+            { trustServer: true, epoch },
+          );
+        }
+
         const result = await purchaseCoffeeVariant(slug);
-        applyAuthoritativeState(result.state, { epoch });
+        applyAuthoritativeState(
+          {
+            ...result.state,
+            spentCoffeeCups: Math.max(
+              Math.max(0, Number(result.state.spentCoffeeCups ?? 0)),
+              Math.max(0, localSpent) - COFFEE_VARIANT_PURCHASE_COST,
+            ),
+          },
+          { epoch },
+        );
         if (result.playerRank != null) {
           updatePlayerRank(result.playerRank);
         }
@@ -1264,7 +1474,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         }
       } catch (err) {
         if (err instanceof ApiRequestError && err.state) {
-          applyAuthoritativeState(err.state, { epoch });
+          applyAuthoritativeState(
+            {
+              ...err.state,
+              spentCoffeeCups: mergePreservedSpentCoffeeCups(
+                err.state.spentCoffeeCups,
+                before.spentCoffeeCups,
+                0,
+              ),
+            },
+            { epoch },
+          );
         }
         const message = err instanceof Error ? err.message : '캐릭터 구매에 실패했습니다.';
         setActionError(message);
@@ -1313,10 +1533,6 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       return;
     }
 
-    if (syncingRef.current) {
-      showSceneDialogue('잠시만 기다려 주세요…');
-      return;
-    }
     if (
       isReadyToDrinkGrowth(prev.growth) ||
       isReadyToDrinkGrowth(displayGrowthRef.current)
@@ -1339,28 +1555,39 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const optimistic = grantAdWaterCredit(prev);
       stateRef.current = optimistic;
       setState(optimistic);
-
-      const result = await watchAdGame();
-      applyAuthoritativeState(
-        {
-          ...result.state,
-          totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
-        },
-        { epoch },
-      );
       showSceneDialogue(sceneDialogueForAdReward());
+      setWatchingAd(false);
+
+      void (async () => {
+        try {
+          const result = await watchAdGame();
+          if (epoch !== stateEpochRef.current) return;
+          applyAuthoritativeState(
+            {
+              ...result.state,
+              totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+            },
+            { epoch },
+          );
+        } catch (err) {
+          if (epoch !== stateEpochRef.current) return;
+          if (err instanceof ApiRequestError && err.state) {
+            applyAuthoritativeState(
+              {
+                ...err.state,
+                totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+              },
+              { epoch },
+            );
+          } else {
+            applyAuthoritativeState(prev, { epoch });
+          }
+          const message = err instanceof Error ? err.message : '물 채우기 처리에 실패했습니다.';
+          setActionError(message);
+          showSceneDialogue(message);
+        }
+      })();
     } catch (err) {
-      if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(
-          {
-            ...err.state,
-            totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
-          },
-          { epoch },
-        );
-      } else {
-        applyAuthoritativeState(prev, { epoch });
-      }
       const message = err instanceof Error ? err.message : '물 채우기 처리에 실패했습니다.';
       setActionError(message);
       showSceneDialogue(message);
@@ -1371,7 +1598,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const grantTutorialWaterRefill = useCallback(async () => {
     const currentSession = sessionRef.current;
-    if (syncingRef.current || watchingAd) return false;
+    if (watchingAd) return false;
 
     const prev = stateRef.current;
     if (!needsAdForWater(prev)) return true;
@@ -1380,34 +1607,38 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const epoch = stateEpochRef.current;
     setActionError(null);
 
-    try {
-      const optimistic = grantAdWaterCredit(prev);
-      stateRef.current = optimistic;
-      setState(optimistic);
+    const optimistic = grantAdWaterCredit(prev);
+    stateRef.current = optimistic;
+    setState(optimistic);
 
-      const result = await watchAdGame();
-      applyAuthoritativeState(
-        {
-          ...result.state,
-          totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
-        },
-        { epoch },
-      );
-      return true;
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.state) {
+    void (async () => {
+      try {
+        const result = await watchAdGame();
+        if (epoch !== stateEpochRef.current) return;
         applyAuthoritativeState(
           {
-            ...err.state,
-            totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+            ...result.state,
+            totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
           },
           { epoch },
         );
-      } else {
-        applyAuthoritativeState(prev, { epoch });
+      } catch (err) {
+        if (epoch !== stateEpochRef.current) return;
+        if (err instanceof ApiRequestError && err.state) {
+          applyAuthoritativeState(
+            {
+              ...err.state,
+              totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
+            },
+            { epoch },
+          );
+        } else {
+          applyAuthoritativeState(prev, { epoch });
+        }
       }
-      return false;
-    }
+    })();
+
+    return true;
   }, [applyAuthoritativeState, watchingAd]);
 
   const claimShareReward = useCallback(
@@ -1549,7 +1780,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
     try {
       const result = await claimDailyLoginRouletteGame();
-      const rewardTotalCoffees = before.totalCoffees + result.rewardCups;
+      const rewardTotalCoffees = mergePreservedTotalCoffees(
+        result.state.totalCoffees,
+        before.totalCoffees,
+        result.rewardCups,
+      );
       if (result.bonusSpin) {
         applyAuthoritativeState(
           {
@@ -1579,7 +1814,16 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       return { rewardCups: result.rewardCups };
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
-        applyAuthoritativeState(err.state, { epoch });
+        applyAuthoritativeState(
+          {
+            ...err.state,
+            totalCoffees: mergePreservedTotalCoffees(
+              err.state.totalCoffees,
+              before.totalCoffees,
+            ),
+          },
+          { epoch },
+        );
       }
       const message = err instanceof Error ? err.message : '접속 룰렛 보상을 받지 못했어요.';
       showSceneDialogue(message);
@@ -1619,7 +1863,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         0,
         Number(result.previousRewardCups ?? clientPreviousRewardCups),
       );
-      const rewardTotalCoffees = Math.max(0, before.totalCoffees - previousRewardCups + result.rewardCups);
+      const rewardTotalCoffees = mergePreservedTotalCoffees(
+        result.state.totalCoffees,
+        before.totalCoffees,
+        result.rewardCups - previousRewardCups,
+      );
       applyAuthoritativeState(
         {
           ...result.state,
@@ -1640,7 +1888,16 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         const serverClaimedToday =
           String(err.state.dailyLoginRouletteDayKey ?? '') === today;
         if (!clientClaimedToday || serverClaimedToday) {
-          applyAuthoritativeState(err.state, { epoch });
+          applyAuthoritativeState(
+            {
+              ...err.state,
+              totalCoffees: mergePreservedTotalCoffees(
+                err.state.totalCoffees,
+                before.totalCoffees,
+              ),
+            },
+            { epoch },
+          );
         }
       }
       const message = err instanceof Error ? err.message : '룰렛 다시 돌리기에 실패했어요.';
@@ -1649,7 +1906,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     }
   }, [applyAuthoritativeState, ensureGameplaySession, showSceneDialogue, updatePlayerRank]);
 
-  const resetDailyLoginRouletteForTest = useCallback(async () => {
+  const resetRouletteRewardState = useCallback(async () => {
     resetDailyLoginRouletteStorage();
     resetCatRouletteGuideForToday();
 
@@ -1657,23 +1914,46 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     applyAuthoritativeState(
       {
         ...stateRef.current,
-        dailyLoginRouletteDayKey: '',
-        dailyLoginRouletteRewardCups: 0,
-        dailyLoginRouletteRespinDayKey: '',
+        ...getRouletteRewardResetStatePatch(),
       },
-      { epoch },
+      { trustServer: true, epoch },
     );
 
     const currentSession = sessionRef.current;
     if (import.meta.env.DEV && currentSession?.userId && currentSession.source !== 'mock') {
       try {
         const result = await devResetDailyLoginRouletteGame();
-        applyAuthoritativeState(normalizeLoadedState(result.state), { epoch });
+        applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
       } catch {
         // optimistic client reset is enough for UI retry
       }
     }
   }, [applyAuthoritativeState]);
+
+  const resetDailyFortuneRewardState = useCallback(async () => {
+    const epoch = stateEpochRef.current;
+    applyAuthoritativeState(
+      {
+        ...stateRef.current,
+        ...getDailyFortuneRewardResetStatePatch(),
+      },
+      { trustServer: true, epoch },
+    );
+
+    const currentSession = sessionRef.current;
+    if (import.meta.env.DEV && currentSession?.userId && currentSession.source !== 'mock') {
+      try {
+        const result = await devResetDailyRitualGame();
+        applyAuthoritativeState(normalizeLoadedState(result.state), { trustServer: true, epoch });
+      } catch {
+        // optimistic client reset is enough for UI retry
+      }
+    }
+  }, [applyAuthoritativeState]);
+
+  const resetDailyLoginRouletteForTest = useCallback(async () => {
+    await resetRouletteRewardState();
+  }, [resetRouletteRewardState]);
 
   const claimPassiveCoffee = useCallback(async () => {
     if (claimingPassiveRef.current) {
@@ -2088,12 +2368,18 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         updatePlayerRank(result.playerRank);
       }
       setLastEarned(result.lastEarned);
+      const earned = result.lastEarned ?? actualReward;
       const capReached =
         result.dailyCapJustReached === true || hasReachedDailyPointCap(result.state);
       const brewed200Reached = hasCrossedBrewedSpentReviewThreshold(
         before.lifetimeBrewedSpent ?? 0,
         result.state.lifetimeBrewedSpent ?? 0,
       );
+
+      const promotion = await claimBrewedCoffeePromotion(batchSize, earned);
+      if (promotion.ok && promotion.state) {
+        applyAuthoritativeState(promotion.state, { epoch });
+      }
 
       if (capReached) {
         showSceneDialogue(sceneDialogueForDailyPointCap());
@@ -2103,8 +2389,14 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         });
       } else if (brewed200Reached) {
         showSceneDialogue(sceneDialogueForBrewedSpent200(result.state.lifetimeBrewedSpent ?? 0));
+      } else if (promotion.ok) {
+        showSceneDialogue(
+          sceneDialogueForSellBatchWithPromotion(batchSize, earned, promotion.message),
+        );
+      } else if (!promotion.skipped) {
+        showSceneDialogue(sceneDialogueForSellBatchPromotionFailed(batchSize, earned));
       } else {
-        showSceneDialogue(sceneDialogueForSellBatch(batchSize, result.lastEarned ?? actualReward));
+        showSceneDialogue(sceneDialogueForSellBatch(batchSize, earned));
       }
 
       if (brewed200Reached) {
@@ -2157,7 +2449,12 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const stats = getPassiveUiStats(stateRef.current, balanceRules);
 
     if (stats.canClaim && !prevPassiveCanClaimRef.current) {
-      showSceneDialogue(sceneDialogueForPassiveReady());
+      if (
+        !canSpinDailyLoginRouletteToday(stateRef.current) ||
+        hasSeenDailyRouletteSceneDialogueToday()
+      ) {
+        showSceneDialogue(sceneDialogueForPassiveReady());
+      }
     }
 
     prevPassiveCanClaimRef.current = stats.canClaim;
@@ -2192,13 +2489,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const progress = Math.min(100, (state.money / GOAL_AMOUNT) * 100);
   const dailyPointCapReached = hasReachedDailyPointCap(settleDailyPoint(state));
   const drinkUiActive =
-    ((isReadyToDrinkGrowth(state.growth) || isReadyToDrinkGrowth(displayGrowth)) ||
-      isDrinkCommitting) &&
-    !isHolding;
+    (isReadyToDrinkGrowth(state.growth) || isDrinkCommitting) && !isHolding;
   const readyToDrink =
-    (isReadyToDrinkGrowth(state.growth) || isReadyToDrinkGrowth(displayGrowth)) &&
-    !actionSyncing &&
-    !isHolding;
+    isReadyToDrinkGrowth(state.growth) && !actionSyncing && !isHolding;
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
   const waterStatus = useMemo(
     () => getWaterStatus(state),
@@ -2306,6 +2599,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     testBumpPassiveGrowth,
     testSetTotalCoffees,
     testSetSpentCoffeeCups,
+    releaseTestAddSpentCoffeeCups,
     purchaseVariant,
     selectVariant,
     reset,
@@ -2336,6 +2630,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     claimDailyLoginRoulette,
     respinDailyLoginRoulette,
     resetDailyLoginRouletteForTest,
+    resetRouletteRewardState,
+    resetDailyFortuneRewardState,
+    getRewardResetLogSnapshot: () => buildRewardResetLogSnapshot(stateRef.current),
     claimPassiveCoffee,
     claimingPassiveCoffee,
     passiveClaimFeedback,

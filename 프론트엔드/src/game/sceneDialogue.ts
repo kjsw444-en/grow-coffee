@@ -65,9 +65,25 @@ export function sceneDialogueForDrink(cups = 1) {
 export function sceneDialogueForSellBatch(cupCount: number, reward: number) {
 
   return formatSceneDialogue(
-    `내린 커피 ${cupCount.toLocaleString('ko-KR')}잔을 마셨어요! ${formatWon(reward)} 포인트를 받았어요.`,
+    `내린 커피 ${cupCount.toLocaleString('ko-KR')}잔을 마셨어요! 커피값 ${formatWon(reward)}을 적립했어요.`,
   );
 
+}
+
+export function sceneDialogueForSellBatchWithPromotion(
+  cupCount: number,
+  reward: number,
+  promotionMessage: string,
+) {
+  return formatSceneDialogue(
+    `내린 커피 ${cupCount.toLocaleString('ko-KR')}잔을 마셨어요! 커피값 ${formatWon(reward)} 적립 · ${promotionMessage}`,
+  );
+}
+
+export function sceneDialogueForSellBatchPromotionFailed(cupCount: number, reward: number) {
+  return formatSceneDialogue(
+    `내린 커피 ${cupCount.toLocaleString('ko-KR')}잔 · 커피값 ${formatWon(reward)}은 적립됐어요. 토스 지급은 잠시 후 다시 시도해 주세요.`,
+  );
 }
 
 export function sceneDialogueForDailyPointCap() {

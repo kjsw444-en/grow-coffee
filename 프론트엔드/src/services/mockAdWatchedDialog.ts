@@ -9,8 +9,8 @@
 
 import { resolveRewardedAdGroupId } from './adsConfig';
 
-/** true면 항상 「광고 대체창」 확인 창 사용 — 출시 전 테스트용. 출시 시 false */
-export const USE_MOCK_AD_WATCHED_DIALOG = true;
+/** false — 앱인토스 live 광고 ID로 전면·리워드 광고 노출 */
+export const USE_MOCK_AD_WATCHED_DIALOG = false;
 
 const OVERLAY_ATTR = 'data-mock-ad-watched-overlay';
 

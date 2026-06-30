@@ -24,9 +24,11 @@ import {
   syncRankingFromGameState,
 } from './ranking.js'
 import {
+  BREWED_COFFEE_PROMOTION_CLAIM_TYPE,
   COFFEE_VALUE_CLAIM_TYPE,
   RANKING_TOP3_CLAIM_TYPE,
   deletePromotionClaim,
+  findPromotionClaimByRewardKey,
   getPromotionClaim,
   recordPromotionClaim,
 } from './promotionClaims.js'
@@ -82,7 +84,8 @@ import {
   normalizeRecommendKind,
 } from './menuRecommendations.js'
 import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
-import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE } from './constants.js'
+import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE, getBrewedCoffeePointReward } from './constants.js'
+import { getTodayKey } from './waterQuota.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
   exchangeTossAuthorizationCode,
@@ -1350,6 +1353,62 @@ app.post('/api/promotion/coffee-value/claim', requireStorage, requireUser, async
       ok: true,
       alreadyClaimed: false,
       rewardKey: claim.reward_key ?? claim.rewardKey ?? rewardKey,
+      state: current,
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/promotion/brewed-coffee/claim', requireStorage, requireUser, async (req, res) => {
+  const rewardKey = String(req.body?.rewardKey ?? '').trim()
+  const cupCount = Math.floor(Number(req.body?.cupCount ?? 0))
+  const amount = Math.floor(Number(req.body?.amount ?? 0))
+
+  if (!rewardKey) {
+    res.status(400).json({ ok: false, message: 'rewardKey가 필요합니다.' })
+    return
+  }
+
+  if (!BREWED_COFFEE_DRINK_OPTIONS.includes(cupCount)) {
+    res.status(400).json({ ok: false, message: '프로모션 지급 가능한 잔 수가 아니에요.' })
+    return
+  }
+
+  const expectedAmount = getBrewedCoffeePointReward(cupCount)
+  if (amount <= 0 || amount !== expectedAmount) {
+    res.status(400).json({ ok: false, message: '프로모션 지급 금액이 올바르지 않아요.' })
+    return
+  }
+
+  try {
+    const existing = await findPromotionClaimByRewardKey(req.userId, rewardKey)
+    if (existing) {
+      const current = await getGameState(req.userId)
+      res.json({
+        ok: true,
+        alreadyClaimed: true,
+        rewardKey: existing.reward_key ?? existing.rewardKey ?? rewardKey,
+        cupCount,
+        amount,
+        state: current,
+      })
+      return
+    }
+
+    const claim = await recordPromotionClaim({
+      userId: req.userId,
+      claimType: BREWED_COFFEE_PROMOTION_CLAIM_TYPE,
+      dayKey: `${getTodayKey()}:${rewardKey}`,
+      rewardKey,
+    })
+    const current = await getGameState(req.userId)
+    res.json({
+      ok: true,
+      alreadyClaimed: false,
+      rewardKey: claim.reward_key ?? claim.rewardKey ?? rewardKey,
+      cupCount,
+      amount,
       state: current,
     })
   } catch (error) {
