@@ -6,7 +6,6 @@ import fs from 'node:fs'
 import {
   clearRitualOverlay,
   getGameState,
-  getLastActionAt,
   getProfileDisplayName,
   handleTossUnlink,
   resolveGuestSession as resolveGuestProfile,
@@ -85,7 +84,7 @@ import {
 } from './menuRecommendations.js'
 import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
 import { grantBrewedCoffeeFields } from './brewedCoffeeReceived.js'
-import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE, getBrewedCoffeePointReward } from './constants.js'
+import { BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE, getBrewedCoffeePointReward } from './constants.js'
 import { getTodayKey } from './waterQuota.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
 import {
@@ -207,18 +206,6 @@ app.get('/api/game/state', requireUser, async (req, res) => {
 app.post('/api/game/water', requireUser, async (req, res) => {
   try {
     const now = Date.now()
-    const lastAction = getLastActionAt(req.userId)
-    const devBypass = isDevRequest(req)
-
-    if (!devBypass && now - lastAction < ACTION_COOLDOWN_MS) {
-      const current = await getGameState(req.userId)
-      res.status(429).json({
-        ok: false,
-        message: '잠시 후 다시 시도해 주세요.',
-        state: current,
-      })
-      return
-    }
 
     const current = await getGameState(req.userId)
     const result = applyWater(current)
