@@ -84,6 +84,7 @@ import {
   normalizeRecommendKind,
 } from './menuRecommendations.js'
 import { formatDrunkCoffeePurchaseCost } from './coffeeVariants.js'
+import { grantBrewedCoffeeFields } from './brewedCoffeeReceived.js'
 import { ACTION_COOLDOWN_MS, BREWED_COFFEE_DRINK_OPTIONS, BREWED_COFFEE_FINISH_BONUS_AMOUNT, BREWED_COFFEE_FINISH_BONUS_THRESHOLD, SHARE_REWARD_MODULE_ID, SELL_BATCH_SIZE, getBrewedCoffeePointReward } from './constants.js'
 import { getTodayKey } from './waterQuota.js'
 import { getBalanceRules, previewPassiveGrowth } from './passiveGrowth.js'
@@ -374,6 +375,8 @@ app.post('/api/game/dev/set-drunk-coffees', requireUser, async (req, res) => {
 
 /** 출시 테스트 — 마신 커피 +1000 (고정) */
 const RELEASE_TEST_ADD_DRUNK_COFFEES = 1000
+/** 출시 테스트 — 내린 커피 +1000 (고정) */
+const RELEASE_TEST_ADD_BREWED_COFFEES = 1000
 
 app.post('/api/game/release-test/add-drunk-coffees', requireUser, async (req, res) => {
   const amount = RELEASE_TEST_ADD_DRUNK_COFFEES
@@ -386,6 +389,26 @@ app.post('/api/game/release-test/add-drunk-coffees', requireUser, async (req, re
       ...current,
       spentCoffeeCups,
       lifetimeDrunkCoffees,
+    })
+    res.json({
+      ok: true,
+      state,
+      added: amount,
+      passiveGrowthPreview: previewPassiveGrowth(state),
+    })
+  } catch (error) {
+    handleApiError(res, error)
+  }
+})
+
+app.post('/api/game/release-test/add-brewed-coffees', requireUser, async (req, res) => {
+  const amount = RELEASE_TEST_ADD_BREWED_COFFEES
+
+  try {
+    const current = await getGameState(req.userId)
+    const state = await saveGameState(req.userId, {
+      ...current,
+      ...grantBrewedCoffeeFields(current, amount),
     })
     res.json({
       ok: true,

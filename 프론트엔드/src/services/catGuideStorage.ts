@@ -6,6 +6,8 @@ type CatGuideRecord = {
   dateKey: string;
   fortuneGuideSeen: boolean;
   rouletteGuideSeen: boolean;
+  /** 오늘 룰렛 안내 말풍선(나를 눌러라냥~) 표시 여부 */
+  rouletteSceneDialogueSeen?: boolean;
 };
 
 function readRecord(): CatGuideRecord | null {
@@ -36,12 +38,29 @@ export function hasSeenCatRouletteGuideToday(dateKey = getTodayKey()) {
   return record?.dateKey === dateKey && record.rouletteGuideSeen === true;
 }
 
+export function hasSeenDailyRouletteSceneDialogueToday(dateKey = getTodayKey()) {
+  const record = readRecord();
+  return record?.dateKey === dateKey && record.rouletteSceneDialogueSeen === true;
+}
+
+export function markDailyRouletteSceneDialogueSeenToday(dateKey = getTodayKey()) {
+  const record = readRecord();
+  writeRecord({
+    dateKey,
+    fortuneGuideSeen: record?.dateKey === dateKey ? record.fortuneGuideSeen : false,
+    rouletteGuideSeen: record?.dateKey === dateKey ? record.rouletteGuideSeen : false,
+    rouletteSceneDialogueSeen: true,
+  });
+}
+
 export function markCatFortuneGuideSeenToday(dateKey = getTodayKey()) {
   const record = readRecord();
   writeRecord({
     dateKey,
     fortuneGuideSeen: true,
     rouletteGuideSeen: record?.dateKey === dateKey ? record.rouletteGuideSeen : false,
+    rouletteSceneDialogueSeen:
+      record?.dateKey === dateKey ? record.rouletteSceneDialogueSeen : false,
   });
 }
 
@@ -51,6 +70,8 @@ export function markCatRouletteGuideSeenToday(dateKey = getTodayKey()) {
     dateKey,
     fortuneGuideSeen: record?.dateKey === dateKey ? record.fortuneGuideSeen : false,
     rouletteGuideSeen: true,
+    rouletteSceneDialogueSeen:
+      record?.dateKey === dateKey ? record.rouletteSceneDialogueSeen : false,
   });
 }
 
@@ -61,6 +82,7 @@ export function resetCatRouletteGuideForToday(dateKey = getTodayKey()) {
     dateKey,
     fortuneGuideSeen: record.fortuneGuideSeen,
     rouletteGuideSeen: false,
+    rouletteSceneDialogueSeen: false,
   });
 }
 

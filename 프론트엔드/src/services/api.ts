@@ -285,6 +285,19 @@ export async function devSetSpentCoffeeCups(spentCoffeeCups: number) {
   }>
 }
 
+/** 출시 테스트 — 내린 커피(totalCoffees) 고정량 추가 */
+export async function releaseTestAddBrewedCoffees(amount = 1000) {
+  return request('/api/game/release-test/add-brewed-coffees', {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  }) as Promise<{
+    ok: true
+    state: GameState
+    added: number
+    passiveGrowthPreview?: PassiveGrowthPreview
+  }>
+}
+
 /** 출시 테스트 — 마신 커피(spentCoffeeCups) 고정량 추가 */
 export async function releaseTestAddDrunkCoffees(amount = 1000) {
   return request('/api/game/release-test/add-drunk-coffees', {

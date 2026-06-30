@@ -115,6 +115,35 @@
   padding: 0 16px;
 }
 
+.game__release-test-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto 10px;
+  padding: 0 16px;
+}
+
+.game__release-test-btn {
+  min-width: 160px;
+  padding: 10px 14px;
+  border: 1px solid #d4b896;
+  border-radius: 12px;
+  background: rgba(255, 251, 244, 0.96);
+  color: #7a5530;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(120, 90, 50, 0.08);
+}
+
+.game__release-test-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .game__test-btn {
   display: block;
   width: auto;

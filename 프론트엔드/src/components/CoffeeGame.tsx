@@ -36,6 +36,11 @@ import {
 import { initInterstitialAds } from '../services/interstitialAd';
 import { initRewardedAds } from '../services/rewardedAd';
 import { formatWon, isDrinkStage } from '../game/utils';
+import {
+  RELEASE_TEST_ADD_DRUNK_COFFEES,
+  RELEASE_TEST_ADD_BREWED_COFFEES,
+  RELEASE_TEST_TOOLS_ENABLED,
+} from '../game/featureFlags';
 import type { AuthUser } from '../hooks/useAuth';
 import type { DailyGameId } from '../services/dailyGamePick';
 import type { BonusFeatureView } from '../features/goldcat/BonusFeatureHost';
@@ -131,6 +136,8 @@ export function CoffeeGame() {
     testBumpGrowth,
     testBumpPassiveGrowth,
     testSetTotalCoffees,
+    releaseTestAddSpentCoffeeCups,
+    releaseTestAddBrewedCoffees,
     purchaseVariant,
     selectVariant,
     reset,
@@ -1520,6 +1527,27 @@ export function CoffeeGame() {
               claimingAttendanceDaily={claimingAttendanceDaily}
               claimingAttendanceStreak={claimingAttendanceStreak}
             />
+
+            {RELEASE_TEST_TOOLS_ENABLED && (
+              <div className="game__release-test-row">
+                <button
+                  type="button"
+                  className="game__release-test-btn"
+                  disabled={isHolding || loading || actionSyncing}
+                  onClick={() => void releaseTestAddSpentCoffeeCups(RELEASE_TEST_ADD_DRUNK_COFFEES)}
+                >
+                  마신 커피 +{RELEASE_TEST_ADD_DRUNK_COFFEES.toLocaleString('ko-KR')}잔
+                </button>
+                <button
+                  type="button"
+                  className="game__release-test-btn"
+                  disabled={isHolding || loading || actionSyncing}
+                  onClick={() => void releaseTestAddBrewedCoffees(RELEASE_TEST_ADD_BREWED_COFFEES)}
+                >
+                  내린 커피 +{RELEASE_TEST_ADD_BREWED_COFFEES.toLocaleString('ko-KR')}잔
+                </button>
+              </div>
+            )}
 
             {isReviewPreviewEnabled() && (
               <>

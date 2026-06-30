@@ -14,6 +14,7 @@ import {
   devSetTotalCoffees,
   devSetSpentCoffeeCups,
   releaseTestAddDrunkCoffees,
+  releaseTestAddBrewedCoffees as releaseTestAddBrewedCoffeesApi,
   releaseTestSyncSpentCoffeeCups,
   drinkGame,
   ensureGuestSession,
@@ -66,7 +67,7 @@ import {
   hasReachedDailyPointCap,
   settleDailyPoint,
 } from './dailyPoint';
-import { RELEASE_TEST_ADD_DRUNK_COFFEES } from './featureFlags';
+import { RELEASE_TEST_ADD_DRUNK_COFFEES, RELEASE_TEST_ADD_BREWED_COFFEES } from './featureFlags';
 import {
   commitWaterGrowth,
   isReadyToDrinkGrowth,
@@ -1369,6 +1370,66 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     applyLocalIncrement();
   }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
 
+  const releaseTestAddBrewedCoffees = useCallback(async (amount = RELEASE_TEST_ADD_BREWED_COFFEES) => {
+    if (loading || isHolding || syncingRef.current) return;
+
+    const prev = stateRef.current;
+    const addAmount = Math.max(1, Math.floor(amount));
+    const currentSession = sessionRef.current;
+
+    const applyLocalIncrement = () => {
+      applyAuthoritativeState({
+        ...prev,
+        ...grantBrewedCoffeeFields(prev, addAmount),
+      });
+      showSceneDialogue(`내린 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+    };
+
+    if (currentSession?.userId) {
+      stateEpochRef.current += 1;
+      const epoch = stateEpochRef.current;
+
+      try {
+        const result = await releaseTestAddBrewedCoffeesApi(addAmount);
+        const nextTotalCoffees = mergePreservedTotalCoffees(
+          result.state.totalCoffees,
+          prev.totalCoffees,
+          addAmount,
+        );
+        applyAuthoritativeState(
+          {
+            ...result.state,
+            totalCoffees: nextTotalCoffees,
+          },
+          { trustServer: true, epoch },
+        );
+        showSceneDialogue(`내린 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+        return;
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.state) {
+          const nextTotalCoffees = mergePreservedTotalCoffees(
+            err.state.totalCoffees,
+            prev.totalCoffees,
+            addAmount,
+          );
+          applyAuthoritativeState(
+            {
+              ...err.state,
+              totalCoffees: nextTotalCoffees,
+            },
+            { trustServer: true, epoch },
+          );
+          showSceneDialogue(`내린 커피 +${addAmount.toLocaleString('ko-KR')}잔`);
+          return;
+        }
+        applyLocalIncrement();
+        return;
+      }
+    }
+
+    applyLocalIncrement();
+  }, [applyAuthoritativeState, isHolding, loading, showSceneDialogue]);
+
   const reset = useCallback(async () => {
     const currentSession = sessionRef.current;
     if (!currentSession) return;
@@ -2600,6 +2661,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     testSetTotalCoffees,
     testSetSpentCoffeeCups,
     releaseTestAddSpentCoffeeCups,
+    releaseTestAddBrewedCoffees,
     purchaseVariant,
     selectVariant,
     reset,
