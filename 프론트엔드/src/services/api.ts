@@ -224,10 +224,17 @@ export async function fetchGameState(): Promise<GameState> {
   return bootstrap.state
 }
 
-export async function waterGame(options?: { pendingLocalWaters?: number }) {
+export async function waterGame(options?: {
+  pendingLocalWaters?: number
+  clientWatersToday?: number
+}) {
   const pendingLocalWaters = Math.max(0, Math.min(3, Math.floor(Number(options?.pendingLocalWaters ?? 0))))
-  const body =
-    pendingLocalWaters > 0 ? JSON.stringify({ pendingLocalWaters }) : '{}'
+  const payload: { pendingLocalWaters?: number; clientWatersToday?: number } = {}
+  if (pendingLocalWaters > 0) payload.pendingLocalWaters = pendingLocalWaters
+  if (options?.clientWatersToday !== undefined) {
+    payload.clientWatersToday = Math.max(0, Math.floor(Number(options.clientWatersToday)))
+  }
+  const body = Object.keys(payload).length > 0 ? JSON.stringify(payload) : '{}'
   return request('/api/game/water', { method: 'POST', body }) as Promise<{
     ok: true
     state: GameState
@@ -605,8 +612,12 @@ export async function claimBrewedCoffeeFinishBonusGame() {
   }>
 }
 
-export async function watchAdGame() {
-  return request('/api/game/watch-ad', { method: 'POST', body: '{}' }) as Promise<{
+export async function watchAdGame(options?: { clientWatersToday?: number }) {
+  const body =
+    options?.clientWatersToday !== undefined
+      ? JSON.stringify({ clientWatersToday: options.clientWatersToday })
+      : '{}'
+  return request('/api/game/watch-ad', { method: 'POST', body }) as Promise<{
     ok: true
     state: GameState
   }>

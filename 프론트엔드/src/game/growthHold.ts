@@ -46,6 +46,9 @@ export function resolveWaterSyncGrowth(
 ) {
   const start = roundGrowth(holdStartGrowth);
   const server = roundGrowth(serverGrowth);
+
+  if (server >= 100) return 100;
+
   const maxDelta = options.maxDelta ?? GROWTH_PER_WATER;
   const maxExpected = roundGrowth(Math.min(100, start + maxDelta));
   const minExpected = commitWaterGrowth(start);

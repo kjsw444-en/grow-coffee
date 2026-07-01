@@ -163,6 +163,7 @@ export function CoffeeGame() {
     passiveActive,
     waterStatus,
     readyToDrink,
+    effectiveGrowth,
     drinkUiActive,
     isDrinkCommitting,
     needsAd,
@@ -1545,13 +1546,15 @@ export function CoffeeGame() {
 
   const treePanelGrowth = getRitualEffectiveGrowth(state, displayGrowth);
   const treeWatering = isHolding && (holdMode === 'water' || holdMode === 'brew');
-  const serverGrowthPercent = state.growth;
-  const plantGrowthForScene = isReadyToDrinkGrowth(serverGrowthPercent)
-    ? getRitualEffectiveGrowth(state, serverGrowthPercent)
+  const growthForDrinkGate = tutorialActive
+    ? Math.max(roundGrowth(state.growth), roundGrowth(displayGrowth))
+    : roundGrowth(effectiveGrowth);
+  const plantGrowthForScene = isReadyToDrinkGrowth(growthForDrinkGate)
+    ? getRitualEffectiveGrowth(state, growthForDrinkGate)
     : getRitualEffectiveGrowth(state, displayGrowth);
   const drinkStage = useMemo(
-    () => isDrinkStage(serverGrowthPercent),
-    [serverGrowthPercent],
+    () => isDrinkStage(growthForDrinkGate),
+    [growthForDrinkGate],
   );
 
   const tutorialPlantProps = useMemo(

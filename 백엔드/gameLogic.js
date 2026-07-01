@@ -35,6 +35,7 @@ import {
   consumeWaterQuota,
   getTodayKey,
   grantAdWaterCredit,
+  mergeHybridClientQuota,
   needsAdForWater,
   normalizeWaterQuota,
 } from './waterQuota.js'
@@ -213,15 +214,38 @@ export function applyWater(state) {
 /**
  * 하이브리드 — 로컬에서 쌓인 물주기(pendingLocalWaters) + 마지막 1회를 서버에서 일괄 반영해 growth=100%.
  */
-export function applyWaterFinalizeCycle(state, pendingLocalWaters = 3) {
+export function applyWaterFinalizeCycle(state, pendingLocalWaters = 3, options = {}) {
   const current = withSettledPassive(state)
   const pending = Math.max(0, Math.min(3, Math.floor(Number(pendingLocalWaters ?? 0))))
+  const clientWatersToday = options.clientWatersToday
 
   if (roundGrowth(current.growth) >= 100) {
     return { ok: false, reason: 'ready-to-drink', state: current, lastEarned: null }
   }
 
   let next = { ...current }
+
+  if (clientWatersToday !== undefined && clientWatersToday !== null && Number.isFinite(Number(clientWatersToday))) {
+    next = { ...next, ...mergeHybridClientQuota(next, clientWatersToday) }
+
+    if (!canWaterToday(next)) {
+      return { ok: false, reason: 'need-ad', state: next, lastEarned: null }
+    }
+
+    const quota = consumeWaterQuota(next)
+    next = {
+      ...next,
+      ...quota,
+      growth: clampGrowth(100),
+      totalWaters: next.totalWaters + 1,
+    }
+
+    if (Math.max(0, Number(next.ritualFertilizerCharges ?? 0)) > 0) {
+      next = consumeRitualFertilizerCharge(next)
+    }
+
+    return { ok: true, state: next, lastEarned: null }
+  }
 
   for (let i = 0; i < pending; i += 1) {
     if (!canWaterToday(next)) {
@@ -297,14 +321,20 @@ export function applyDevBumpPassive(state) {
   }
 }
 
-export function applyWatchAd(state) {
+export function applyWatchAd(state, options = {}) {
   const current = withSettledPassive(state)
+  const clientWatersToday = options.clientWatersToday
 
-  if (!needsAdForWater(current)) {
+  let quotaBase = current
+  if (clientWatersToday !== undefined && clientWatersToday !== null) {
+    quotaBase = { ...current, ...mergeHybridClientQuota(current, clientWatersToday) }
+  }
+
+  if (!needsAdForWater(quotaBase)) {
     return { ok: false, reason: 'not-needed', state: current }
   }
 
-  const nextQuota = grantAdWaterCredit(current)
+  const nextQuota = grantAdWaterCredit(quotaBase)
 
   return {
     ok: true,

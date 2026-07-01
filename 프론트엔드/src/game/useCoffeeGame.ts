@@ -119,8 +119,10 @@ import {
 import { initialState, type GameState } from './types';
 import {
   clearLocalTreeGrowth,
+  getHybridGrowthFloor,
   getPendingLocalWaters,
   isHybridLocalTreeGrowth,
+  normalizeHybridServerGrowth,
   readLocalTreeGrowth,
   writeLocalTreeGrowth,
 } from './localTreeGrowth';
@@ -171,6 +173,15 @@ import {
   hasCrossedShopPurchaseReviewThreshold,
 } from './reviewMilestones';
 
+function syncHybridServerGrowthRef(ref: { current: number }, serverGrowth: number) {
+  ref.current = normalizeHybridServerGrowth(serverGrowth);
+}
+
+function readHybridGrowthFloor(userId: string, stateGrowth: number, displayGrowth: number) {
+  const stored = userId ? readLocalTreeGrowth(userId) : 0;
+  return getHybridGrowthFloor(stateGrowth, displayGrowth, stored);
+}
+
 function readCount(raw: GameState, camel: keyof GameState, snake: string) {
   const record = raw as GameState & Record<string, unknown>;
   const value = record[camel] ?? record[snake];
@@ -178,17 +189,20 @@ function readCount(raw: GameState, camel: keyof GameState, snake: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function normalizeLoadedState(raw: GameState) {
+function normalizeLoadedState(raw: GameState, options?: { skipLegacyGrowthReconcile?: boolean }) {
   const totalWaters = readCount(raw, 'totalWaters', 'total_waters');
   const ownedCoffeeVariants = normalizeOwnedCoffeeVariants(
     raw.ownedCoffeeVariants ?? (raw as GameState & { owned_coffee_variants?: unknown }).owned_coffee_variants,
   );
+  const sanitizedGrowth = sanitizeGrowthForWaters(raw.growth ?? 0);
   const normalized: GameState = {
     ...raw,
-    growth: reconcileLegacyServerGrowth(
-      sanitizeGrowthForWaters(raw.growth ?? 0),
-      totalWaters,
-    ),
+    growth:
+      options?.skipLegacyGrowthReconcile ||
+      isHybridLocalTreeGrowth(sanitizedGrowth) ||
+      sanitizedGrowth >= 100
+        ? sanitizedGrowth
+        : reconcileLegacyServerGrowth(sanitizedGrowth, totalWaters),
     money: readCount(raw, 'money', 'money'),
     totalCoffees: readCount(raw, 'totalCoffees', 'total_coffees'),
     totalWaters,
@@ -552,17 +566,24 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         return stateRef.current;
       }
       const trustServer = options?.trustServer ?? false;
+      const userId = sessionRef.current?.userId ?? '';
+      const storedLocalGrowth = userId ? readLocalTreeGrowth(userId) : 0;
       const currentGrowth = roundGrowth(stateRef.current.growth);
       const currentDisplayGrowth = roundGrowth(displayGrowthRef.current);
       const incomingGrowth = roundGrowth(raw.growth);
+      const hybridFloor = getHybridGrowthFloor(
+        currentGrowth,
+        currentDisplayGrowth,
+        storedLocalGrowth,
+      );
       let growth = incomingGrowth;
       if (
         !trustServer &&
         !isDrinkCommittingRef.current &&
-        isHybridLocalTreeGrowth(Math.max(currentGrowth, currentDisplayGrowth)) &&
-        incomingGrowth < Math.max(currentGrowth, currentDisplayGrowth)
+        isHybridLocalTreeGrowth(hybridFloor) &&
+        incomingGrowth < hybridFloor
       ) {
-        growth = Math.max(currentGrowth, currentDisplayGrowth);
+        growth = hybridFloor;
       }
       const tutorialGrowthFloor =
         tutorialBypassQuotaRef.current && !trustServer && !isDrinkCommittingRef.current
@@ -571,6 +592,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       if (tutorialGrowthFloor !== null && tutorialGrowthFloor < 100) {
         growth = Math.max(growth, tutorialGrowthFloor);
       }
+      const skipLegacyGrowthReconcile = !trustServer && isHybridLocalTreeGrowth(growth);
       const mergedQuota = trustServer
         ? normalizeWaterQuota(raw)
         : mergeWaterQuotaFromServer(stateRef.current, raw);
@@ -583,13 +605,23 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const mergedAttendance = trustServer
         ? normalizeAttendance(raw)
         : mergeAttendanceFromServer(stateRef.current, raw);
-      const next = normalizeLoadedState({
-        ...raw,
-        growth,
-        ...mergedQuota,
-        ...mergedPassive,
-        ...mergedAttendance,
-      });
+      const next = normalizeLoadedState(
+        {
+          ...raw,
+          growth,
+          ...mergedQuota,
+          ...mergedPassive,
+          ...mergedAttendance,
+        },
+        { skipLegacyGrowthReconcile },
+      );
+      if (userId && isHybridLocalTreeGrowth(next.growth)) {
+        writeLocalTreeGrowth(userId, next.growth);
+      } else if (userId && trustServer && roundGrowth(next.growth) >= 100) {
+        clearLocalTreeGrowth(userId);
+      } else if (userId && trustServer && roundGrowth(next.growth) === 0) {
+        clearLocalTreeGrowth(userId);
+      }
       logWaterCycle('apply-session', {
         prevGrowth: currentGrowth,
         incomingGrowth: roundGrowth(raw.growth),
@@ -674,7 +706,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       options?: { trustServer?: boolean },
     ) => {
       let growth = raw.growth;
-      if (holdStartGrowth !== undefined) {
+      const finalizeStroke =
+        holdStartGrowth !== undefined &&
+        roundGrowth(holdStartGrowth + GROWTH_PER_WATER) >= 100;
+      if (holdStartGrowth !== undefined && roundGrowth(raw.growth) < 100) {
         const beforeCharges = stateRef.current.ritualFertilizerCharges ?? 0;
         const afterCharges = raw.ritualFertilizerCharges ?? 0;
         const usedFertilizer = afterCharges < beforeCharges;
@@ -683,6 +718,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
             ? roundGrowth(GROWTH_PER_WATER * 1.3)
             : GROWTH_PER_WATER,
         });
+        if (finalizeStroke && roundGrowth(displayGrowthRef.current) >= 100) {
+          growth = 100;
+        }
+      } else if (holdStartGrowth !== undefined) {
+        growth = roundGrowth(raw.growth);
       }
       return applyAuthoritativeState(
         {
@@ -722,7 +762,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         const localTotalCoffees = stateRef.current.totalCoffees;
         const localSpentCoffeeCups = stateRef.current.spentCoffeeCups;
         const serverGrowth = roundGrowth(next.state.growth);
-        serverGrowthRef.current = serverGrowth;
+        syncHybridServerGrowthRef(serverGrowthRef, serverGrowth);
         const localGrowth = readLocalTreeGrowth(next.userId);
         const mergedGrowth =
           serverGrowth < 100 && localGrowth > serverGrowth ? localGrowth : next.state.growth;
@@ -856,7 +896,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       const epoch = stateEpochRef.current;
       const before = stateRef.current;
       const beforeGrowth = roundGrowth(before.growth);
-      const lockedHoldStart = holdStartGrowthRef.current ?? beforeGrowth;
+      const userId = currentSession.userId;
+      const lockedHoldStart =
+        holdStartGrowthRef.current ??
+        readHybridGrowthFloor(userId, beforeGrowth, roundGrowth(displayGrowthRef.current));
       const isWaterLike = mode === 'water' || mode === 'brew';
 
       const applyOptimisticWaterHold = () => {
@@ -910,7 +953,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         resetHoldUi();
 
         const nextGrowth = roundGrowth(optimisticState.growth);
-        if (isHybridLocalTreeGrowth(nextGrowth)) {
+        // 온보딩은 광고 quota 없이 매 물주기마다 서버(testBump) 동기화 — 하이브리드 로컬 저장 제외
+        if (isHybridLocalTreeGrowth(nextGrowth) && !tutorialBypassQuota) {
           writeLocalTreeGrowth(currentSession.userId, nextGrowth);
           logWaterCycle('water-local-only', {
             nextGrowth,
@@ -924,7 +968,39 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         const pendingLocalWaters = getPendingLocalWaters(
           lockedHoldStart,
           serverGrowthRef.current,
+          { finalStroke: nextGrowth >= 100 },
         );
+        const clientWatersToday = Math.floor(roundGrowth(lockedHoldStart) / GROWTH_PER_WATER);
+        const waterGameOptions =
+          pendingLocalWaters > 0
+            ? { pendingLocalWaters, clientWatersToday }
+            : undefined;
+
+        const applyFinalizeServerState = (
+          serverState: GameState,
+          resolvedGrowth: number,
+          source: string,
+        ) => {
+          if (nextGrowth >= 100 && resolvedGrowth < 100) {
+            logWaterCycle('water-finalize-incomplete', {
+              responseGrowth: resolvedGrowth,
+              lockedHoldStart,
+              pendingLocalWaters,
+              serverGrowth: serverGrowthRef.current,
+            });
+            applyAuthoritativeState(
+              { ...serverState, growth: 100 },
+              { epoch, source: `${source}-keep-local-100`, trustServer: false },
+            );
+            return;
+          }
+          applyWaterServerState(serverState, lockedHoldStart, epoch, source, {
+            trustServer: true,
+          });
+          if (resolvedGrowth >= 100) {
+            clearLocalTreeGrowth(currentSession.userId);
+          }
+        };
 
         void (async () => {
           pendingWaterSyncRef.current = true;
@@ -935,16 +1011,14 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
             displayGrowth: roundGrowth(displayGrowthRef.current),
             serverGrowth: serverGrowthRef.current,
             pendingLocalWaters,
+            tutorialBypassQuota,
             pendingWaterSync: pendingWaterSyncRef.current,
             actionSyncing: actionSyncingRef.current,
           });
           try {
-            const result =
-              tutorialBypassQuota && pendingLocalWaters === 0
-                ? await testBumpGame()
-                : await waterGame(
-                    pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
-                  );
+            const result = tutorialBypassQuota
+              ? await testBumpGame()
+              : await waterGame(waterGameOptions);
             if (epoch !== stateEpochRef.current) return;
             const resolvedGrowth = roundGrowth(result.state.growth);
             logWaterCycle('water-api-after', {
@@ -955,13 +1029,15 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
               displayGrowth: roundGrowth(displayGrowthRef.current),
               pendingLocalWaters,
             });
-            applyWaterServerState(result.state, lockedHoldStart, epoch, 'water-api-finalize', {
-              trustServer: true,
-            });
-            serverGrowthRef.current = resolvedGrowth;
-            clearLocalTreeGrowth(currentSession.userId);
+            applyFinalizeServerState(result.state, resolvedGrowth, 'water-api-finalize');
+            syncHybridServerGrowthRef(
+              serverGrowthRef,
+              nextGrowth >= 100 && resolvedGrowth < 100 ? 100 : resolvedGrowth,
+            );
             setLastEarned(result.lastEarned);
-            finishWaterDialogue(resolvedGrowth);
+            finishWaterDialogue(
+              nextGrowth >= 100 && resolvedGrowth < 100 ? 100 : resolvedGrowth,
+            );
           } catch (err) {
             if (epoch !== stateEpochRef.current) return;
             if (
@@ -972,10 +1048,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
               needsAdForWater(err.state)
             ) {
               try {
-                await watchAdGame();
-                const retry = await waterGame(
-                  pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
-                );
+                await watchAdGame({ clientWatersToday });
+                const retry = tutorialBypassQuota
+                  ? await testBumpGame()
+                  : await waterGame(waterGameOptions);
                 if (epoch !== stateEpochRef.current) return;
                 const resolvedGrowth = roundGrowth(retry.state.growth);
                 logWaterCycle('water-api-after', {
@@ -986,13 +1062,19 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
                   displayGrowth: roundGrowth(displayGrowthRef.current),
                   pendingLocalWaters,
                 });
-                applyWaterServerState(retry.state, lockedHoldStart, epoch, 'water-api-retry-after-watch-ad', {
-                  trustServer: true,
-                });
-                serverGrowthRef.current = resolvedGrowth;
-                clearLocalTreeGrowth(currentSession.userId);
+                applyFinalizeServerState(
+                  retry.state,
+                  resolvedGrowth,
+                  'water-api-retry-after-watch-ad',
+                );
+                syncHybridServerGrowthRef(
+                  serverGrowthRef,
+                  nextGrowth >= 100 && resolvedGrowth < 100 ? 100 : resolvedGrowth,
+                );
                 setLastEarned(retry.lastEarned);
-                finishWaterDialogue(resolvedGrowth);
+                finishWaterDialogue(
+                  nextGrowth >= 100 && resolvedGrowth < 100 ? 100 : resolvedGrowth,
+                );
                 return;
               } catch (retryErr) {
                 stateRef.current = before;
@@ -1007,6 +1089,13 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
               }
             }
             if (isWaterCooldownError(err) && err.state) {
+              if (roundGrowth(optimisticState.growth) >= 100 && lockedHoldStart < 100) {
+                commitDisplayGrowth(lockedHoldStart, true);
+                const reverted = { ...stateRef.current, growth: lockedHoldStart };
+                stateRef.current = reverted;
+                setState(reverted);
+                writeLocalTreeGrowth(currentSession.userId, lockedHoldStart);
+              }
               const resolvedGrowth = roundGrowth(err.state.growth);
               logWaterCycle('water-api-after', {
                 responseGrowth: resolvedGrowth,
@@ -1016,12 +1105,19 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
                 displayGrowth: roundGrowth(displayGrowthRef.current),
               });
               applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-cooldown-error-state', {
-                trustServer: true,
+                trustServer: false,
               });
-              serverGrowthRef.current = resolvedGrowth;
+              syncHybridServerGrowthRef(serverGrowthRef, resolvedGrowth);
               return;
             }
             if (err instanceof ApiRequestError && err.state) {
+              if (roundGrowth(optimisticState.growth) >= 100 && lockedHoldStart < 100) {
+                commitDisplayGrowth(lockedHoldStart, true);
+                const reverted = { ...stateRef.current, growth: lockedHoldStart };
+                stateRef.current = reverted;
+                setState(reverted);
+                writeLocalTreeGrowth(currentSession.userId, lockedHoldStart);
+              }
               const resolvedGrowth = roundGrowth(err.state.growth);
               logWaterCycle('water-api-after', {
                 responseGrowth: resolvedGrowth,
@@ -1031,9 +1127,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
                 displayGrowth: roundGrowth(displayGrowthRef.current),
               });
               applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-error-state', {
-                trustServer: true,
+                trustServer: false,
               });
-              serverGrowthRef.current = resolvedGrowth;
+              syncHybridServerGrowthRef(serverGrowthRef, resolvedGrowth);
               if (needsAdForWater(err.state)) {
                 const refillLabel = getRefillActionLabel(err.state.growth);
                 showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
@@ -1083,8 +1179,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           actionSyncing: actionSyncingRef.current,
         });
         const pendingLocalWaters = getPendingLocalWaters(lockedHoldStart, serverGrowthRef.current);
+        const clientWatersToday = Math.floor(roundGrowth(lockedHoldStart) / GROWTH_PER_WATER);
         const result = await waterGame(
-          pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
+          pendingLocalWaters > 0
+            ? { pendingLocalWaters, clientWatersToday }
+            : undefined,
         );
         const resolvedGrowth = roundGrowth(result.state.growth);
         logWaterCycle('water-api-after', {
@@ -1098,7 +1197,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         applyWaterServerState(result.state, lockedHoldStart, epoch, 'water-api-sync', {
           trustServer: true,
         });
-        serverGrowthRef.current = resolvedGrowth;
+        syncHybridServerGrowthRef(serverGrowthRef, resolvedGrowth);
         if (resolvedGrowth >= 100) {
           clearLocalTreeGrowth(currentSession.userId);
         }
@@ -1225,7 +1324,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       return;
     }
     if (holdStartRef.current !== null) return;
-    if (isReadyToDrinkGrowth(stateRef.current.growth)) return;
+    if (isReadyToDrinkGrowth(readHybridGrowthFloor(
+      sessionRef.current?.userId ?? '',
+      roundGrowth(stateRef.current.growth),
+      roundGrowth(displayGrowthRef.current),
+    ))) return;
     if (!canUseGrowHold(stateRef.current) && !tutorialBypassQuota) {
       if (needsAdForWater(stateRef.current)) {
         const refillLabel = getRefillActionLabel(stateRef.current.growth);
@@ -1237,10 +1340,15 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     holdPreflightRef.current = true;
     try {
       const activeState = stateRef.current;
+      const userId = currentSession.userId;
 
-      const authoritativeGrowth = roundGrowth(activeState.growth);
+      const authoritativeGrowth = readHybridGrowthFloor(
+        userId,
+        roundGrowth(activeState.growth),
+        roundGrowth(displayGrowthRef.current),
+      );
       if (holdStartRef.current !== null || syncingRef.current) return;
-      if (isReadyToDrinkGrowth(activeState.growth)) return;
+      if (isReadyToDrinkGrowth(authoritativeGrowth)) return;
       if (!canUseGrowHold(activeState) && !tutorialBypassQuota) return;
 
       const mode: HoldMode =
@@ -1867,6 +1975,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     const epoch = stateEpochRef.current;
     logWaterCycle('watch-ad-before', {
       adWaterCredits: prev.adWaterCredits,
+      watersToday: prev.watersToday,
       needsAdForWater: needsAdForWater(prev),
     });
 
@@ -1877,6 +1986,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         return;
       }
 
+      const clientWatersToday = Math.max(0, Math.floor(Number(prev.watersToday ?? 0)));
       const optimistic = grantAdWaterCredit(prev);
       stateRef.current = optimistic;
       setState(optimistic);
@@ -1885,7 +1995,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
       void (async () => {
         try {
-          const result = await watchAdGame();
+          const result = await watchAdGame({ clientWatersToday });
           if (epoch !== stateEpochRef.current) return;
           logWaterCycle('watch-ad-after', {
             responseAdWaterCredits: result.state.adWaterCredits,
@@ -1941,16 +2051,18 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     setActionError(null);
     logWaterCycle('watch-ad-before', {
       adWaterCredits: prev.adWaterCredits,
+      watersToday: prev.watersToday,
       needsAdForWater: needsAdForWater(prev),
     });
 
+    const clientWatersToday = Math.max(0, Math.floor(Number(prev.watersToday ?? 0)));
     const optimistic = grantAdWaterCredit(prev);
     stateRef.current = optimistic;
     setState(optimistic);
 
     void (async () => {
       try {
-        const result = await watchAdGame();
+        const result = await watchAdGame({ clientWatersToday });
         if (epoch !== stateEpochRef.current) return;
         logWaterCycle('watch-ad-after', {
           responseAdWaterCredits: result.state.adWaterCredits,
@@ -2832,10 +2944,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const progress = Math.min(100, (state.money / GOAL_AMOUNT) * 100);
   const dailyPointCapReached = hasReachedDailyPointCap(settleDailyPoint(state));
+  const effectiveGrowth = useMemo(() => {
+    const userId = session?.userId ?? '';
+    return readHybridGrowthFloor(userId, state.growth, displayGrowth);
+  }, [session?.userId, state.growth, displayGrowth]);
+  const growthForReadyCheck = tutorialBypassQuotaRef.current
+    ? Math.max(roundGrowth(state.growth), roundGrowth(displayGrowth))
+    : roundGrowth(effectiveGrowth);
   const drinkUiActive =
-    (isReadyToDrinkGrowth(state.growth) || isDrinkCommitting) && !isHolding;
+    (isReadyToDrinkGrowth(growthForReadyCheck) || isDrinkCommitting) && !isHolding;
   const readyToDrink =
-    isReadyToDrinkGrowth(state.growth) && !actionSyncing && !isHolding;
+    isReadyToDrinkGrowth(growthForReadyCheck) && !actionSyncing && !isHolding;
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
   const waterStatus = useMemo(
     () => getWaterStatus(state),
@@ -2960,6 +3079,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     claimingAttendanceStreak,
     progress,
     readyToDrink,
+    effectiveGrowth,
     drinkUiActive,
     isDrinkCommitting,
     needsAd,

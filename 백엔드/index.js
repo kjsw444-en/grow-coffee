@@ -210,10 +210,14 @@ app.post('/api/game/water', requireUser, async (req, res) => {
   try {
     const now = Date.now()
     const pendingLocalWaters = Math.max(0, Math.min(3, Math.floor(Number(req.body?.pendingLocalWaters ?? 0))))
+    const rawClientWatersToday = Math.floor(Number(req.body?.clientWatersToday ?? NaN))
+    const clientWatersToday = Number.isFinite(rawClientWatersToday) ? rawClientWatersToday : undefined
 
     const current = await getGameState(req.userId)
     const result =
-      pendingLocalWaters > 0 ? applyWaterFinalizeCycle(current, pendingLocalWaters) : applyWater(current)
+      pendingLocalWaters > 0
+        ? applyWaterFinalizeCycle(current, pendingLocalWaters, { clientWatersToday })
+        : applyWater(current)
 
     if (!result.ok) {
       const messages = {
@@ -628,8 +632,11 @@ app.post('/api/game/dev/advance-daily-ritual', requireUser, async (req, res) => 
 
 app.post('/api/game/watch-ad', requireUser, async (req, res) => {
   try {
+    const clientWatersToday = Math.max(0, Math.floor(Number(req.body?.clientWatersToday ?? NaN)))
     const current = await getGameState(req.userId)
-    const result = applyWatchAd(current)
+    const result = applyWatchAd(current, {
+      clientWatersToday: Number.isFinite(clientWatersToday) ? clientWatersToday : undefined,
+    })
 
     if (!result.ok) {
       const messages = {

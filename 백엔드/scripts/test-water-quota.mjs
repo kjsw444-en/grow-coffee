@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { applyWatchAd, applyWater } from '../gameLogic.js'
+import { applyWatchAd, applyWater, applyWaterFinalizeCycle } from '../gameLogic.js'
 import { initialGameState } from '../constants.js'
 import { canWaterToday, needsAdForWater } from '../waterQuota.js'
 
@@ -63,6 +63,53 @@ test('물주기 전에는 광고 보상 불가', () => {
   const ad = applyWatchAd(state)
   assert.equal(ad.ok, false)
   assert.equal(ad.reason, 'not-needed')
+})
+
+test('하이브리드 — 서버 quota 0·클라이언트 watersToday 1 → 광고 보상', () => {
+  const server = { ...initialGameState, growth: 0, watersToday: 0, waterDayKey: '2026-07-01' }
+  assert.equal(needsAdForWater(server), false)
+
+  const ad = applyWatchAd(server, { clientWatersToday: 1 })
+  assert.equal(ad.ok, true)
+  assert.equal(ad.state.watersToday, 1)
+  assert.equal(ad.state.adWaterCredits, 1)
+  assert.equal(ad.state.growth, 0)
+})
+
+test('하이브리드 — clientWatersToday 미전달 시 서버 quota 0이면 거절', () => {
+  const server = { ...initialGameState, growth: 0, watersToday: 0 }
+  const ad = applyWatchAd(server)
+  assert.equal(ad.ok, false)
+  assert.equal(ad.reason, 'not-needed')
+})
+
+test('하이브리드 — 2·3회째 광고 (로컬 크레딧 소모 반영)', () => {
+  let server = { ...initialGameState, growth: 0, watersToday: 0, waterDayKey: '2026-07-01' }
+  const ad1 = applyWatchAd(server, { clientWatersToday: 1 })
+  assert.equal(ad1.ok, true)
+  assert.equal(ad1.state.adWaterCredits, 1)
+
+  const ad2 = applyWatchAd(ad1.state, { clientWatersToday: 2 })
+  assert.equal(ad2.ok, true)
+  assert.equal(ad2.state.watersToday, 2)
+  assert.equal(ad2.state.adWaterCredits, 1)
+
+  const ad3 = applyWatchAd(ad2.state, { clientWatersToday: 3 })
+  assert.equal(ad3.ok, true)
+  assert.equal(ad3.state.watersToday, 3)
+  assert.equal(ad3.state.adWaterCredits, 1)
+})
+
+test('하이브리드 — 75% 커피 내리기 finalize (clientWatersToday=3)', () => {
+  let server = { ...initialGameState, growth: 0, totalWaters: 4, watersToday: 0, waterDayKey: '2026-07-01' }
+  server = applyWatchAd(server, { clientWatersToday: 1 }).state
+  server = applyWatchAd(server, { clientWatersToday: 2 }).state
+  server = applyWatchAd(server, { clientWatersToday: 3 }).state
+
+  const fin = applyWaterFinalizeCycle(server, 3, { clientWatersToday: 3 })
+  assert.equal(fin.ok, true)
+  assert.equal(fin.state.growth, 100)
+  assert.equal(fin.state.watersToday, 4)
 })
 
 test('dayKey 없어도 watersToday 유지 — 0%에서 광고 슬롯', () => {

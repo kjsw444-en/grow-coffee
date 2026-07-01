@@ -26,6 +26,9 @@ function commitWaterGrowth(startGrowth) {
 function resolveWaterSyncGrowth(holdStartGrowth, serverGrowth, options = {}) {
   const start = roundGrowth(holdStartGrowth);
   const server = roundGrowth(serverGrowth);
+
+  if (server >= 100) return 100;
+
   const maxDelta = options.maxDelta ?? GROWTH_PER_WATER;
   const maxExpected = roundGrowth(Math.min(100, start + maxDelta));
   const minExpected = commitWaterGrowth(start);
@@ -66,9 +69,8 @@ test('구서버 75% 점프 응답은 +25%로 보정', () => {
   assert.equal(resolveWaterSyncGrowth(50, 75), 75);
 });
 
-test('신서버 +25% 응답은 그대로', () => {
-  assert.equal(resolveWaterSyncGrowth(0, 25), 25);
-  assert.equal(resolveWaterSyncGrowth(25, 50), 50);
+test('finalize 100% 응답은 holdStart와 무관하게 100%', () => {
+  assert.equal(resolveWaterSyncGrowth(0, 100), 100);
   assert.equal(resolveWaterSyncGrowth(75, 100), 100);
 });
 

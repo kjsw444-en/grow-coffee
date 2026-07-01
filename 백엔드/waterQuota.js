@@ -60,3 +60,26 @@ export function grantAdWaterCredit(raw) {
   const quota = normalizeWaterQuota(raw)
   return { ...quota, adWaterCredits: quota.adWaterCredits + 1 }
 }
+
+/** 하이브리드 — 프론트 로컬 물주기 quota를 서버에 반영 (growth는 그대로) */
+export function syncHybridClientWaterQuota(raw, clientWatersToday, maxLocalAhead = 3) {
+  const quota = normalizeWaterQuota(raw)
+  const client = Math.max(0, Math.floor(Number(clientWatersToday ?? 0)))
+  if (client <= quota.watersToday) return quota
+
+  const capped = Math.min(client, quota.watersToday + Math.max(0, Math.floor(maxLocalAhead)))
+  return { ...quota, watersToday: capped }
+}
+
+/** 하이브리드 — watersToday 동기화 + 로컬에서 이미 쓴 광고 크레딧 제거 */
+export function mergeHybridClientQuota(raw, clientWatersToday, maxLocalAhead = 3) {
+  const quota = normalizeWaterQuota(raw)
+  const client = Math.max(0, Math.floor(Number(clientWatersToday ?? 0)))
+  if (client <= 0) return quota
+
+  const synced = syncHybridClientWaterQuota(raw, client, maxLocalAhead)
+  return {
+    ...synced,
+    adWaterCredits: client > quota.watersToday ? 0 : quota.adWaterCredits,
+  }
+}
