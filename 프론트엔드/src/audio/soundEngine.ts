@@ -134,9 +134,18 @@ class SoundEngine {
     this.primeOutput();
   }
 
-  async recoverAfterAd() {
+  markInterrupted() {
+    this.rebuildContextOnNextGesture = true;
+    this.stopAmbient({ immediate: true });
+  }
+
+  async recoverAfterInterruption() {
     this.rebuildContextOnNextGesture = true;
     await this.ensureRunning();
+  }
+
+  async recoverAfterAd() {
+    await this.recoverAfterInterruption();
   }
 
   async unlock() {
@@ -261,17 +270,17 @@ class SoundEngine {
         this.tone(523, 0.1, { volume: 0.1, release: 0.12 });
         break;
       case 'waterStart':
-        this.tone(330, 0.14, { volume: 0.2, type: 'sine' });
-        this.tone(440, 0.1, { volume: 0.14, release: 0.1 });
+        this.tone(330, 0.14, { volume: 0.28, type: 'sine' });
+        this.tone(440, 0.1, { volume: 0.2, release: 0.1 });
         break;
       case 'waterTick':
-        this.tone(520 + Math.random() * 40, 0.04, { volume: 0.09, type: 'sine' });
+        this.tone(520 + Math.random() * 40, 0.04, { volume: 0.14, type: 'sine' });
         break;
       case 'waterComplete':
-        this.chord([523, 659, 784], 0.35, 0.18);
+        this.chord([523, 659, 784], 0.35, 0.24);
         break;
       case 'waterCancel':
-        this.tone(280, 0.16, { volume: 0.09, release: 0.14 });
+        this.tone(280, 0.16, { volume: 0.13, release: 0.14 });
         break;
       case 'growth':
         this.chord([587, 740, 880], 0.28, 0.11);
@@ -281,7 +290,7 @@ class SoundEngine {
         window.setTimeout(() => this.play('coin'), 120);
         break;
       case 'slotRoll':
-        [0, 90, 180, 270, 360, 450, 540, 630, 720, 810].forEach((delay, index) => {
+        [0, 60, 120, 180, 240, 300, 360, 420].forEach((delay, index) => {
           window.setTimeout(() => {
             this.tone(520 + (index % 5) * 55, 0.035, {
               volume: 0.07,

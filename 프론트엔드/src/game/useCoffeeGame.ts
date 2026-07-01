@@ -365,7 +365,7 @@ function isWaterCooldownError(err: unknown): err is ApiRequestError {
 const HOLD_UI_COMMIT_MS = 32;
 const DISPLAY_GROWTH_MIN_DELTA = 1 / 10 ** GROWTH_DISPLAY_DECIMALS;
 const HARVEST_REWARD_ROLL_MS = 500;
-const HARVEST_REWARD_RESULT_MS = 300;
+const HARVEST_REWARD_RESULT_MS = 500;
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));

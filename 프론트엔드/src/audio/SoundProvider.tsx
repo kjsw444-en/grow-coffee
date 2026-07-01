@@ -77,13 +77,17 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   const stopWaterLoop = useCallback(() => soundEngine.stopWaterLoop(), []);
 
   useEffect(() => {
+    const onBackground = () => {
+      soundEngine.markInterrupted();
+    };
+
     const onForeground = () => {
       if (document.hidden) {
-        soundEngine.stopAmbient({ immediate: true });
+        onBackground();
         return;
       }
 
-      void soundEngine.ensureRunning().then(() => {
+      void soundEngine.recoverAfterInterruption().then(() => {
         if (unlocked && !settings.muted) {
           void soundEngine.startAmbient();
         }
@@ -91,11 +95,15 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     };
 
     document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('pagehide', onBackground);
+    window.addEventListener('blur', onBackground);
     window.addEventListener('focus', onForeground);
     window.addEventListener('pageshow', onForeground);
 
     return () => {
       document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('pagehide', onBackground);
+      window.removeEventListener('blur', onBackground);
       window.removeEventListener('focus', onForeground);
       window.removeEventListener('pageshow', onForeground);
     };
@@ -105,7 +113,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     if (!unlocked || settings.muted) return;
 
     const recoverFromGesture = () => {
-      void soundEngine.ensureRunning().then(() => {
+      void soundEngine.unlock().then(() => {
         if (!settings.muted) {
           void soundEngine.startAmbient();
         }

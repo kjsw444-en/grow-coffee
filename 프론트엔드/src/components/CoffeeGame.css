@@ -318,7 +318,7 @@
   font-weight: 1000;
   line-height: 1;
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.78);
-  animation: harvest-reward-cups 0.56s cubic-bezier(0.2, 1.6, 0.4, 1) 0.58s both;
+  animation: harvest-reward-cups 0.24s cubic-bezier(0.2, 1.35, 0.4, 1) both;
 }
 
 .game__harvest-reward-pop--rolling .game__harvest-reward-cups {
