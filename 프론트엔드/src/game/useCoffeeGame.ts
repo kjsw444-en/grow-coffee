@@ -794,7 +794,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           return null;
         }
 
-        const quotaState = canUseGrowHold(before) ? consumeWaterQuota(before) : before;
+        const quotaState = canUseGrowHold(before)
+          ? consumeWaterQuota(before)
+          : tutorialBypassQuota
+            ? consumeWaterQuota(grantAdWaterCredit(before))
+            : before;
         return {
           ...quotaState,
           growth: nextGrowth,
@@ -820,16 +824,42 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         setState(optimisticState);
         triggerTapBurst();
         resetHoldUi();
+        syncingRef.current = true;
+        setActionSyncing(true);
+        setActionError(null);
 
         void (async () => {
           try {
-            const result = await waterGame();
+            const result = await (tutorialBypassQuota ? testBumpGame() : waterGame());
             if (epoch !== stateEpochRef.current) return;
             applyWaterServerState(result.state, lockedHoldStart, epoch);
             setLastEarned(result.lastEarned);
             finishWaterDialogue(resolveWaterSyncGrowth(lockedHoldStart, result.state.growth));
           } catch (err) {
             if (epoch !== stateEpochRef.current) return;
+            if (
+              tutorialBypassQuota &&
+              isWaterLike &&
+              err instanceof ApiRequestError &&
+              err.state &&
+              needsAdForWater(err.state)
+            ) {
+              try {
+                await watchAdGame();
+                const retry = await waterGame();
+                if (epoch !== stateEpochRef.current) return;
+                applyWaterServerState(retry.state, lockedHoldStart, epoch);
+                setLastEarned(retry.lastEarned);
+                finishWaterDialogue(resolveWaterSyncGrowth(lockedHoldStart, retry.state.growth));
+                return;
+              } catch (retryErr) {
+                const message =
+                  retryErr instanceof Error ? retryErr.message : '튜토리얼 물주기에 실패했습니다.';
+                setActionError(message);
+                showSceneDialogue(message);
+                return;
+              }
+            }
             if (isWaterCooldownError(err) && err.state) {
               applyWaterServerState(err.state, lockedHoldStart, epoch);
               return;
@@ -852,6 +882,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
             const message = err instanceof Error ? err.message : '동작 처리에 실패했습니다.';
             setActionError(message);
             showSceneDialogue(message);
+          } finally {
+            syncingRef.current = false;
+            setActionSyncing(false);
           }
         })();
         return;
@@ -938,7 +971,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       if (startGrowth !== null) {
         commitDisplayGrowth(
           previewHoldDisplayGrowth(startGrowth, holdDisplayStartRef.current, progress),
-          progress >= 100,
+          true,
         );
       }
     }

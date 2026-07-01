@@ -497,6 +497,118 @@
   pointer-events: auto;
 }
 
+.plant-scene__video-toggle {
+  position: absolute;
+  right: 0;
+  bottom: 2.5%;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 40px;
+  padding: 3px 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  background: rgba(18, 14, 12, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0.82;
+}
+
+.plant-scene__video-toggle small {
+  display: block;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: rgba(255, 248, 240, 0.9);
+}
+
+.plant-scene__video-toggle span {
+  display: block;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.plant-scene__video-toggle--off {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.plant-scene__video-toggle:active {
+  transform: scale(0.98);
+  opacity: 0.95;
+  background: rgba(18, 14, 12, 0.4);
+}
+
+.plant-scene__drink-ready-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.plant-scene__video-popup {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(38, 28, 20, 0.34);
+  pointer-events: auto;
+}
+
+.plant-scene__video-popup-card {
+  width: min(86%, 280px);
+  padding: 18px 16px 14px;
+  border: 2px solid rgba(255, 220, 150, 0.8);
+  border-radius: 18px;
+  background: #fff9ef;
+  box-shadow: 0 12px 28px rgba(70, 44, 20, 0.24);
+  color: #5a3a20;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.plant-scene__video-popup-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.plant-scene__video-popup-card p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.plant-scene__video-popup-card button {
+  min-width: 96px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #efcf8e 0%, #e0ad5c 100%);
+  color: #4d2f14;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .plant-scene__drink-fallback {
   z-index: 1;
   position: absolute;

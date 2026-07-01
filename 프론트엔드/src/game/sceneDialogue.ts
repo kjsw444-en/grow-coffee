@@ -189,6 +189,8 @@ const CAT_NUDGE_DIALOGUES = [
 
   '커피냥이 커피 상점에서 캐릭터를 모아보자고 손짓해요!',
 
+  '커피냥이 오른쪽 아래 🎬 버튼을 알려줘요. 커피 마시기 영상을 켜고 끌 수 있어요.',
+
 ] as const;
 
 
@@ -227,16 +229,39 @@ function wrapDialogueLine(text: string, lineWidth: number) {
 
   if (text.length <= lineWidth) return text;
 
-
-
   const lines: string[] = [];
 
   let current = '';
 
+  const words = text.split(/(\s+)/).filter((word) => word.length > 0);
 
+  if (words.some((word) => word.trim().length > 0)) {
+    for (const word of words) {
+      if (/^\s+$/.test(word)) continue;
+      if (word.length > lineWidth) {
+        if (current) {
+          lines.push(current);
+          current = '';
+        }
+        lines.push(splitLongDialogueWord(word, lineWidth));
+        continue;
+      }
+      const next = current ? `${current} ${word}` : word;
+      if (next.length <= lineWidth) {
+        current = next;
+        continue;
+      }
+      if (current) {
+        lines.push(current);
+      }
+      current = word;
+    }
+
+    if (current) lines.push(current);
+    return lines.join('\n');
+  }
 
   for (const char of text) {
-
     if (current.length >= lineWidth) {
 
       lines.push(current);
@@ -257,6 +282,21 @@ function wrapDialogueLine(text: string, lineWidth: number) {
 
   return lines.join('\n');
 
+}
+
+function splitLongDialogueWord(word: string, lineWidth: number) {
+  const chunks: string[] = [];
+  let current = '';
+  for (const char of word) {
+    if (current.length >= lineWidth) {
+      chunks.push(current);
+      current = char;
+      continue;
+    }
+    current += char;
+  }
+  if (current) chunks.push(current);
+  return chunks.join('\n');
 }
 
 

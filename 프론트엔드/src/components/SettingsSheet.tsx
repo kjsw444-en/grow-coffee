@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   BREWED_COFFEE_DRINK_OPTIONS,
   GOAL_AMOUNT,
@@ -9,6 +10,14 @@ import { formatDrunkCoffeePurchaseCost } from '../game/coffeeVariants';
 import { formatWon } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import './SettingsSheet.css';
+
+const DRINK_VIDEO_ENABLED_STORAGE_KEY = 'grow-coffee-drink-video-enabled';
+const DRINK_VIDEO_SETTING_CHANGE_EVENT = 'grow-coffee-drink-video-setting-change';
+
+function readDrinkVideoEnabled() {
+  if (typeof localStorage === 'undefined') return true;
+  return localStorage.getItem(DRINK_VIDEO_ENABLED_STORAGE_KEY) !== 'off';
+}
 
 type SettingsSheetProps = {
   user: AuthUser;
@@ -43,9 +52,17 @@ export function SettingsSheet({
   onClose,
 }: SettingsSheetProps) {
   const isTossLinked = user.source === 'toss';
+  const [drinkVideoEnabled, setDrinkVideoEnabled] = useState(readDrinkVideoEnabled);
   const drinkOptionsLabel = BREWED_COFFEE_DRINK_OPTIONS.map(
     (cups) => `${cups.toLocaleString('ko-KR')}잔`,
   ).join(' · ');
+
+  const toggleDrinkVideo = () => {
+    const next = !drinkVideoEnabled;
+    localStorage.setItem(DRINK_VIDEO_ENABLED_STORAGE_KEY, next ? 'on' : 'off');
+    window.dispatchEvent(new Event(DRINK_VIDEO_SETTING_CHANGE_EVENT));
+    setDrinkVideoEnabled(next);
+  };
 
   return (
     <div className="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -86,6 +103,19 @@ export function SettingsSheet({
 
         <section className="settings__guide" aria-labelledby="settings-guide-title">
           <h3 id="settings-guide-title">게임 안내</h3>
+
+          <div className="settings__guide-block settings__video-setting">
+            <div>
+              <h4>커피 마시기 동영상</h4>
+              <p>
+                100%에서 커피 마시기를 누를 때 영상을 볼지 정해요. 끄면 커피별 이미지가 보이고,
+                바로 보상 룰렛으로 넘어가요.
+              </p>
+            </div>
+            <button type="button" className="settings__video-toggle" onClick={toggleDrinkVideo}>
+              {drinkVideoEnabled ? '동영상 켜짐' : '동영상 꺼짐'}
+            </button>
+          </div>
 
           <div className="settings__guide-block">
             <h4>커피나무 키우기</h4>

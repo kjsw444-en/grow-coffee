@@ -105,6 +105,25 @@
   color: var(--pastel-text-soft);
 }
 
+.settings__video-setting {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings__video-toggle {
+  min-width: 96px;
+  min-height: 38px;
+  border: 1px solid var(--pastel-border);
+  border-radius: 999px;
+  background: var(--pastel-bg-surface);
+  color: var(--pastel-text-accent);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .settings__info {
   margin: 0 0 14px;
   display: grid;
