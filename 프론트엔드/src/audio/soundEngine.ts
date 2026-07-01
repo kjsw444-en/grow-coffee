@@ -261,14 +261,14 @@ class SoundEngine {
         this.tone(523, 0.1, { volume: 0.1, release: 0.12 });
         break;
       case 'waterStart':
-        this.tone(330, 0.14, { volume: 0.12, type: 'sine' });
-        this.tone(440, 0.1, { volume: 0.08, release: 0.1 });
+        this.tone(330, 0.14, { volume: 0.2, type: 'sine' });
+        this.tone(440, 0.1, { volume: 0.14, release: 0.1 });
         break;
       case 'waterTick':
-        this.tone(520 + Math.random() * 40, 0.04, { volume: 0.05, type: 'sine' });
+        this.tone(520 + Math.random() * 40, 0.04, { volume: 0.09, type: 'sine' });
         break;
       case 'waterComplete':
-        this.chord([523, 659, 784], 0.35, 0.14);
+        this.chord([523, 659, 784], 0.35, 0.18);
         break;
       case 'waterCancel':
         this.tone(280, 0.16, { volume: 0.09, release: 0.14 });

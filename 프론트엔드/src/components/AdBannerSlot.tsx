@@ -9,7 +9,7 @@ type AdBannerSlotProps = {
 };
 
 const ATTACH_RETRY_MS = 600;
-const MAX_ATTACH_ATTEMPTS = 8;
+const MAX_ATTACH_ATTEMPTS = 20;
 
 export function AdBannerSlot({ variant, className, bannerShape = 'card' }: AdBannerSlotProps) {
   const containerRef = useRef<HTMLDivElement>(null);

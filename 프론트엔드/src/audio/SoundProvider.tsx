@@ -23,6 +23,25 @@ type SoundContextValue = {
 };
 
 const SoundContext = createContext<SoundContextValue | null>(null);
+const BUTTON_SOUND_DEDUPE_MS = 160;
+let lastButtonSoundAt = 0;
+
+function isSoundableButton(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  const button = target.closest('button, [role="button"]');
+  if (!(button instanceof HTMLElement)) return false;
+  if (button instanceof HTMLButtonElement && button.disabled) return false;
+  if (button.getAttribute('aria-disabled') === 'true') return false;
+  return true;
+}
+
+function markButtonSoundPlayed() {
+  lastButtonSoundAt = performance.now();
+}
+
+function shouldSkipDuplicateButtonSound() {
+  return performance.now() - lastButtonSoundAt < BUTTON_SOUND_DEDUPE_MS;
+}
 
 export function SoundProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<SoundSettings>(() => soundEngine.getSettings());
@@ -104,6 +123,25 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     };
   }, [unlocked, settings.muted]);
 
+  useEffect(() => {
+    if (settings.muted) return;
+
+    const playCapturedButtonSound = (event: MouseEvent) => {
+      if (!isSoundableButton(event.target)) return;
+      if (shouldSkipDuplicateButtonSound()) return;
+
+      markButtonSoundPlayed();
+      void soundEngine.unlock().then(() => {
+        soundEngine.play('button');
+      });
+    };
+
+    window.addEventListener('click', playCapturedButtonSound, { capture: true });
+    return () => {
+      window.removeEventListener('click', playCapturedButtonSound, true);
+    };
+  }, [settings.muted]);
+
   const value = useMemo(
     () => ({
       settings,
@@ -133,6 +171,12 @@ export function useButtonSound(sfx: SfxId = 'button') {
   const { unlock, play } = useSound();
   return useCallback(async () => {
     await unlock();
+    if ((sfx === 'button' || sfx === 'tap') && shouldSkipDuplicateButtonSound()) {
+      return;
+    }
+    if (sfx === 'button' || sfx === 'tap') {
+      markButtonSoundPlayed();
+    }
     play(sfx);
   }, [unlock, play, sfx]);
 }
