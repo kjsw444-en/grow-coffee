@@ -94,7 +94,7 @@ function PlantSceneArtLayerComponent({
   const plantImageSrc = (coffeeStage || hideChrome) && storedPlayback ? storedPlayback.image : stage.image;
   const plantImageKey = (coffeeStage || hideChrome) && storedPlayback ? storedPlayback.id : stage.min;
   const bgSrc = getPlantBackgroundSrc(stageGrowth);
-  const showTopStack = !hideOverlay && !hideGameChrome;
+  const showTopStack = !hideOverlay && !hideChrome;
   const harvestRewardStopY =
     harvestReward?.cups == null
       ? 0

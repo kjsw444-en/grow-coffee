@@ -1593,11 +1593,7 @@ export function CoffeeGame() {
         onCoffeeValuePress={handleCoffeeValuePress}
       />
 
-      {loading ? (
-        <main className="game__main">
-          <p className="game__status">불러오는 중...</p>
-        </main>
-      ) : error ? (
+      {error && !loading ? (
         <main className="game__main">
           <p className="game__status game__status--error">{error}</p>
         </main>

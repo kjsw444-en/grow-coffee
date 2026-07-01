@@ -1,6 +1,6 @@
-import { memo, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
-import type { SelectedCoffeeSlug } from '../game/hiddenCoffeeVariants';
+import { getActiveCoffeePlayback, type SelectedCoffeeSlug } from '../game/hiddenCoffeeVariants';
 import { isDrinkStage } from '../game/utils';
 import type { HoldMode } from '../game/constants';
 import type { GrowActionSlot } from '../game/waterQuota';
@@ -64,6 +64,14 @@ type PlantSceneProps = {
   slotBelowShop?: ReactNode;
 };
 
+const DRINK_VIDEO_ENABLED_STORAGE_KEY = 'grow-coffee-drink-video-enabled';
+const DRINK_VIDEO_SETTING_CHANGE_EVENT = 'grow-coffee-drink-video-setting-change';
+
+function readDrinkVideoEnabled() {
+  if (typeof localStorage === 'undefined') return true;
+  return localStorage.getItem(DRINK_VIDEO_ENABLED_STORAGE_KEY) !== 'off';
+}
+
 function PlantSceneComponent({
   growth,
   plantGrowth,
@@ -112,17 +120,55 @@ function PlantSceneComponent({
   slotBelowShop,
 }: PlantSceneProps) {
   const drinkVideoRef = useRef<PlantDrinkVideoHandle>(null);
+  const drinkCompletionTriggeredRef = useRef(false);
+  const [drinkVideoEnabled, setDrinkVideoEnabled] = useState(readDrinkVideoEnabled);
   const drinkStage = isDrinkStage(plantGrowth) || isDrinkCommitting;
   const showAdSlot = growActionSlot === 'ad';
   const growHoldDisabled = disabled || showAdSlot || !canUseGrowHold;
-  const showDrinkVideo = drinkUiActive && !isHolding && !suspendDrinkVideo;
+  const showDrinkVideo = drinkVideoEnabled && drinkUiActive && !isHolding && !suspendDrinkVideo;
+  const drinkReadyImageSrc =
+    drinkStage && !showDrinkVideo
+      ? getActiveCoffeePlayback(plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants)?.drinkPreviewImage ?? null
+      : null;
   const showWateringCan =
     isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showAdSlot;
 
-  const handleDrinkTap = () => {
-    drinkVideoRef.current?.playFromUserGesture();
+  const triggerDrinkCompletionOnce = () => {
+    if (drinkCompletionTriggeredRef.current) return;
+    drinkCompletionTriggeredRef.current = true;
     onDrinkTap();
   };
+
+  const handleDrinkTap = () => {
+    drinkCompletionTriggeredRef.current = false;
+
+    if (!drinkVideoEnabled) {
+      triggerDrinkCompletionOnce();
+      return;
+    }
+
+    const playbackStarted = drinkVideoRef.current?.playFromUserGesture() ?? false;
+    if (!playbackStarted) {
+      triggerDrinkCompletionOnce();
+    }
+  };
+
+  const handleDrinkVideoToggle = () => {
+    const next = !drinkVideoEnabled;
+    localStorage.setItem(DRINK_VIDEO_ENABLED_STORAGE_KEY, next ? 'on' : 'off');
+    window.dispatchEvent(new Event(DRINK_VIDEO_SETTING_CHANGE_EVENT));
+    setDrinkVideoEnabled(next);
+  };
+
+  useEffect(() => {
+    const syncDrinkVideoSetting = () => {
+      setDrinkVideoEnabled(readDrinkVideoEnabled());
+    };
+    window.addEventListener(DRINK_VIDEO_SETTING_CHANGE_EVENT, syncDrinkVideoSetting);
+    return () => {
+      window.removeEventListener(DRINK_VIDEO_SETTING_CHANGE_EVENT, syncDrinkVideoSetting);
+    };
+  }, []);
 
   return (
     <section className="plant-scene">
@@ -137,6 +183,8 @@ function PlantSceneComponent({
               plantGrowth={plantGrowth}
               selectedCoffeeVariant={selectedCoffeeVariant}
               ownedCoffeeVariants={ownedCoffeeVariants}
+              onPlaybackEnded={triggerDrinkCompletionOnce}
+              onPlaybackFailed={triggerDrinkCompletionOnce}
             />
           ) : null}
           <PlantSceneArtLayer
@@ -168,6 +216,33 @@ function PlantSceneComponent({
             hideGrowthGauge={showAdSlot}
           />
           <PlantSceneHoldEffects showWateringCan={showWateringCan} holdProgress={holdProgress} />
+          {drinkReadyImageSrc ? (
+            <img
+              className="plant-scene__drink-ready-image"
+              src={drinkReadyImageSrc}
+              alt=""
+              draggable={false}
+            />
+          ) : null}
+          {!showDrinkVideo ? (
+            <button
+              type="button"
+              className={`plant-scene__video-toggle${drinkVideoEnabled ? '' : ' plant-scene__video-toggle--off'}`}
+              aria-pressed={drinkVideoEnabled}
+              aria-label={drinkVideoEnabled ? '커피마시기 동영상 켜짐' : '커피마시기 동영상 꺼짐'}
+              title={drinkVideoEnabled ? '동영상 켜짐' : '동영상 꺼짐'}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleDrinkVideoToggle();
+              }}
+            >
+              <small>{drinkVideoEnabled ? 'ON' : 'OFF'}</small>
+              <span aria-hidden="true">🎬</span>
+            </button>
+          ) : null}
           <PlantSceneActionLayer
             plantGrowth={plantGrowth}
             growth={growth}
