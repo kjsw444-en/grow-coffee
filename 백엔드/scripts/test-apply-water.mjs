@@ -6,6 +6,7 @@ import {
   applyPurchaseCoffeeVariant,
   applySellBatch,
   applyWater,
+  applyWaterFinalizeCycle,
   sanitizeLoadedGameState,
 } from '../gameLogic.js'
 import { COFFEE_VARIANT_PURCHASE_COST, DEFAULT_COFFEE_VARIANT_SLUG } from '../coffeeVariants.js'
@@ -28,6 +29,14 @@ test('물 1회당 growth +25% — 방치 settle과 함께 동작', () => {
     state = result.state
   }
   assert.equal(state.growth, 100)
+})
+
+test('하이브리드 — pending 3 + finalize 1회로 growth 100%', () => {
+  const state = { ...initialGameState, growth: 0, adWaterCredits: 3 }
+  const finalize = applyWaterFinalizeCycle(state, 3)
+  assert.equal(finalize.ok, true, finalize.reason)
+  assert.equal(finalize.state.growth, 100)
+  assert.equal(finalize.state.totalWaters, 4)
 })
 
 test('커피 마시기 — 내린 커피 +1, spentCoffeeCups·lifetimeDrunkCoffees 유지', () => {

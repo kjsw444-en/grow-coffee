@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
 import {
+  attachVideoToDisplayHost,
   guardInlinePresentation,
   prepareDrinkVideoFirstFramePreview,
   prepareDrinkVideoForAudiblePlay,
@@ -67,6 +68,7 @@ function PlantDrinkVideoLayerComponent(
   const hostRef = useRef<HTMLDivElement>(null);
   const mountedVideoRef = useRef<HTMLVideoElement | null>(null);
   const mountedNetworkSrcRef = useRef<string | null>(null);
+  const mountedDirectVideoRef = useRef(false);
   const markedBufferedRef = useRef(false);
   const isPlayingRef = useRef(false);
   const playRequestedRef = useRef(false);
@@ -118,11 +120,20 @@ function PlantDrinkVideoLayerComponent(
   const releaseMountedVideo = useCallback(() => {
     detachVideoListenersRef.current?.();
     detachVideoListenersRef.current = null;
+    const mountedVideo = mountedVideoRef.current;
     if (mountedNetworkSrcRef.current) {
-      releaseDisplayedVideoToPreload(mountedNetworkSrcRef.current);
+      if (mountedDirectVideoRef.current) {
+        mountedVideo?.pause();
+        mountedVideo?.removeAttribute('src');
+        mountedVideo?.load();
+        mountedVideo?.remove();
+      } else {
+        releaseDisplayedVideoToPreload(mountedNetworkSrcRef.current);
+      }
       mountedNetworkSrcRef.current = null;
     }
     mountedVideoRef.current = null;
+    mountedDirectVideoRef.current = false;
     isPlayingRef.current = false;
     setIsPlaying(false);
     setPlayRequested(false);
@@ -130,7 +141,7 @@ function PlantDrinkVideoLayerComponent(
   }, []);
 
   const ensureVideoMounted = useCallback((): HTMLVideoElement | null => {
-    if (!networkVideoSrc || prepState !== 'ready') return null;
+    if (!networkVideoSrc) return null;
 
     const host = hostRef.current;
     if (!host) return null;
@@ -147,11 +158,18 @@ function PlantDrinkVideoLayerComponent(
       releaseMountedVideo();
     }
 
-    const video = claimPreparedVideoForDisplay(networkVideoSrc, host);
-    if (!video) return null;
+    const preparedVideo = prepState === 'ready' ? claimPreparedVideoForDisplay(networkVideoSrc, host) : null;
+    const video = preparedVideo ?? document.createElement('video');
+    if (!preparedVideo) {
+      video.crossOrigin = 'anonymous';
+      video.src = networkVideoSrc;
+      attachVideoToDisplayHost(video, host);
+      video.load();
+    }
 
     mountedVideoRef.current = video;
     mountedNetworkSrcRef.current = networkVideoSrc;
+    mountedDirectVideoRef.current = !preparedVideo;
     markedBufferedRef.current = false;
 
     const releaseInlineGuard = guardInlinePresentation(video);
@@ -234,6 +252,8 @@ function PlantDrinkVideoLayerComponent(
       networkState: video.networkState,
       error: video.error,
     });
+    isPlayingRef.current = false;
+    setIsPlaying(false);
     setPlayFailed(true);
     onPlaybackFailedRef.current?.();
   }, []);
@@ -241,18 +261,6 @@ function PlantDrinkVideoLayerComponent(
   const playFromUserGesture = useCallback((): boolean => {
     if (!networkVideoSrc) {
       console.log('[drink-video] gesture-play-skipped', { networkVideoSrc });
-      return false;
-    }
-
-    if (prepState !== 'ready') {
-      console.log('[drink-video] gesture-play-skipped', {
-        reason: 'not-ready',
-        networkVideoSrc,
-        prepState,
-      });
-      setPlayRequested(true);
-      setPlayFailed(true);
-      onPlaybackFailedRef.current?.();
       return false;
     }
 
@@ -275,6 +283,8 @@ function PlantDrinkVideoLayerComponent(
 
     setPlayRequested(true);
     setPlayFailed(false);
+    isPlayingRef.current = true;
+    setIsPlaying(true);
 
     console.log('[drink-video play]', {
       currentSrc: video.currentSrc,

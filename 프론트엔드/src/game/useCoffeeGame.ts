@@ -118,6 +118,13 @@ import {
 } from './passiveGrowth';
 import { initialState, type GameState } from './types';
 import {
+  clearLocalTreeGrowth,
+  getPendingLocalWaters,
+  isHybridLocalTreeGrowth,
+  readLocalTreeGrowth,
+  writeLocalTreeGrowth,
+} from './localTreeGrowth';
+import {
   canUseGrowHold,
   consumeWaterQuota,
   getGrowActionSlot,
@@ -350,6 +357,19 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function logWaterCycle(tag: string, payload: Record<string, unknown>) {
+  console.log(`[${tag}]`, payload);
+}
+
+function hasSkipSeedBonus(state: GameState) {
+  const legacy = state as GameState & {
+    hasSkipSeed?: unknown;
+    skipSeed?: unknown;
+    giftSkipSeed?: unknown;
+  };
+  return Boolean(legacy.hasSkipSeed ?? legacy.skipSeed ?? legacy.giftSkipSeed ?? false);
+}
+
 export type SellBatchOutcome =
   | { ok: true; popupMessage: string }
   | { ok: false };
@@ -412,6 +432,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const holdDisplayStartRef = useRef(0);
   const holdSyncCommittedRef = useRef(false);
   const holdPreflightRef = useRef(false);
+  const isDrinkCommittingRef = useRef(false);
+  const tutorialBypassQuotaRef = useRef(tutorialBypassQuota);
+  const actionSyncingRef = useRef(false);
+  const pendingWaterSyncRef = useRef(false);
+  const serverGrowthRef = useRef(0);
   const sceneDialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayGrowthFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const harvestRewardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -426,6 +451,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   holdModeRef.current = holdMode;
   sessionRef.current = session;
   displayGrowthRef.current = displayGrowth;
+  isDrinkCommittingRef.current = isDrinkCommitting;
+  tutorialBypassQuotaRef.current = tutorialBypassQuota;
+  actionSyncingRef.current = actionSyncing;
 
   const commitDisplayGrowth = useCallback((next: number, force = false) => {
     const rounded = roundGrowth(Math.min(100, Math.max(0, next)));
@@ -519,11 +547,30 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   }, []);
 
   const applyAuthoritativeState = useCallback(
-    (raw: GameState, options?: { trustServer?: boolean; epoch?: number }) => {
+    (raw: GameState, options?: { trustServer?: boolean; epoch?: number; source?: string }) => {
       if (options?.epoch !== undefined && options.epoch !== stateEpochRef.current) {
         return stateRef.current;
       }
       const trustServer = options?.trustServer ?? false;
+      const currentGrowth = roundGrowth(stateRef.current.growth);
+      const currentDisplayGrowth = roundGrowth(displayGrowthRef.current);
+      const incomingGrowth = roundGrowth(raw.growth);
+      let growth = incomingGrowth;
+      if (
+        !trustServer &&
+        !isDrinkCommittingRef.current &&
+        isHybridLocalTreeGrowth(Math.max(currentGrowth, currentDisplayGrowth)) &&
+        incomingGrowth < Math.max(currentGrowth, currentDisplayGrowth)
+      ) {
+        growth = Math.max(currentGrowth, currentDisplayGrowth);
+      }
+      const tutorialGrowthFloor =
+        tutorialBypassQuotaRef.current && !trustServer && !isDrinkCommittingRef.current
+          ? Math.max(growth, currentDisplayGrowth)
+          : null;
+      if (tutorialGrowthFloor !== null && tutorialGrowthFloor < 100) {
+        growth = Math.max(growth, tutorialGrowthFloor);
+      }
       const mergedQuota = trustServer
         ? normalizeWaterQuota(raw)
         : mergeWaterQuotaFromServer(stateRef.current, raw);
@@ -538,9 +585,17 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         : mergeAttendanceFromServer(stateRef.current, raw);
       const next = normalizeLoadedState({
         ...raw,
+        growth,
         ...mergedQuota,
         ...mergedPassive,
         ...mergedAttendance,
+      });
+      logWaterCycle('apply-session', {
+        prevGrowth: currentGrowth,
+        incomingGrowth: roundGrowth(raw.growth),
+        resolvedGrowth: roundGrowth(next.growth),
+        displayGrowth: roundGrowth(displayGrowthRef.current),
+        source: options?.source ?? (trustServer ? 'trust-server' : 'authoritative-state'),
       });
       stateRef.current = next;
       setState(next);
@@ -611,7 +666,13 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   }, [releasePassiveClaimUi]);
 
   const applyStateWithPreview = useCallback(
-    (raw: GameState, holdStartGrowth?: number, epoch?: number) => {
+    (
+      raw: GameState,
+      holdStartGrowth?: number,
+      epoch?: number,
+      source = 'water-api',
+      options?: { trustServer?: boolean },
+    ) => {
       let growth = raw.growth;
       if (holdStartGrowth !== undefined) {
         const beforeCharges = stateRef.current.ritualFertilizerCharges ?? 0;
@@ -629,15 +690,20 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           growth,
           totalCoffees: Math.max(Number(raw.totalCoffees ?? 0), stateRef.current.totalCoffees),
         },
-        { epoch },
+        { epoch, source, trustServer: options?.trustServer },
       );
     },
     [applyAuthoritativeState],
   );
 
   const applyWaterServerState = useCallback(
-    (serverState: GameState, holdStartGrowth: number, epoch?: number) =>
-      applyStateWithPreview(serverState, holdStartGrowth, epoch),
+    (
+      serverState: GameState,
+      holdStartGrowth: number,
+      epoch?: number,
+      source?: string,
+      options?: { trustServer?: boolean },
+    ) => applyStateWithPreview(serverState, holdStartGrowth, epoch, source, options),
     [applyStateWithPreview],
   );
 
@@ -655,15 +721,24 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       if (next.state) {
         const localTotalCoffees = stateRef.current.totalCoffees;
         const localSpentCoffeeCups = stateRef.current.spentCoffeeCups;
+        const serverGrowth = roundGrowth(next.state.growth);
+        serverGrowthRef.current = serverGrowth;
+        const localGrowth = readLocalTreeGrowth(next.userId);
+        const mergedGrowth =
+          serverGrowth < 100 && localGrowth > serverGrowth ? localGrowth : next.state.growth;
+        if (serverGrowth >= 100) {
+          clearLocalTreeGrowth(next.userId);
+        }
         applyAuthoritativeState({
           ...next.state,
+          growth: mergedGrowth,
           totalCoffees: mergePreservedTotalCoffees(next.state.totalCoffees, localTotalCoffees),
           spentCoffeeCups: mergePreservedSpentCoffeeCups(
             next.state.spentCoffeeCups,
             localSpentCoffeeCups,
             0,
           ),
-        });
+        }, { source: `session:${next.source}` });
       }
       if (next.source === 'mock') {
         setConnectionWarning(
@@ -819,22 +894,74 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
       const optimisticState = applyOptimisticWaterHold();
       if (optimisticState) {
+        logWaterCycle('water-hold-complete', {
+          beforeGrowth,
+          optimisticGrowth: roundGrowth(optimisticState.growth),
+          displayGrowth: roundGrowth(displayGrowthRef.current),
+          hasSkipSeed: hasSkipSeedBonus(before),
+          watersToday: before.watersToday,
+          adWaterCredits: before.adWaterCredits,
+          needsAdForWater: needsAdForWater(before),
+        });
         stateRef.current = optimisticState;
         commitDisplayGrowth(optimisticState.growth, true);
         setState(optimisticState);
         triggerTapBurst();
         resetHoldUi();
-        syncingRef.current = true;
-        setActionSyncing(true);
-        setActionError(null);
+
+        const nextGrowth = roundGrowth(optimisticState.growth);
+        if (isHybridLocalTreeGrowth(nextGrowth)) {
+          writeLocalTreeGrowth(currentSession.userId, nextGrowth);
+          logWaterCycle('water-local-only', {
+            nextGrowth,
+            displayGrowth: roundGrowth(displayGrowthRef.current),
+            serverGrowth: serverGrowthRef.current,
+          });
+          finishWaterDialogue(nextGrowth);
+          return;
+        }
+
+        const pendingLocalWaters = getPendingLocalWaters(
+          lockedHoldStart,
+          serverGrowthRef.current,
+        );
 
         void (async () => {
+          pendingWaterSyncRef.current = true;
+          actionSyncingRef.current = true;
+          setActionSyncing(true);
+          logWaterCycle('water-api-before', {
+            growth: roundGrowth(stateRef.current.growth),
+            displayGrowth: roundGrowth(displayGrowthRef.current),
+            serverGrowth: serverGrowthRef.current,
+            pendingLocalWaters,
+            pendingWaterSync: pendingWaterSyncRef.current,
+            actionSyncing: actionSyncingRef.current,
+          });
           try {
-            const result = await (tutorialBypassQuota ? testBumpGame() : waterGame());
+            const result =
+              tutorialBypassQuota && pendingLocalWaters === 0
+                ? await testBumpGame()
+                : await waterGame(
+                    pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
+                  );
             if (epoch !== stateEpochRef.current) return;
-            applyWaterServerState(result.state, lockedHoldStart, epoch);
+            const resolvedGrowth = roundGrowth(result.state.growth);
+            logWaterCycle('water-api-after', {
+              responseGrowth: resolvedGrowth,
+              responseWatersToday: result.state.watersToday,
+              responseAdWaterCredits: result.state.adWaterCredits,
+              nextGrowth: resolvedGrowth,
+              displayGrowth: roundGrowth(displayGrowthRef.current),
+              pendingLocalWaters,
+            });
+            applyWaterServerState(result.state, lockedHoldStart, epoch, 'water-api-finalize', {
+              trustServer: true,
+            });
+            serverGrowthRef.current = resolvedGrowth;
+            clearLocalTreeGrowth(currentSession.userId);
             setLastEarned(result.lastEarned);
-            finishWaterDialogue(resolveWaterSyncGrowth(lockedHoldStart, result.state.growth));
+            finishWaterDialogue(resolvedGrowth);
           } catch (err) {
             if (epoch !== stateEpochRef.current) return;
             if (
@@ -846,13 +973,32 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
             ) {
               try {
                 await watchAdGame();
-                const retry = await waterGame();
+                const retry = await waterGame(
+                  pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
+                );
                 if (epoch !== stateEpochRef.current) return;
-                applyWaterServerState(retry.state, lockedHoldStart, epoch);
+                const resolvedGrowth = roundGrowth(retry.state.growth);
+                logWaterCycle('water-api-after', {
+                  responseGrowth: resolvedGrowth,
+                  responseWatersToday: retry.state.watersToday,
+                  responseAdWaterCredits: retry.state.adWaterCredits,
+                  nextGrowth: resolvedGrowth,
+                  displayGrowth: roundGrowth(displayGrowthRef.current),
+                  pendingLocalWaters,
+                });
+                applyWaterServerState(retry.state, lockedHoldStart, epoch, 'water-api-retry-after-watch-ad', {
+                  trustServer: true,
+                });
+                serverGrowthRef.current = resolvedGrowth;
+                clearLocalTreeGrowth(currentSession.userId);
                 setLastEarned(retry.lastEarned);
-                finishWaterDialogue(resolveWaterSyncGrowth(lockedHoldStart, retry.state.growth));
+                finishWaterDialogue(resolvedGrowth);
                 return;
               } catch (retryErr) {
+                stateRef.current = before;
+                commitDisplayGrowth(lockedHoldStart, true);
+                setState(before);
+                writeLocalTreeGrowth(currentSession.userId, lockedHoldStart);
                 const message =
                   retryErr instanceof Error ? retryErr.message : '튜토리얼 물주기에 실패했습니다.';
                 setActionError(message);
@@ -861,11 +1007,33 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
               }
             }
             if (isWaterCooldownError(err) && err.state) {
-              applyWaterServerState(err.state, lockedHoldStart, epoch);
+              const resolvedGrowth = roundGrowth(err.state.growth);
+              logWaterCycle('water-api-after', {
+                responseGrowth: resolvedGrowth,
+                responseWatersToday: err.state.watersToday,
+                responseAdWaterCredits: err.state.adWaterCredits,
+                nextGrowth: resolvedGrowth,
+                displayGrowth: roundGrowth(displayGrowthRef.current),
+              });
+              applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-cooldown-error-state', {
+                trustServer: true,
+              });
+              serverGrowthRef.current = resolvedGrowth;
               return;
             }
             if (err instanceof ApiRequestError && err.state) {
-              applyWaterServerState(err.state, lockedHoldStart, epoch);
+              const resolvedGrowth = roundGrowth(err.state.growth);
+              logWaterCycle('water-api-after', {
+                responseGrowth: resolvedGrowth,
+                responseWatersToday: err.state.watersToday,
+                responseAdWaterCredits: err.state.adWaterCredits,
+                nextGrowth: resolvedGrowth,
+                displayGrowth: roundGrowth(displayGrowthRef.current),
+              });
+              applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-error-state', {
+                trustServer: true,
+              });
+              serverGrowthRef.current = resolvedGrowth;
               if (needsAdForWater(err.state)) {
                 const refillLabel = getRefillActionLabel(err.state.growth);
                 showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
@@ -877,13 +1045,16 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
               return;
             }
 
-            applyAuthoritativeState(before, { epoch });
+            stateRef.current = before;
             commitDisplayGrowth(lockedHoldStart, true);
+            setState(before);
+            writeLocalTreeGrowth(currentSession.userId, lockedHoldStart);
             const message = err instanceof Error ? err.message : '동작 처리에 실패했습니다.';
             setActionError(message);
             showSceneDialogue(message);
           } finally {
-            syncingRef.current = false;
+            pendingWaterSyncRef.current = false;
+            actionSyncingRef.current = false;
             setActionSyncing(false);
           }
         })();
@@ -897,20 +1068,63 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       }
 
       syncingRef.current = true;
+      actionSyncingRef.current = true;
       setActionSyncing(true);
       setActionError(null);
 
       try {
-        const result = await waterGame();
-        applyWaterServerState(result.state, lockedHoldStart, epoch);
+        pendingWaterSyncRef.current = true;
+        logWaterCycle('water-api-before', {
+          growth: roundGrowth(stateRef.current.growth),
+          displayGrowth: roundGrowth(displayGrowthRef.current),
+          serverGrowth: serverGrowthRef.current,
+          pendingLocalWaters: getPendingLocalWaters(lockedHoldStart, serverGrowthRef.current),
+          pendingWaterSync: pendingWaterSyncRef.current,
+          actionSyncing: actionSyncingRef.current,
+        });
+        const pendingLocalWaters = getPendingLocalWaters(lockedHoldStart, serverGrowthRef.current);
+        const result = await waterGame(
+          pendingLocalWaters > 0 ? { pendingLocalWaters } : undefined,
+        );
+        const resolvedGrowth = roundGrowth(result.state.growth);
+        logWaterCycle('water-api-after', {
+          responseGrowth: resolvedGrowth,
+          responseWatersToday: result.state.watersToday,
+          responseAdWaterCredits: result.state.adWaterCredits,
+          nextGrowth: resolvedGrowth,
+          displayGrowth: roundGrowth(displayGrowthRef.current),
+          pendingLocalWaters,
+        });
+        applyWaterServerState(result.state, lockedHoldStart, epoch, 'water-api-sync', {
+          trustServer: true,
+        });
+        serverGrowthRef.current = resolvedGrowth;
+        if (resolvedGrowth >= 100) {
+          clearLocalTreeGrowth(currentSession.userId);
+        }
         setLastEarned(result.lastEarned);
-        const synced = resolveWaterSyncGrowth(lockedHoldStart, result.state.growth);
-        finishWaterDialogue(synced);
+        finishWaterDialogue(resolvedGrowth);
       } catch (err) {
         if (isWaterCooldownError(err) && err.state) {
-          applyWaterServerState(err.state, lockedHoldStart, epoch);
+          const nextGrowth = resolveWaterSyncGrowth(lockedHoldStart, err.state.growth);
+          logWaterCycle('water-api-after', {
+            responseGrowth: roundGrowth(err.state.growth),
+            responseWatersToday: err.state.watersToday,
+            responseAdWaterCredits: err.state.adWaterCredits,
+            nextGrowth,
+            displayGrowth: roundGrowth(displayGrowthRef.current),
+          });
+          applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-sync-cooldown-error-state');
         } else if (isWaterLike && err instanceof ApiRequestError && err.state) {
-          applyWaterServerState(err.state, lockedHoldStart, epoch);
+          const nextGrowth = resolveWaterSyncGrowth(lockedHoldStart, err.state.growth);
+          logWaterCycle('water-api-after', {
+            responseGrowth: roundGrowth(err.state.growth),
+            responseWatersToday: err.state.watersToday,
+            responseAdWaterCredits: err.state.adWaterCredits,
+            nextGrowth,
+            displayGrowth: roundGrowth(displayGrowthRef.current),
+          });
+          applyWaterServerState(err.state, lockedHoldStart, epoch, 'water-api-sync-error-state');
           if (needsAdForWater(err.state)) {
             const refillLabel = getRefillActionLabel(err.state.growth);
             showSceneDialogue(`물주기·내리기 1회 완료! 「${refillLabel}」를 눌러 주세요.`);
@@ -934,7 +1148,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           showSceneDialogue(message);
         }
       } finally {
+        pendingWaterSyncRef.current = false;
         syncingRef.current = false;
+        actionSyncingRef.current = false;
         setActionSyncing(false);
         resetHoldUi();
       }
@@ -971,7 +1187,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       if (startGrowth !== null) {
         commitDisplayGrowth(
           previewHoldDisplayGrowth(startGrowth, holdDisplayStartRef.current, progress),
-          true,
+          progress >= 100,
         );
       }
     }
@@ -1088,7 +1304,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       }
       showSceneDialogue(dialogue);
       await wait(HARVEST_REWARD_RESULT_MS);
-      applyAuthoritativeState({ ...result.state, growth: 0 }, { epoch });
+      applyAuthoritativeState({ ...result.state, growth: 0 }, { epoch, trustServer: true });
+      serverGrowthRef.current = 0;
+      const userId = sessionRef.current?.userId;
+      if (userId) clearLocalTreeGrowth(userId);
       triggerTapBurst();
     } catch (err) {
       if (err instanceof ApiRequestError && err.state) {
@@ -1488,6 +1707,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     };
     const resetState = normalizeLoadedState({ ...buildResetState(), ...rewardResetPatch });
     applyAuthoritativeState(resetState, { trustServer: true, epoch });
+    serverGrowthRef.current = 0;
+    clearLocalTreeGrowth(currentSession.userId);
     resetDailyGameSave();
 
     try {
@@ -1497,6 +1718,8 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           normalizeLoadedState({ ...result.state, ...rewardResetPatch }),
           { trustServer: true, epoch },
         );
+        serverGrowthRef.current = 0;
+        clearLocalTreeGrowth(currentSession.userId);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '초기화에 실패했습니다.';
@@ -1642,6 +1865,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
     setWatchingAd(true);
     setActionError(null);
     const epoch = stateEpochRef.current;
+    logWaterCycle('watch-ad-before', {
+      adWaterCredits: prev.adWaterCredits,
+      needsAdForWater: needsAdForWater(prev),
+    });
 
     try {
       const watched = await showInterstitialAd();
@@ -1660,25 +1887,33 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
         try {
           const result = await watchAdGame();
           if (epoch !== stateEpochRef.current) return;
+          logWaterCycle('watch-ad-after', {
+            responseAdWaterCredits: result.state.adWaterCredits,
+            needsAdForWater: needsAdForWater(result.state),
+          });
           applyAuthoritativeState(
             {
               ...result.state,
               totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
             },
-            { epoch },
+            { epoch, source: 'watch-ad' },
           );
         } catch (err) {
           if (epoch !== stateEpochRef.current) return;
           if (err instanceof ApiRequestError && err.state) {
+            logWaterCycle('watch-ad-after', {
+              responseAdWaterCredits: err.state.adWaterCredits,
+              needsAdForWater: needsAdForWater(err.state),
+            });
             applyAuthoritativeState(
               {
                 ...err.state,
                 totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
               },
-              { epoch },
+              { epoch, source: 'watch-ad-error-state' },
             );
           } else {
-            applyAuthoritativeState(prev, { epoch });
+            applyAuthoritativeState(prev, { epoch, source: 'watch-ad-error-revert' });
           }
           const message = err instanceof Error ? err.message : '물 채우기 처리에 실패했습니다.';
           setActionError(message);
@@ -1704,6 +1939,10 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
     const epoch = stateEpochRef.current;
     setActionError(null);
+    logWaterCycle('watch-ad-before', {
+      adWaterCredits: prev.adWaterCredits,
+      needsAdForWater: needsAdForWater(prev),
+    });
 
     const optimistic = grantAdWaterCredit(prev);
     stateRef.current = optimistic;
@@ -1713,25 +1952,33 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       try {
         const result = await watchAdGame();
         if (epoch !== stateEpochRef.current) return;
+        logWaterCycle('watch-ad-after', {
+          responseAdWaterCredits: result.state.adWaterCredits,
+          needsAdForWater: needsAdForWater(result.state),
+        });
         applyAuthoritativeState(
           {
             ...result.state,
             totalCoffees: Math.max(Number(result.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
           },
-          { epoch },
+          { epoch, source: 'tutorial-watch-ad' },
         );
       } catch (err) {
         if (epoch !== stateEpochRef.current) return;
         if (err instanceof ApiRequestError && err.state) {
+          logWaterCycle('watch-ad-after', {
+            responseAdWaterCredits: err.state.adWaterCredits,
+            needsAdForWater: needsAdForWater(err.state),
+          });
           applyAuthoritativeState(
             {
               ...err.state,
               totalCoffees: Math.max(Number(err.state.totalCoffees ?? 0), stateRef.current.totalCoffees),
             },
-            { epoch },
+            { epoch, source: 'tutorial-watch-ad-error-state' },
           );
         } else {
-          applyAuthoritativeState(prev, { epoch });
+          applyAuthoritativeState(prev, { epoch, source: 'tutorial-watch-ad-error-revert' });
         }
       }
     })();

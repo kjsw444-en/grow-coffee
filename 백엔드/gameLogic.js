@@ -210,6 +210,50 @@ export function applyWater(state) {
   return { ok: true, state: next, lastEarned: null }
 }
 
+/**
+ * 하이브리드 — 로컬에서 쌓인 물주기(pendingLocalWaters) + 마지막 1회를 서버에서 일괄 반영해 growth=100%.
+ */
+export function applyWaterFinalizeCycle(state, pendingLocalWaters = 3) {
+  const current = withSettledPassive(state)
+  const pending = Math.max(0, Math.min(3, Math.floor(Number(pendingLocalWaters ?? 0))))
+
+  if (roundGrowth(current.growth) >= 100) {
+    return { ok: false, reason: 'ready-to-drink', state: current, lastEarned: null }
+  }
+
+  let next = { ...current }
+
+  for (let i = 0; i < pending; i += 1) {
+    if (!canWaterToday(next)) {
+      return { ok: false, reason: 'need-ad', state: next, lastEarned: null }
+    }
+    const quota = consumeWaterQuota(next)
+    next = {
+      ...next,
+      ...quota,
+      totalWaters: next.totalWaters + 1,
+    }
+  }
+
+  if (!canWaterToday(next)) {
+    return { ok: false, reason: 'need-ad', state: next, lastEarned: null }
+  }
+
+  const quota = consumeWaterQuota(next)
+  next = {
+    ...next,
+    ...quota,
+    growth: clampGrowth(100),
+    totalWaters: next.totalWaters + 1,
+  }
+
+  if (Math.max(0, Number(next.ritualFertilizerCharges ?? 0)) > 0) {
+    next = consumeRitualFertilizerCharge(next)
+  }
+
+  return { ok: true, state: next, lastEarned: null }
+}
+
 /** DEV 전용 — 쿨다운·일일 물ota 없이 +25% (오류 테스트용) */
 export function applyDevTestWater(state) {
   const current = withSettledPassive(state)

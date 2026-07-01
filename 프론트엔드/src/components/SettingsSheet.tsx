@@ -163,11 +163,9 @@ export function SettingsSheet({
         <p className="settings__warn">
           게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
         </p>
-        {import.meta.env.DEV && (
-          <button type="button" className="settings__reset" onClick={onReset}>
-            진행 데이터 초기화
-          </button>
-        )}
+        <button type="button" className="settings__reset" onClick={onReset}>
+          진행 데이터 초기화
+        </button>
         <button type="button" className="settings__close" onClick={onClose}>
           닫기
         </button>

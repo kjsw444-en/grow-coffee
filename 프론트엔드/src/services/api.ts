@@ -224,8 +224,11 @@ export async function fetchGameState(): Promise<GameState> {
   return bootstrap.state
 }
 
-export async function waterGame() {
-  return request('/api/game/water', { method: 'POST', body: '{}' }) as Promise<{
+export async function waterGame(options?: { pendingLocalWaters?: number }) {
+  const pendingLocalWaters = Math.max(0, Math.min(3, Math.floor(Number(options?.pendingLocalWaters ?? 0))))
+  const body =
+    pendingLocalWaters > 0 ? JSON.stringify({ pendingLocalWaters }) : '{}'
+  return request('/api/game/water', { method: 'POST', body }) as Promise<{
     ok: true
     state: GameState
     lastEarned: number | null

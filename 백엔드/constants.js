@@ -6,6 +6,9 @@ import {
 
 export const GOAL_AMOUNT = 4700
 export const GROWTH_PER_WATER = 25
+/** 사이클당 물주기 횟수 — 0~75%는 프론트 로컬, 100%에서 DB 일괄 저장 */
+export const WATERS_PER_CYCLE = 4
+export const LOCAL_TREE_GROWTH_MAX = GROWTH_PER_WATER * (WATERS_PER_CYCLE - 1)
 export const SELL_PRICE = 47
 export const SELL_BATCH_SIZE = 50
 export const SELL_BATCH_REWARD = 100

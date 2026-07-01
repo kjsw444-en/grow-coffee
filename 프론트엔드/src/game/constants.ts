@@ -6,6 +6,9 @@ export const BREWED_COFFEE_FINISH_BONUS_THRESHOLD = 48;
 export const BREWED_COFFEE_FINISH_BONUS_AMOUNT = 2;
 export { BREWED_COFFEE_DRINK_OPTIONS, getBrewedCoffeePointReward } from './brewedCoffeeDrink';
 export const GROWTH_PER_WATER = 25;
+/** 사이클당 물주기 — 0~75% 로컬, 100%에서만 서버 저장 */
+export const WATERS_PER_CYCLE = 4;
+export const LOCAL_TREE_GROWTH_MAX = GROWTH_PER_WATER * (WATERS_PER_CYCLE - 1);
 
 /** 토스 공유 리워드 — contactsViral moduleId */
 export const SHARE_REWARD_MODULE_ID =

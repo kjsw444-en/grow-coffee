@@ -56,6 +56,7 @@ import {
   applyShareReward,
   applyWatchAd,
   applyWater,
+  applyWaterFinalizeCycle,
   getRankingBrewedSpend,
   getDailyRankingBrewedSpend,
 } from './gameLogic.js'
@@ -208,9 +209,11 @@ app.get('/api/game/state', requireUser, async (req, res) => {
 app.post('/api/game/water', requireUser, async (req, res) => {
   try {
     const now = Date.now()
+    const pendingLocalWaters = Math.max(0, Math.min(3, Math.floor(Number(req.body?.pendingLocalWaters ?? 0))))
 
     const current = await getGameState(req.userId)
-    const result = applyWater(current)
+    const result =
+      pendingLocalWaters > 0 ? applyWaterFinalizeCycle(current, pendingLocalWaters) : applyWater(current)
 
     if (!result.ok) {
       const messages = {
