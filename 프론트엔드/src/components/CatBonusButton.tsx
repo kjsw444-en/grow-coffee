@@ -103,6 +103,7 @@ export function CatBonusButton({
         onPointerLeave={() => finishPress(true)}
         onPointerCancel={() => finishPress(true)}
       >
+        <span className="cat-bonus-btn__hitbox" aria-hidden="true" />
         <span className="cat-bonus-btn__frame" aria-hidden="true">
           <img
             className="cat-bonus-btn__img"

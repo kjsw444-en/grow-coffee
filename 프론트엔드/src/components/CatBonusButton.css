@@ -27,6 +27,14 @@
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  pointer-events: none;
+}
+
+.cat-bonus-btn__hitbox {
+  position: absolute;
+  inset: 28px 36px 18px 44px;
+  z-index: 6;
+  pointer-events: auto;
 }
 
 .cat-bonus-btn:disabled {
@@ -42,7 +50,6 @@
   border: none;
   box-shadow: none;
   transform-origin: center bottom;
-  clip-path: inset(28px 36px 18px 44px);
 }
 
 .cat-bonus-btn__img {

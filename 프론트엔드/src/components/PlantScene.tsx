@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
 import { getActiveCoffeePlayback, type SelectedCoffeeSlug } from '../game/hiddenCoffeeVariants';
 import { isDrinkStage } from '../game/utils';
-import type { HoldMode } from '../game/constants';
+import { COFFEE_STAGE_MIN, type HoldMode } from '../game/constants';
 import type { GrowActionSlot } from '../game/waterQuota';
 import type { DailyGameId } from '../services/dailyGamePick';
 import { PlantDrinkVideoLayer, type PlantDrinkVideoHandle } from './PlantDrinkVideoLayer';
@@ -126,6 +126,7 @@ function PlantSceneComponent({
   const showAdSlot = growActionSlot === 'ad';
   const growHoldDisabled = disabled || showAdSlot || !canUseGrowHold;
   const showDrinkVideo = drinkVideoEnabled && drinkUiActive && !isHolding && !suspendDrinkVideo;
+  const mountDrinkVideoLayer = drinkVideoEnabled && plantGrowth >= COFFEE_STAGE_MIN && !suspendDrinkVideo;
   const drinkReadyImageSrc =
     drinkStage && !showDrinkVideo
       ? getActiveCoffeePlayback(plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants)?.drinkPreviewImage ?? null
@@ -176,10 +177,12 @@ function PlantSceneComponent({
         className={`plant-scene__frame ${isWatering ? 'plant-scene__frame--water' : ''} ${isReady ? 'plant-scene__frame--ready' : ''} ${showDrinkVideo ? 'plant-scene__frame--complete' : ''} ${tapBurst ? 'plant-scene__frame--bounce' : ''}`}
       >
         <div className={`plant-scene__art-wrap${showDrinkVideo ? ' plant-scene__art-wrap--drink' : ''}`}>
-          {showDrinkVideo ? (
+          {mountDrinkVideoLayer ? (
             <PlantDrinkVideoLayer
               ref={drinkVideoRef}
               active={showDrinkVideo}
+              mounted={mountDrinkVideoLayer}
+              showPoster={showDrinkVideo}
               plantGrowth={plantGrowth}
               selectedCoffeeVariant={selectedCoffeeVariant}
               ownedCoffeeVariants={ownedCoffeeVariants}

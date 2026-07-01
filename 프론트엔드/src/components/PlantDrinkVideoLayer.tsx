@@ -41,6 +41,7 @@ export type PlantDrinkVideoHandle = {
 
 type PlantDrinkVideoLayerProps = {
   active: boolean;
+  mounted?: boolean;
   showPoster?: boolean;
   plantGrowth: number;
   selectedCoffeeVariant: SelectedCoffeeSlug;
@@ -55,6 +56,7 @@ const PLAYBACK_BUFFER_MARK_SEC = 0.05;
 function PlantDrinkVideoLayerComponent(
   {
     active,
+    mounted = active,
     showPoster = true,
     plantGrowth,
     selectedCoffeeVariant,
@@ -104,7 +106,7 @@ function PlantDrinkVideoLayerComponent(
   const posterSrc = playback?.drinkPreviewImage ?? null;
   const prepReady = prepState === 'ready';
   const prepFailed = prepState === 'failed' || (playRequested && playFailed && !isPlaying);
-  const showLoadingMessage = active && playRequested && !prepReady && prepState !== 'failed';
+  const showLoadingMessage = active && playRequested && !isPlaying && !prepReady && prepState !== 'failed';
   const showRetry = playRequested && prepFailed;
   const showStatusOverlay = active && playRequested && (showLoadingMessage || showRetry);
   const showPosterImage = showPoster && active && !!posterSrc && !isPlaying;
@@ -327,6 +329,11 @@ function PlantDrinkVideoLayerComponent(
   }, [networkVideoSrc]);
 
   useEffect(() => {
+    if (!mounted || !networkVideoSrc) return;
+    ensureVideoMounted();
+  }, [ensureVideoMounted, mounted, networkVideoSrc]);
+
+  useEffect(() => {
     if (!active || prepState !== 'ready' || !networkVideoSrc) return;
 
     const video = ensureVideoMounted();
@@ -341,14 +348,14 @@ function PlantDrinkVideoLayerComponent(
   }, [active, ensureVideoMounted, networkVideoSrc, playRequested, prepState]);
 
   useEffect(() => {
-    if (active) return;
+    if (mounted) return;
     markedBufferedRef.current = false;
     playRequestedRef.current = false;
     setPlayRequested(false);
     setPlayFailed(false);
     setIsPlaying(false);
     releaseMountedVideo();
-  }, [active, releaseMountedVideo]);
+  }, [mounted, releaseMountedVideo]);
 
   useEffect(() => () => releaseMountedVideo(), [releaseMountedVideo]);
 
@@ -361,6 +368,7 @@ function PlantDrinkVideoLayerComponent(
   const layerClassName = [
     'plant-scene__drink-media',
     showPoster ? 'plant-scene__drink-media--solo' : '',
+    mounted && !active ? 'plant-scene__drink-media--warmup' : '',
     'drink-video-layer',
     showPoster ? '' : 'drink-video-layer--warmup-only',
     isPlaying ? 'drink-video-layer--playing' : 'drink-video-layer--poster-front',
@@ -369,7 +377,7 @@ function PlantDrinkVideoLayerComponent(
     .filter(Boolean)
     .join(' ');
 
-  if (!active) {
+  if (!mounted) {
     return null;
   }
 
