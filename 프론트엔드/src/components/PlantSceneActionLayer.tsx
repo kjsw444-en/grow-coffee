@@ -24,7 +24,6 @@ type PlantSceneActionLayerProps = {
   onPointerUp: () => void;
   onDrinkTap: () => void;
   onWatchAd: () => void;
-  onUnmuteDrinkVideo?: () => void;
 };
 
 function PlantSceneActionLayerComponent({
@@ -48,7 +47,6 @@ function PlantSceneActionLayerComponent({
   onPointerUp,
   onDrinkTap,
   onWatchAd,
-  onUnmuteDrinkVideo,
 }: PlantSceneActionLayerProps) {
   return (
     <div
@@ -65,7 +63,6 @@ function PlantSceneActionLayerComponent({
           onClick={(event) => {
             event.stopPropagation();
             if (disabled || !readyToDrink) return;
-            onUnmuteDrinkVideo?.();
             onDrinkTap();
           }}
         >

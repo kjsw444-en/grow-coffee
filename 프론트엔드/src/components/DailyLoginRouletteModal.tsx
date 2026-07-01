@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useSound } from '../audio/SoundProvider';
+import { resumeGameAudioAfterAd } from '../audio/resumeGameAudioAfterAd';
 import {
   DAILY_LOGIN_ROULETTE_SEGMENTS,
   formatDailyLoginRouletteReward,
@@ -7,10 +9,12 @@ import {
   getNextDailyLoginRouletteRotation,
   isDailyLoginRouletteBigWin,
 } from '../game/dailyLoginRoulette';
+import { AppPortal } from './AppPortal';
 import './DailyLoginRouletteModal.css';
+import './RewardDialog.css';
 
 const WHEEL_IMAGE_SRC = '/images/daily-roulette-wheel.png';
-const BIG_WIN_IMAGE_SRC = '/images/daily-roulette-win-5plus.png';
+const BIG_WIN_IMAGE_SRC = '/images/daily-roulette-win-5plus.png?v=1';
 
 type DailyLoginRouletteModalProps = {
   spinning: boolean;
@@ -26,6 +30,20 @@ type DailyLoginRouletteModalProps = {
 };
 
 const SPIN_MS = 4200;
+const SPIN_TICK_MS = 750;
+
+function playRouletteSpinTick(play: (id: 'slotRoll') => void) {
+  resumeGameAudioAfterAd();
+  play('slotRoll');
+}
+
+function playRouletteStop(play: (id: 'slotStop' | 'win') => void, resultCups: number) {
+  resumeGameAudioAfterAd();
+  play('slotStop');
+  if (isDailyLoginRouletteBigWin(resultCups)) {
+    window.setTimeout(() => play('win'), 100);
+  }
+}
 
 function resetWheelToStart(
   rotationRef: MutableRefObject<number>,
@@ -66,12 +84,36 @@ export function DailyLoginRouletteModal({
   onReceive,
   onClose,
 }: DailyLoginRouletteModalProps) {
+  const { play } = useSound();
   const [rotation, setRotation] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [revealedCups, setRevealedCups] = useState<number | null>(null);
   const rotationRef = useRef(0);
   const lastSpinGenerationRef = useRef(0);
   const lastSnapRevealKeyRef = useRef(0);
+  const spinTickTimerRef = useRef(0);
+
+  useEffect(() => {
+    if (!animating) {
+      if (spinTickTimerRef.current) {
+        window.clearInterval(spinTickTimerRef.current);
+        spinTickTimerRef.current = 0;
+      }
+      return;
+    }
+
+    playRouletteSpinTick(play);
+    spinTickTimerRef.current = window.setInterval(() => {
+      playRouletteSpinTick(play);
+    }, SPIN_TICK_MS);
+
+    return () => {
+      if (spinTickTimerRef.current) {
+        window.clearInterval(spinTickTimerRef.current);
+        spinTickTimerRef.current = 0;
+      }
+    };
+  }, [animating, play]);
 
   useEffect(() => {
     if (resultCups === null) {
@@ -122,6 +164,7 @@ export function DailyLoginRouletteModal({
         revealTimer = window.setTimeout(() => {
           setAnimating(false);
           setRevealedCups(resultCups);
+          playRouletteStop(play, resultCups);
         }, SPIN_MS);
       });
     });
@@ -131,7 +174,7 @@ export function DailyLoginRouletteModal({
       cancelAnimationFrame(raf2);
       window.clearTimeout(revealTimer);
     };
-  }, [resultCups, snapRevealKey, spinGeneration]);
+  }, [play, resultCups, snapRevealKey, spinGeneration]);
 
   const showInitialLayout = resultCups === null && !animating;
   const awaitingReveal =
@@ -149,7 +192,13 @@ export function DailyLoginRouletteModal({
   const showWheelPointer = !showBigWin && (showInitialLayout || animating || awaitingReveal);
 
   return (
-    <div className="daily-roulette-overlay" role="dialog" aria-modal="true" aria-labelledby="daily-roulette-title">
+    <AppPortal rootId="daily-roulette-portal-root">
+      <div
+        className="daily-roulette-overlay reward-dialog-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="daily-roulette-title"
+      >
       <div className="daily-roulette-card">
         <p className="daily-roulette-badge">1일 1접속 이벤트</p>
         <h2 id="daily-roulette-title">오늘의 행운 룰렛</h2>
@@ -237,6 +286,7 @@ export function DailyLoginRouletteModal({
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </AppPortal>
   );
 }

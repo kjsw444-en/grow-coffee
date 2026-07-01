@@ -201,9 +201,13 @@ export function CharacterShopSheet({
       <div ref={sheetRef} className="character-shop__sheet">
         <h2 id="character-shop-title">커피 상점</h2>
         <p className="character-shop__notice">
-          커피 종류마다 여성·남성 캐릭터가 있어요. 캐릭터 구매는{' '}
-          <strong>{formatDrunkCoffeePurchaseCost()}</strong>이 필요해요. 특정 조합을 모두 구매하면 ❤️ 히든 커플
-          영상이 열려요.
+          커피 종류마다 여성·남성 캐릭터가 있어요.
+          <br />
+          캐릭터 구매는 <strong>{formatDrunkCoffeePurchaseCost()}</strong>이 필요해요.
+          <br />
+          특정 조합을 모두 구매하면 ❤️
+          <br />
+          설레는 히든 커플 영상이 열려요.
         </p>
         <p className="character-shop__balance">
           보유 {formatDrunkCoffeePurchaseCost(availableCups)}

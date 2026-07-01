@@ -1,4 +1,5 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
+import { resumeGameAudioAfterAd } from '../audio/resumeGameAudioAfterAd';
 import { resolveRewardedAdGroupId } from './adsConfig';
 import {
   shouldUseMockRewardedAd,
@@ -103,6 +104,7 @@ function showLoadedRewardedAd() {
       settled = true;
       clearTimeout(timeoutId);
       adStatus = 'idle';
+      resumeGameAudioAfterAd();
       void preloadRewardedAd();
       resolve(result);
     };

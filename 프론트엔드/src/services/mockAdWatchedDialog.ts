@@ -8,6 +8,8 @@
  */
 
 import { resolveRewardedAdGroupId } from './adsConfig';
+import { shouldUseMockTossAds } from './adEnvironment';
+import { resumeGameAudioAfterAd } from '../audio/resumeGameAudioAfterAd';
 
 /** false — 앱인토스 live 광고 ID로 전면·리워드 광고 노출 */
 export const USE_MOCK_AD_WATCHED_DIALOG = false;
@@ -17,6 +19,10 @@ const OVERLAY_ATTR = 'data-mock-ad-watched-overlay';
 /** 실광고 ID가 없으면 mock 사용 */
 export function shouldUseMockRewardedAd() {
   if (USE_MOCK_AD_WATCHED_DIALOG) {
+    return true;
+  }
+
+  if (shouldUseMockTossAds()) {
     return true;
   }
 
@@ -102,6 +108,7 @@ export async function showMockAdWatchedDialog(subtitleText?: string): Promise<bo
     const finish = (watched: boolean) => {
       window.removeEventListener('keydown', onKeyDown);
       overlay.remove();
+      if (watched) resumeGameAudioAfterAd();
       resolve(watched);
     };
 

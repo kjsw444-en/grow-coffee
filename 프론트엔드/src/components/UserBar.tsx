@@ -7,6 +7,7 @@ import './UserBar.css';
 type UserBarProps = {
   money: number;
   user: AuthUser;
+  showPlayerRank?: boolean;
   onOpenSettings: () => void;
   onCoffeeValuePress?: () => void;
 };
@@ -18,9 +19,17 @@ function sessionLabel(source: AuthUser['source']) {
   return '오프라인';
 }
 
-export const UserBar = memo(function UserBar({ money, user, onOpenSettings, onCoffeeValuePress }: UserBarProps) {
+export const UserBar = memo(function UserBar({
+  money,
+  user,
+  showPlayerRank = true,
+  onOpenSettings,
+  onCoffeeValuePress,
+}: UserBarProps) {
   const meta =
-    user.rank !== null ? `랭킹 ${user.rank}위 · ${sessionLabel(user.source)}` : sessionLabel(user.source);
+    showPlayerRank && user.rank !== null
+      ? `랭킹 ${user.rank}위 · ${sessionLabel(user.source)}`
+      : sessionLabel(user.source);
 
   return (
     <header className="user-bar">

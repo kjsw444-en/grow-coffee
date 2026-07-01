@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import type { CoffeeVariantSlug } from './coffeeVariants';
 import { DRINK_VIDEO_PRELOAD_GROWTH_MIN } from './constants';
+import { prepareCoffeePlaybackVideo } from './drinkVideoPreparation';
 import {
-  preloadCoffeePlayback,
   resolveCoffeePlayback,
   type SelectedCoffeeSlug,
 } from './hiddenCoffeeVariants';
@@ -22,6 +22,6 @@ export function useDrinkVideoPreload(
 
   useEffect(() => {
     if (!playback) return;
-    preloadCoffeePlayback(playback);
+    void prepareCoffeePlaybackVideo(playback);
   }, [playback]);
 }

@@ -1610,7 +1610,6 @@ export function CoffeeGame() {
             <PlantScene
               growth={displayGrowth}
               plantGrowth={plantGrowthForScene}
-              serverGrowth={serverGrowthPercent}
               selectedCoffeeVariant={state.selectedCoffeeVariant}
               ownedCoffeeVariants={state.ownedCoffeeVariants}
               isWatering={isHolding}

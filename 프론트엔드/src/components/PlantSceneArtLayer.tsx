@@ -14,6 +14,7 @@ import {
   isDrinkStage,
 } from '../game/utils';
 import { CatBonusButton } from './CatBonusButton';
+import { PlantGrowthGauge } from './PlantGrowthGauge';
 import { RecommendButtons } from './RecommendButtons';
 import { SceneDialogueBox } from './SceneDialogueBox';
 import type { DailyGameId } from '../services/dailyGamePick';
@@ -41,6 +42,11 @@ type PlantSceneArtLayerProps = {
   hideOverlay?: boolean;
   hidePlant?: boolean;
   hideCoffeeChip?: boolean;
+  /** 100% 마시기 대기 — 고양이·말풍선·추천 버튼만 숨김 (배경·식물 유지) */
+  hideGameChrome?: boolean;
+  hideGrowthGauge?: boolean;
+  growth?: number;
+  isHolding?: boolean;
   slotBelowShop?: ReactNode;
 };
 
@@ -67,12 +73,17 @@ function PlantSceneArtLayerComponent({
   hideOverlay = false,
   hidePlant = false,
   hideCoffeeChip = false,
+  hideGameChrome = false,
+  hideGrowthGauge = false,
+  growth = 0,
+  isHolding = false,
   slotBelowShop,
 }: PlantSceneArtLayerProps) {
   const buttonSound = useButtonSound();
   const stageGrowth = getPlantStageGrowth(plantGrowth);
   const stage = getStage(stageGrowth);
   const drinkStage = isDrinkStage(plantGrowth);
+  const hideChrome = hideGameChrome || drinkStage;
   const coffeeStage = isCoffeeStage(stageGrowth) && !drinkStage;
   const showCoffeeVariant = isCoffeeStage(stageGrowth) || drinkStage;
   const storedPlayback = useMemo((): ReturnType<typeof getActiveCoffeePlayback> | null => {
@@ -80,9 +91,10 @@ function PlantSceneArtLayerComponent({
     return getActiveCoffeePlayback(stageGrowth, selectedCoffeeVariant, ownedCoffeeVariants);
   }, [showCoffeeVariant, stageGrowth, selectedCoffeeVariant, ownedCoffeeVariants]);
 
-  const plantImageSrc = coffeeStage && storedPlayback ? storedPlayback.image : stage.image;
-  const plantImageKey = coffeeStage && storedPlayback ? storedPlayback.id : stage.min;
+  const plantImageSrc = (coffeeStage || hideChrome) && storedPlayback ? storedPlayback.image : stage.image;
+  const plantImageKey = (coffeeStage || hideChrome) && storedPlayback ? storedPlayback.id : stage.min;
   const bgSrc = getPlantBackgroundSrc(stageGrowth);
+  const showTopStack = !hideOverlay && !hideGameChrome;
   const harvestRewardStopY =
     harvestReward?.cups == null
       ? 0
@@ -125,7 +137,7 @@ function PlantSceneArtLayerComponent({
           )}
         </div>
       )}
-      {!hideOverlay && (
+      {showTopStack && (
         <div className="plant-scene__top-stack">
           <RecommendButtons
             onOpenComicSeries={onOpenComicSeries}
@@ -136,7 +148,7 @@ function PlantSceneArtLayerComponent({
           <SceneDialogueBox message={sceneDialogue} />
         </div>
       )}
-      {!hideOverlay && (
+      {showTopStack && (
         <CatBonusButton
           disabled={disabled}
           fortuneNudgeVisible={fortuneNudgeVisible}
@@ -151,7 +163,7 @@ function PlantSceneArtLayerComponent({
       )}
       {!hidePlant && (
         <div
-          className={`plant-scene__plant-slot${coffeeStage ? ' plant-scene__plant-slot--coffee' : ''}`}
+          className={`plant-scene__plant-slot${coffeeStage || hideChrome ? ' plant-scene__plant-slot--coffee' : ''}`}
           aria-label={`성장 단계: ${storedPlayback?.label ?? stage.label}`}
         >
           <img
@@ -162,24 +174,29 @@ function PlantSceneArtLayerComponent({
           />
         </div>
       )}
-      {!hideCoffeeChip && (
-        <button
-          type="button"
-          className="plant-scene__coffee-value-chip"
-          aria-label={`커피값 ${formatWon(money)} · 지금까지 지급받은 실제 커피값 수치`}
-          onPointerDown={(event) => {
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            void buttonSound();
-            onCoffeeValuePress?.();
-          }}
-        >
-          <span className="plant-scene__coffee-value-chip-label">커피값</span>
-          <strong>{formatWon(money)}</strong>
-        </button>
-      )}
+      {!hideCoffeeChip || !hideGrowthGauge ? (
+        <div className="plant-scene__left-status-stack">
+          {!hideGrowthGauge ? <PlantGrowthGauge growth={growth} isHolding={isHolding} /> : null}
+          {!hideCoffeeChip ? (
+            <button
+              type="button"
+              className="plant-scene__coffee-value-chip"
+              aria-label={`커피값 ${formatWon(money)} · 지금까지 지급받은 실제 커피값 수치`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                void buttonSound();
+                onCoffeeValuePress?.();
+              }}
+            >
+              <span className="plant-scene__coffee-value-chip-label">커피값</span>
+              <strong>{formatWon(money)}</strong>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

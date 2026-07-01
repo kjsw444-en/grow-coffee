@@ -1,0 +1,309 @@
+.plant-growth-gauge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 34px;
+  margin-left: 2px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px rgba(90, 58, 28, 0.18));
+}
+
+.plant-growth-gauge__label {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fffaf6;
+  text-shadow: 0 1px 4px rgba(40, 24, 10, 0.55);
+}
+
+.plant-growth-gauge__track {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  padding: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.46) 0%, rgba(245, 230, 204, 0.42) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.36);
+  box-shadow:
+    inset 0 2px 6px rgba(180, 140, 90, 0.1),
+    0 4px 14px rgba(120, 80, 40, 0.08);
+  overflow: hidden;
+}
+
+.plant-growth-gauge__ticks {
+  position: absolute;
+  inset: 8px 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.plant-growth-gauge__ticks span {
+  width: 12px;
+  height: 1px;
+  border-radius: 999px;
+  background: rgba(120, 90, 60, 0.22);
+}
+
+.plant-growth-gauge__fill-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.plant-growth-gauge__fill {
+  position: relative;
+  width: 100%;
+  min-height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    #b4eca4 0%,
+    #72d866 28%,
+    #4fbf4a 58%,
+    #3a9a3e 100%
+  );
+  background-size: 100% 200%;
+  transition: height 0.22s ease-out;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    0 0 12px rgba(92, 179, 86, 0.55);
+  animation: plant-growth-gauge-fill-breathe 2.6s ease-in-out infinite;
+}
+
+.plant-growth-gauge__fill-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 20%, rgba(255, 255, 255, 0.45) 0%, transparent 62%);
+  animation: plant-growth-gauge-glow-pulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.plant-growth-gauge__fill-shimmer {
+  position: absolute;
+  inset: -50% -80%;
+  background: linear-gradient(
+    108deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.15) 44%,
+    rgba(240, 255, 230, 0.85) 50%,
+    rgba(255, 255, 255, 0.2) 56%,
+    transparent 68%
+  );
+  animation: plant-growth-gauge-shimmer-sweep 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.plant-growth-gauge__fill-sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.plant-growth-gauge__fill-sparkles span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 4px rgba(255, 255, 255, 0.95),
+    0 0 8px rgba(196, 255, 180, 0.85);
+  opacity: 0;
+  animation: plant-growth-gauge-sparkle 2.8s ease-in-out infinite;
+}
+
+.plant-growth-gauge__fill-sparkles span:nth-child(1) {
+  left: 22%;
+  bottom: 18%;
+  animation-delay: 0s;
+}
+
+.plant-growth-gauge__fill-sparkles span:nth-child(2) {
+  left: 58%;
+  bottom: 42%;
+  animation-delay: 0.7s;
+}
+
+.plant-growth-gauge__fill-sparkles span:nth-child(3) {
+  left: 35%;
+  bottom: 68%;
+  animation-delay: 1.4s;
+}
+
+.plant-growth-gauge__fill-sparkles span:nth-child(4) {
+  left: 70%;
+  bottom: 76%;
+  animation-delay: 2.1s;
+}
+
+.plant-growth-gauge--holding .plant-growth-gauge__fill {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    0 0 18px rgba(92, 179, 86, 0.75);
+  animation-duration: 1.6s;
+}
+
+.plant-growth-gauge--holding .plant-growth-gauge__fill-shimmer {
+  animation-duration: 1.1s;
+}
+
+.plant-growth-gauge--mature .plant-growth-gauge__fill {
+  background: linear-gradient(
+    180deg,
+    #e8f0a0 0%,
+    #c8d85a 30%,
+    #d4a838 62%,
+    #c88828 100%
+  );
+  background-size: 100% 200%;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    0 0 14px rgba(240, 190, 80, 0.5);
+}
+
+.plant-growth-gauge--mature .plant-growth-gauge__fill-glow {
+  background: radial-gradient(ellipse at 50% 20%, rgba(255, 248, 210, 0.55) 0%, transparent 62%);
+}
+
+.plant-growth-gauge--mature .plant-growth-gauge__fill-shimmer {
+  background: linear-gradient(
+    108deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.12) 44%,
+    rgba(255, 244, 190, 0.9) 50%,
+    rgba(255, 230, 150, 0.25) 56%,
+    transparent 68%
+  );
+  animation-duration: 2s;
+}
+
+.plant-growth-gauge--mature .plant-growth-gauge__fill-sparkles span {
+  background: #fffef5;
+  box-shadow:
+    0 0 4px rgba(255, 255, 255, 0.98),
+    0 0 9px rgba(255, 220, 120, 0.9),
+    0 0 14px rgba(255, 190, 60, 0.55);
+  animation-duration: 2.4s;
+}
+
+.plant-growth-gauge--full .plant-growth-gauge__fill {
+  background: linear-gradient(
+    180deg,
+    #ffe08a 0%,
+    #f0b038 45%,
+    #d88820 100%
+  );
+  background-size: 100% 200%;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    0 0 18px rgba(240, 176, 56, 0.75);
+  animation: plant-growth-gauge-fill-breathe 1.6s ease-in-out infinite;
+}
+
+.plant-growth-gauge--full .plant-growth-gauge__fill-sparkles span {
+  width: 3.5px;
+  height: 3.5px;
+  box-shadow:
+    0 0 5px rgba(255, 255, 255, 1),
+    0 0 12px rgba(255, 230, 140, 0.95),
+    0 0 18px rgba(255, 200, 80, 0.7);
+  animation-duration: 1.9s;
+}
+
+.plant-growth-gauge--mature .plant-growth-gauge__pct {
+  color: #ffecc8;
+  text-shadow:
+    0 1px 5px rgba(40, 24, 10, 0.6),
+    0 0 8px rgba(255, 200, 80, 0.35);
+}
+
+.plant-growth-gauge--full .plant-growth-gauge__pct {
+  color: #ffe8a8;
+}
+
+.plant-growth-gauge__pct {
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fffaf6;
+  text-shadow: 0 1px 5px rgba(40, 24, 10, 0.6);
+  white-space: nowrap;
+}
+
+@keyframes plant-growth-gauge-fill-breathe {
+  0%,
+  100% {
+    background-position: 0% 0%;
+    filter: brightness(1);
+  }
+  50% {
+    background-position: 0% 100%;
+    filter: brightness(1.1);
+  }
+}
+
+@keyframes plant-growth-gauge-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes plant-growth-gauge-shimmer-sweep {
+  0% {
+    transform: translateX(-30%) translateY(10%) rotate(8deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  55% {
+    transform: translateX(30%) translateY(-8%) rotate(8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(55%) translateY(-12%) rotate(8deg);
+    opacity: 0;
+  }
+}
+
+@keyframes plant-growth-gauge-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  28% {
+    opacity: 0.2;
+    transform: scale(0.7);
+  }
+  45% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  62% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}

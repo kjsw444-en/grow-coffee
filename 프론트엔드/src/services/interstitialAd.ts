@@ -1,4 +1,5 @@
 import { GoogleAdMob } from '@apps-in-toss/web-framework';
+import { resumeGameAudioAfterAd } from '../audio/resumeGameAudioAfterAd';
 import { resolveInterstitialAdGroupId } from './adsConfig';
 import { USE_MOCK_AD_WATCHED_DIALOG } from './mockAdWatchedDialog';
 import { showMockInterstitialDialog } from './mockInterstitialDialog';
@@ -114,6 +115,9 @@ function showLoadedInterstitialAd() {
       settled = true;
       clearTimeout(timeoutId);
       adStatus = 'idle';
+      if (result.shown) {
+        resumeGameAudioAfterAd();
+      }
       void preloadInterstitialAd();
       resolve(result);
     };

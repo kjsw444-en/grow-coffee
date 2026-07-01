@@ -1,7 +1,7 @@
 import { useButtonSound } from '../audio/SoundProvider';
 import './DailyRitualGiftBox.css';
 
-const RITUAL_GIFT_BOX_SRC = '/images/daily-ritual-cat-gift-box.png?v=3';
+const RITUAL_GIFT_BOX_SRC = '/images/daily-ritual-cat-gift-box.png?v=4';
 
 type DailyRitualGiftBoxProps = {
   visible: boolean;

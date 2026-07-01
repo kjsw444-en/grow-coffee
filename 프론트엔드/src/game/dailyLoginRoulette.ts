@@ -117,6 +117,22 @@ export function canRespinDailyLoginRouletteToday(
   );
 }
 
+/** 오늘 룰렛을 아직 돌리지 않았으면 운세·선물 UI를 뒤로 미룸 */
+export function shouldBlockFortuneForRoulette(
+  state: {
+    dailyLoginRouletteDayKey?: string;
+    ritualBonusRouletteSpins?: number;
+  },
+  options: {
+    showDailyRoulette?: boolean;
+    sessionDismissed?: boolean;
+  } = {},
+) {
+  if (options.showDailyRoulette) return true;
+  if (!canSpinDailyLoginRouletteToday(state)) return false;
+  return true;
+}
+
 export function formatDailyLoginRouletteReward(cups: number) {
   return `내린 커피 ${cups.toLocaleString('ko-KR')}잔`;
 }

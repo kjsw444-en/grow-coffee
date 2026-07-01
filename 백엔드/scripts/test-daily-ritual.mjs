@@ -126,7 +126,7 @@ test('resolveDailyRitual rolls a new gift on day change', () => {
 
 
 
-test('fortune reveal copy matches pre-rolled gift (4 variants)', () => {
+test('fortune reveal copy matches pre-rolled gift (3 variants)', () => {
   for (const giftId of Object.keys(RITUAL_GIFT_DEFINITIONS)) {
     const state = resolveDailyRitual(
       userId,
@@ -174,7 +174,7 @@ test('fortune reveal then gift open flow', () => {
 
 
 
-test('gift rewards apply coffee, passive, roulette, skip seed', () => {
+test('gift rewards apply coffee, passive, roulette', () => {
   const base = {
     ...initialGameState,
     ritualDayKey: today,
@@ -202,41 +202,6 @@ test('gift rewards apply coffee, passive, roulette, skip seed', () => {
     today,
   ).state
   assert.equal(roulette.ritualBonusRouletteSpins, 1)
-
-  const skipSeed = applyRitualGiftOpen(
-    applyRitualFortuneReveal(
-      resolveDailyRitual(userId, { ...base, ritualGiftId: 'GIFT_SKIP_SEED', growth: 0 }, today),
-      userId,
-      today,
-    ).state,
-    userId,
-    today,
-  ).state
-  assert.equal(skipSeed.growth, 25)
-})
-
-test('skip seed gift resets growth to sprout after drink', () => {
-  let state = applyRitualGiftOpen(
-    applyRitualFortuneReveal(
-      resolveDailyRitual(
-        userId,
-        { ...initialGameState, ritualDayKey: today, ritualFortuneId: 'DAILY_GIFT', ritualGiftId: 'GIFT_SKIP_SEED' },
-        today,
-      ),
-      userId,
-      today,
-    ).state,
-    userId,
-    today,
-  ).state
-
-
-
-  state = normalizeGameState({ ...state, growth: 100 })
-
-  state = applyDrink(state, { randomValue: 0 }).state
-
-  assert.equal(state.growth, 25)
 
 })
 

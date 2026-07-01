@@ -1,3 +1,5 @@
+import { resumeGameAudioAfterAd } from '../audio/resumeGameAudioAfterAd';
+
 const OVERLAY_ATTR = 'data-mock-interstitial-overlay';
 
 function removeExistingOverlay() {
@@ -78,6 +80,7 @@ export async function showMockInterstitialDialog(): Promise<boolean> {
     const finish = (watched: boolean) => {
       window.removeEventListener('keydown', onKeyDown);
       overlay.remove();
+      if (watched) resumeGameAudioAfterAd();
       resolve(watched);
     };
 

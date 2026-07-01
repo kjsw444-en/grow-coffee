@@ -58,15 +58,28 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   const stopWaterLoop = useCallback(() => soundEngine.stopWaterLoop(), []);
 
   useEffect(() => {
-    const onVisibility = () => {
+    const onForeground = () => {
       if (document.hidden) {
-        soundEngine.stopAmbient();
-      } else if (unlocked && !settings.muted) {
-        void soundEngine.startAmbient();
+        soundEngine.stopAmbient({ immediate: true });
+        return;
       }
+
+      void soundEngine.ensureRunning().then(() => {
+        if (unlocked && !settings.muted) {
+          void soundEngine.startAmbient();
+        }
+      });
     };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+
+    document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('focus', onForeground);
+    window.addEventListener('pageshow', onForeground);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('focus', onForeground);
+      window.removeEventListener('pageshow', onForeground);
+    };
   }, [unlocked, settings.muted]);
 
   const value = useMemo(

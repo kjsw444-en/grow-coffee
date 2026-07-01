@@ -139,40 +139,22 @@ export const RITUAL_GIFT_TEST_OPTIONS = [
   { id: 'GIFT_COFFEE_2', label: '커피 2잔' },
   { id: 'GIFT_PASSIVE_147', label: '방치 +47%' },
   { id: 'GIFT_ROULETTE', label: '룰렛 +1' },
-  { id: 'GIFT_SKIP_SEED', label: '새싹 시작' },
 ] as const;
 
 const RITUAL_GIFT_LABELS: Record<string, string> = {
   GIFT_COFFEE_2: '내린 커피 2잔',
   GIFT_PASSIVE_147: '방치 +47%',
   GIFT_ROULETTE: '룰렛 +1회',
-  GIFT_SKIP_SEED: '새싹부터 시작',
 };
 
 const RITUAL_GIFT_DESCRIPTIONS: Record<string, string> = {
   GIFT_COFFEE_2: '고양이 선물로 내린 커피 2잔을 바로 받았어요.',
   GIFT_PASSIVE_147: '오늘 하루 동안 방치 커피 충전 속도가 47% 빨라져요.',
   GIFT_ROULETTE: '오늘 룰렛을 한 번 더 돌릴 수 있어요.',
-  GIFT_SKIP_SEED:
-    '오늘 하루 동안 씨앗 단계(0~24%)를 건너뛰고 새싹(25%)부터 자라요. 커피를 마신 뒤에도 새싹부터 다시 시작해요.',
 };
 
-export const RITUAL_SKIP_SEED_MIN_GROWTH = 25;
-
-export function hasRitualSkipSeedGift(state: GameState): boolean {
-  return (
-    readRitualBoolean(state, 'ritualGiftOpened', 'ritual_gift_opened') &&
-    readRitualString(state, 'ritualGiftId', 'ritual_gift_id') === 'GIFT_SKIP_SEED'
-  );
-}
-
-export function getRitualEffectiveGrowth(state: GameState, growth: number): number {
-  const value = Math.min(100, Math.max(0, growth));
-  if (!hasRitualSkipSeedGift(state)) {
-    return value;
-  }
-
-  return Math.max(value, RITUAL_SKIP_SEED_MIN_GROWTH);
+export function getRitualEffectiveGrowth(_state: GameState, growth: number): number {
+  return Math.min(100, Math.max(0, growth));
 }
 
 export function getRitualGiftLabel(giftId: string): string | null {

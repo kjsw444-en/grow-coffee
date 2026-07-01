@@ -7,6 +7,7 @@ import {
   type CoffeeVariantSlug,
 } from './coffeeVariants';
 import { buildCoffeeVideoSrc, HIDDEN_VIDEO_VERSION } from '../services/mediaAssets';
+import { drinkPreviewImageSrc } from './drinkPreviewImages';
 
 /** 상점 잠금 상태 표시명 */
 export const HIDDEN_COFFEE_LOCKED_LABEL = '❤️💕 하트 히든 커피';
@@ -77,6 +78,7 @@ export type CoffeePlayback = {
   label: string;
   image: string;
   video: string;
+  drinkPreviewImage: string;
 };
 
 const HIDDEN_ID_SET = new Set<string>(HIDDEN_COFFEE_VARIANTS.map((entry) => entry.id));
@@ -211,6 +213,7 @@ export function resolveCoffeePlayback(
       label: hidden.unlockedLabel,
       image: getHiddenCoffeePlaybackImage(hidden),
       video: hidden.video,
+      drinkPreviewImage: drinkPreviewImageSrc(hidden.id),
     };
   }
 
@@ -221,6 +224,7 @@ export function resolveCoffeePlayback(
       label: formatCoffeeVariantName(variant),
       image: variant.image,
       video: variant.video,
+      drinkPreviewImage: drinkPreviewImageSrc(variant.id),
     };
   }
 
@@ -230,6 +234,7 @@ export function resolveCoffeePlayback(
     label: formatCoffeeVariantName(fallback),
     image: fallback.image,
     video: fallback.video,
+    drinkPreviewImage: drinkPreviewImageSrc(fallback.id),
   };
 }
 
@@ -263,6 +268,7 @@ export function getNextCoffeePlaybackFallback(
           label: formatCoffeeVariantName(variant),
           image: variant.image,
           video: variant.video,
+          drinkPreviewImage: drinkPreviewImageSrc(variant.id),
         };
       }
     }
@@ -281,6 +287,7 @@ export function getNextCoffeePlaybackFallback(
     label: formatCoffeeVariantName(fallback),
     image: fallback.image,
     video: fallback.video,
+    drinkPreviewImage: drinkPreviewImageSrc(fallback.id),
   };
 }
 

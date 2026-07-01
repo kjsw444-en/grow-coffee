@@ -11,23 +11,33 @@ const NAV_ITEMS = [
 ] as const;
 
 type BottomNavProps = {
+  rankingEnabled?: boolean;
   onRank: () => void;
   onShop: () => void;
   onMyCoffee: () => void;
   onSettings: () => void;
 };
 
-export const BottomNav = memo(function BottomNav({ onRank, onShop, onMyCoffee, onSettings }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({
+  rankingEnabled = true,
+  onRank,
+  onShop,
+  onMyCoffee,
+  onSettings,
+}: BottomNavProps) {
   const buttonSound = useButtonSound('tap');
 
   return (
     <nav className="bottom-nav" aria-label="하단 메뉴">
-      {NAV_ITEMS.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          className={`bottom-nav__item ${item.active ? 'bottom-nav__item--active' : ''}`}
-          disabled={!item.active}
+      {NAV_ITEMS.map((item) => {
+        const active = item.id === 'rank' ? rankingEnabled : item.active;
+
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className={`bottom-nav__item ${active ? 'bottom-nav__item--active' : ''}`}
+            disabled={!active}
           onClick={
             item.id === 'settings'
               ? async () => {
@@ -53,14 +63,15 @@ export const BottomNav = memo(function BottomNav({ onRank, onShop, onMyCoffee, o
                     ? async () => buttonSound()
                     : undefined
           }
-          title={item.active ? undefined : '준비 중'}
-        >
-          <span className="bottom-nav__icon" aria-hidden="true">
-            {item.icon}
-          </span>
-          <span className="bottom-nav__label">{item.label}</span>
-        </button>
-      ))}
+            title={active ? undefined : '준비 중'}
+          >
+            <span className="bottom-nav__icon" aria-hidden="true">
+              {item.icon}
+            </span>
+            <span className="bottom-nav__label">{item.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 });

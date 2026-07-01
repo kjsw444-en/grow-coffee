@@ -22,7 +22,6 @@ class SoundEngine {
   private ambientNodes: AudioNode[] = [];
   private ambientStarted = false;
   private ambientStopTimer: ReturnType<typeof setTimeout> | null = null;
-  private unlocked = false;
   private settings: SoundSettings = loadSettings();
   private waterTickTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -65,11 +64,22 @@ class SoundEngine {
     this.applyVolumes();
   }
 
-  async unlock() {
+  /** 광고·백그라운드 복귀 후에도 AudioContext를 다시 켬 */
+  async ensureRunning() {
     const ctx = this.ensureContext();
-    if (!ctx || this.unlocked) return;
-    if (ctx.state === 'suspended') await ctx.resume();
-    this.unlocked = true;
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+      try {
+        await ctx.resume();
+      } catch {
+        /* WebView 정책 등으로 resume 실패 시 무시 */
+      }
+    }
+  }
+
+  async unlock() {
+    await this.ensureRunning();
   }
 
   private tone(
@@ -173,6 +183,7 @@ class SoundEngine {
 
   play(id: SfxId) {
     if (this.settings.muted) return;
+    void this.ensureRunning();
 
     switch (id) {
       case 'tap':
@@ -338,9 +349,13 @@ class SoundEngine {
   }
 
   async startAmbient() {
-    const ctx = this.ensureContext();
-    if (!ctx || !this.ambientGain || this.ambientStarted || this.settings.muted) return;
-    if (ctx.state === 'suspended') await ctx.resume();
+    await this.ensureRunning();
+    const ctx = this.ctx;
+    if (!ctx || !this.ambientGain || this.settings.muted) return;
+
+    if (this.ambientStarted && this.ambientNodes.length > 0) {
+      return;
+    }
 
     this.stopAmbient({ immediate: true });
 

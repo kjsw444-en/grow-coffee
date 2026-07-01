@@ -119,8 +119,9 @@ function PlantSceneComponent({
   const showWateringCan =
     isHolding && holdMode === 'water' && !showDrinkVideo && !drinkStage && !showAdSlot;
 
-  const handleUnmuteDrinkVideo = () => {
-    void drinkVideoRef.current?.unmute();
+  const handleDrinkTap = () => {
+    drinkVideoRef.current?.playFromUserGesture();
+    onDrinkTap();
   };
 
   return (
@@ -145,6 +146,8 @@ function PlantSceneComponent({
             sceneDialogue={sceneDialogue}
             harvestReward={harvestReward}
             money={money}
+            growth={growth}
+            isHolding={isHolding}
             disabled={disabled}
             onCoffeeValuePress={onCoffeeValuePress}
             onCatPressStart={onCatPressStart}
@@ -162,6 +165,7 @@ function PlantSceneComponent({
             hideOverlay={showDrinkVideo}
             hidePlant={showDrinkVideo}
             hideCoffeeChip={drinkStage || showAdSlot}
+            hideGrowthGauge={showAdSlot}
           />
           <PlantSceneHoldEffects showWateringCan={showWateringCan} holdProgress={holdProgress} />
           <PlantSceneActionLayer
@@ -183,9 +187,8 @@ function PlantSceneComponent({
             holdRemainingSec={holdRemainingSec}
             onPointerDown={onPointerDown}
             onPointerUp={onPointerUp}
-            onDrinkTap={onDrinkTap}
+            onDrinkTap={handleDrinkTap}
             onWatchAd={onWatchAd}
-            onUnmuteDrinkVideo={handleUnmuteDrinkVideo}
           />
           <DailyRitualGiftBox
             visible={ritualGiftVisible && !showDrinkVideo}

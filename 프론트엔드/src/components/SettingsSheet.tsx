@@ -1,4 +1,11 @@
-import { GOAL_AMOUNT, SELL_BATCH_REWARD, SELL_BATCH_SIZE } from '../game/constants';
+import {
+  BREWED_COFFEE_DRINK_OPTIONS,
+  GOAL_AMOUNT,
+  SELL_BATCH_REWARD,
+  SELL_BATCH_SIZE,
+  SHARE_REWARD_COFFEE_AMOUNT,
+} from '../game/constants';
+import { formatDrunkCoffeePurchaseCost } from '../game/coffeeVariants';
 import { formatWon } from '../game/utils';
 import type { AuthUser } from '../hooks/useAuth';
 import './SettingsSheet.css';
@@ -36,6 +43,9 @@ export function SettingsSheet({
   onClose,
 }: SettingsSheetProps) {
   const isTossLinked = user.source === 'toss';
+  const drinkOptionsLabel = BREWED_COFFEE_DRINK_OPTIONS.map(
+    (cups) => `${cups.toLocaleString('ko-KR')}잔`,
+  ).join(' · ');
 
   return (
     <div className="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -74,21 +84,45 @@ export function SettingsSheet({
           )}
         </section>
 
+        <section className="settings__guide" aria-labelledby="settings-guide-title">
+          <h3 id="settings-guide-title">게임 안내</h3>
+
+          <div className="settings__guide-block">
+            <h4>커피나무 키우기</h4>
+            <p>
+              물 주기 버튼을 2초 꾹 눌러 성장시키고, 100%가 되면 커피를 마실 수 있어요. 물이 부족하면
+              광고를 보고 채울 수 있고, 방치·공유·미니게임으로 커피를 더 모을 수 있어요.
+            </p>
+          </div>
+
+          <div className="settings__guide-block">
+            <h4>커피값 적립</h4>
+            <p>
+              내린 커피를 마시면 커피값이 쌓여요. {formatWon(GOAL_AMOUNT)} 목표에 도달하면 토스
+              포인트로 확인할 수 있어요. ({SELL_BATCH_SIZE}잔 마시기마다 {formatWon(SELL_BATCH_REWARD)}
+              )
+            </p>
+          </div>
+
+          <div className="settings__guide-block">
+            <h4>내린 커피 · 마신 커피</h4>
+            <p>
+              내린 커피는 성장·방치·미니게임·룰렛 등으로 모아요. 마신 커피(
+              {formatDrunkCoffeePurchaseCost()})는 상점에서 캐릭터를 구매할 때 써요. 마시기 옵션:{' '}
+              {drinkOptionsLabel}
+            </p>
+          </div>
+
+          <div className="settings__guide-block">
+            <h4>매일 이벤트 · 보너스</h4>
+            <p>
+              1일 1룰렛, 오늘의 커피 운세, 친구 공유(+{SHARE_REWARD_COFFEE_AMOUNT}잔), 히든 커플
+              영상 등 다양한 보너스가 있어요.
+            </p>
+          </div>
+        </section>
+
         <dl className="settings__info">
-          <div>
-            <dt>개발 단계</dt>
-            <dd>백엔드 + 토스 로그인 연동</dd>
-          </div>
-          <div>
-            <dt>게임 데이터</dt>
-            <dd>서버 저장소</dd>
-          </div>
-          <div>
-            <dt>목표 / {SELL_BATCH_SIZE}잔</dt>
-            <dd>
-              {formatWon(GOAL_AMOUNT)} / {formatWon(SELL_BATCH_REWARD)}
-            </dd>
-          </div>
           <div>
             <dt>플레이 기록</dt>
             <dd>
@@ -99,9 +133,11 @@ export function SettingsSheet({
         <p className="settings__warn">
           게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
         </p>
-        <button type="button" className="settings__reset" onClick={onReset}>
-          진행 데이터 초기화
-        </button>
+        {import.meta.env.DEV && (
+          <button type="button" className="settings__reset" onClick={onReset}>
+            진행 데이터 초기화
+          </button>
+        )}
         <button type="button" className="settings__close" onClick={onClose}>
           닫기
         </button>
@@ -109,4 +145,3 @@ export function SettingsSheet({
     </div>
   );
 }
-
