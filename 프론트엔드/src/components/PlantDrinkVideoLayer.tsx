@@ -52,6 +52,14 @@ type PlantDrinkVideoLayerProps = {
 };
 
 const PLAYBACK_BUFFER_MARK_SEC = 0.05;
+const PLAY_START_TIMEOUT_MS = 8_000;
+
+function restoreAudiblePlayback(video: HTMLVideoElement) {
+  video.muted = false;
+  video.defaultMuted = false;
+  video.volume = 1;
+  video.removeAttribute('muted');
+}
 
 function PlantDrinkVideoLayerComponent(
   {
@@ -74,6 +82,7 @@ function PlantDrinkVideoLayerComponent(
   const markedBufferedRef = useRef(false);
   const isPlayingRef = useRef(false);
   const playRequestedRef = useRef(false);
+  const playStartTimeoutRef = useRef<number | null>(null);
   const detachVideoListenersRef = useRef<(() => void) | null>(null);
 
   const onPlaybackStartedRef = useRef(onPlaybackStarted);
@@ -118,6 +127,12 @@ function PlantDrinkVideoLayerComponent(
     }
     setPrepState(getDrinkVideoPrepSnapshot(networkVideoSrc).state);
   }, [networkVideoSrc]);
+
+  const clearPlayStartTimeout = useCallback(() => {
+    if (playStartTimeoutRef.current === null) return;
+    window.clearTimeout(playStartTimeoutRef.current);
+    playStartTimeoutRef.current = null;
+  }, []);
 
   const releaseMountedVideo = useCallback(() => {
     detachVideoListenersRef.current?.();
@@ -177,13 +192,24 @@ function PlantDrinkVideoLayerComponent(
     const releaseInlineGuard = guardInlinePresentation(video);
 
     const onPlaying = () => {
+      clearPlayStartTimeout();
       isPlayingRef.current = true;
+      playRequestedRef.current = false;
       setIsPlaying(true);
       setPlayFailed(false);
+      restoreAudiblePlayback(video);
       onPlaybackStartedRef.current?.();
     };
 
     const onPause = () => {
+      if (playRequestedRef.current && !video.ended) {
+        console.log('[drink-video] pause-ignored-before-playing', {
+          currentTime: video.currentTime,
+          readyState: video.readyState,
+          networkState: video.networkState,
+        });
+        return;
+      }
       if (!video.ended) {
         isPlayingRef.current = false;
         setIsPlaying(false);
@@ -191,10 +217,28 @@ function PlantDrinkVideoLayerComponent(
     };
 
     const onEnded = () => {
+      clearPlayStartTimeout();
       isPlayingRef.current = false;
+      playRequestedRef.current = false;
       setIsPlaying(false);
       onPlaybackEndedRef.current?.();
     };
+
+    const onDisplayReady = (eventName: string) => {
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      setPrepState('ready');
+      console.log(`[drink-video] display-${eventName}`, {
+        networkSrc: networkVideoSrc,
+        readyState: video.readyState,
+        networkState: video.networkState,
+        currentSrc: video.currentSrc,
+        clientWidth: video.clientWidth,
+        clientHeight: video.clientHeight,
+      });
+    };
+
+    const onLoadedData = () => onDisplayReady('loadeddata');
+    const onCanPlay = () => onDisplayReady('canplay');
 
     const onTimeUpdate = () => {
       if (!video.paused && video.currentTime >= PLAYBACK_BUFFER_MARK_SEC && !markedBufferedRef.current) {
@@ -204,6 +248,7 @@ function PlantDrinkVideoLayerComponent(
     };
 
     const onError = () => {
+      clearPlayStartTimeout();
       if (playback) {
         setBlockedVideoSlugs((prev) => {
           if (prev.includes(playback.id)) return prev;
@@ -214,6 +259,7 @@ function PlantDrinkVideoLayerComponent(
         });
       }
       isPlayingRef.current = false;
+      playRequestedRef.current = false;
       setIsPlaying(false);
       setPlayFailed(true);
       onPlaybackFailedRef.current?.();
@@ -228,6 +274,8 @@ function PlantDrinkVideoLayerComponent(
     video.addEventListener('playing', onPlaying);
     video.addEventListener('pause', onPause);
     video.addEventListener('ended', onEnded);
+    video.addEventListener('loadeddata', onLoadedData);
+    video.addEventListener('canplay', onCanPlay);
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('error', onError);
 
@@ -236,14 +284,17 @@ function PlantDrinkVideoLayerComponent(
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onEnded);
+      video.removeEventListener('loadeddata', onLoadedData);
+      video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('error', onError);
     };
 
     return video;
-  }, [networkVideoSrc, ownedCoffeeVariants, playback, prepState, releaseMountedVideo]);
+  }, [clearPlayStartTimeout, networkVideoSrc, ownedCoffeeVariants, playback, prepState, releaseMountedVideo]);
 
   const logPlayFailed = useCallback((video: HTMLVideoElement, error: unknown) => {
+    clearPlayStartTimeout();
     const err = error as { name?: string; message?: string; code?: number } | null;
     console.error('[drink-video play-failed]', {
       name: err?.name,
@@ -255,10 +306,11 @@ function PlantDrinkVideoLayerComponent(
       error: video.error,
     });
     isPlayingRef.current = false;
+    playRequestedRef.current = false;
     setIsPlaying(false);
     setPlayFailed(true);
     onPlaybackFailedRef.current?.();
-  }, []);
+  }, [clearPlayStartTimeout]);
 
   const playFromUserGesture = useCallback((): boolean => {
     if (!networkVideoSrc) {
@@ -284,6 +336,7 @@ function PlantDrinkVideoLayerComponent(
     }
 
     setPlayRequested(true);
+    playRequestedRef.current = true;
     setPlayFailed(false);
     isPlayingRef.current = true;
     setIsPlaying(true);
@@ -304,8 +357,22 @@ function PlantDrinkVideoLayerComponent(
 
     try {
       prepareDrinkVideoForAudiblePlay(video);
+      video.muted = true;
+      video.defaultMuted = true;
+      video.setAttribute('muted', '');
+      clearPlayStartTimeout();
+      playStartTimeoutRef.current = window.setTimeout(() => {
+        if (!playRequestedRef.current || isPlayingRef.current && !video.paused) return;
+        logPlayFailed(video, new Error('play start timeout'));
+      }, PLAY_START_TIMEOUT_MS);
       const playPromise = video.play();
-      playPromise.catch((error) => logPlayFailed(video, error));
+      playPromise
+        .then(() => {
+          window.setTimeout(() => {
+            if (!video.paused && !video.ended) restoreAudiblePlayback(video);
+          }, 80);
+        })
+        .catch((error) => logPlayFailed(video, error));
       return true;
     } catch (error) {
       logPlayFailed(video, error);
