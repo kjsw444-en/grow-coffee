@@ -981,6 +981,19 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
           resolvedGrowth: number,
           source: string,
         ) => {
+          if (tutorialBypassQuota && resolvedGrowth < nextGrowth) {
+            logWaterCycle('tutorial-water-keep-optimistic-growth', {
+              responseGrowth: resolvedGrowth,
+              nextGrowth,
+              displayGrowth: roundGrowth(displayGrowthRef.current),
+            });
+            applyAuthoritativeState(
+              { ...serverState, growth: nextGrowth },
+              { epoch, source: `${source}-tutorial-keep-optimistic`, trustServer: false },
+            );
+            return;
+          }
+
           if (nextGrowth >= 100 && resolvedGrowth < 100) {
             logWaterCycle('water-finalize-incomplete', {
               responseGrowth: resolvedGrowth,
@@ -1319,6 +1332,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       !currentSession?.userId ||
       loading ||
       syncingRef.current ||
+      (tutorialBypassQuota && pendingWaterSyncRef.current) ||
       holdPreflightRef.current
     ) {
       return;
