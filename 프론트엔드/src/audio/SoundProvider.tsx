@@ -82,6 +82,28 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     };
   }, [unlocked, settings.muted]);
 
+  useEffect(() => {
+    if (!unlocked || settings.muted) return;
+
+    const recoverFromGesture = () => {
+      void soundEngine.ensureRunning().then(() => {
+        if (!settings.muted) {
+          void soundEngine.startAmbient();
+        }
+      });
+    };
+
+    window.addEventListener('pointerdown', recoverFromGesture, { capture: true, passive: true });
+    window.addEventListener('touchstart', recoverFromGesture, { capture: true, passive: true });
+    window.addEventListener('click', recoverFromGesture, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', recoverFromGesture, true);
+      window.removeEventListener('touchstart', recoverFromGesture, true);
+      window.removeEventListener('click', recoverFromGesture, true);
+    };
+  }, [unlocked, settings.muted]);
+
   const value = useMemo(
     () => ({
       settings,

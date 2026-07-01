@@ -41,7 +41,7 @@ export const DAILY_PASSIVE_GROWTH_CAP = 200
 
 /** 토스 공유 리워드 — contactsViral moduleId, 지급 내린 커피 */
 export const SHARE_REWARD_MODULE_ID = 'd2b00c15-3de1-437f-82b6-af3d1d87eb46'
-export const SHARE_REWARD_COFFEE_AMOUNT = 25
+export const SHARE_REWARD_COFFEE_AMOUNT = 10
 
 /** 출석 — 커피나무 100% 수확 하루 목표·연속 보너스 */
 export const ATTENDANCE_DAILY_GOAL = 3

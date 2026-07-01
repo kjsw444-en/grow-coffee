@@ -58,8 +58,8 @@ function GrowthPanelAttendanceSectionComponent({
               onClick={onClaimAttendanceDaily}
             >
               {claimingAttendanceDaily
-                ? '받는 중…'
-                : `내린 커피 ${attendance.dailyRewardCups}잔 받기`}
+                ? '광고 확인 중…'
+                : `광고 보고 내린 커피 ${attendance.dailyRewardCups}잔 받기`}
             </button>
           )}
           {attendance.canClaimStreakBonus && (

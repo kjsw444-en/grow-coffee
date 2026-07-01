@@ -6,6 +6,7 @@ export type RewardedAdPurpose =
   | 'comic'
   | 'minigame'
   | 'coffee-finish-bonus'
+  | 'attendance-daily'
   | 'daily-roulette'
   | 'daily-roulette-respin';
 
@@ -16,6 +17,7 @@ export const REWARDED_AD_PURPOSE_COPY: Record<RewardedAdPurpose, string> = {
   comic: '리워드 광고 시청 후 썰 만화를 이어서 볼 수 있어요.',
   minigame: '리워드 광고 시청 후 1일 1게임을 시작할 수 있어요.',
   'coffee-finish-bonus': '리워드 광고 시청 후 내린 커피 마지막 부스트를 받을 수 있어요.',
+  'attendance-daily': '리워드 광고 시청 후 출석 보상 내린 커피를 받을 수 있어요.',
   'daily-roulette': '리워드 광고 시청 후 오늘의 접속 룰렛을 돌릴 수 있어요.',
   'daily-roulette-respin': '리워드 광고 시청 후 룰렛을 한 번 더 돌릴 수 있어요.',
 };

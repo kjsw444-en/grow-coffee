@@ -681,7 +681,7 @@
 }
 
 .minigame-cover-hero--with-controls .minigame-cover-hero__media {
-  aspect-ratio: 334 / 420;
+  aspect-ratio: 334 / 860;
 }
 
 .minigame-cover-hero__header {
@@ -737,10 +737,10 @@
   inset: auto 0 0;
   z-index: 3;
   display: grid;
-  gap: 0.45rem;
-  max-height: 72%;
-  padding: 2.4rem 0.65rem 0.7rem;
-  overflow-y: auto;
+  gap: 0.5rem;
+  max-height: none;
+  padding: 11.15rem 0.78rem 1rem;
+  overflow: visible;
   background: linear-gradient(
     180deg,
     rgba(18, 12, 8, 0) 0%,
@@ -767,16 +767,59 @@
 
 .minigame-cover-hero__controls .ai-mission-select--on-cover {
   margin: 0;
-  gap: 0.42rem;
+  gap: 0.48rem;
+}
+
+.minigame-cover-hero__controls .ai-mission-select-shell {
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+  min-height: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 16px;
 }
 
 .minigame-cover-hero__controls .ai-mission-select-button {
-  min-height: 54px;
-  padding: 0.62rem 0.72rem;
+  width: 100%;
+  min-height: 46px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 0.58rem;
+  padding: 0;
   background: rgba(255, 252, 247, 0.96);
-  border: 1.5px solid rgba(255, 255, 255, 0.72);
+  border: 0;
   box-shadow: 0 8px 18px rgba(18, 12, 8, 0.22);
   backdrop-filter: blur(8px);
+}
+
+.minigame-cover-hero__controls .ai-mission-select-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 1.18rem;
+}
+
+.minigame-cover-hero__controls .ai-mission-select-copy {
+  min-width: 0;
+}
+
+.minigame-cover-hero__controls .ai-mission-select-copy strong {
+  font-size: 0.82rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.minigame-cover-hero__controls .ai-mission-select-copy small {
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.minigame-cover-hero__controls .ai-mission-select-badges {
+  justify-content: flex-start;
+  padding-left: 2.9rem;
+}
+
+.minigame-cover-hero__controls .ai-quest-badge {
+  padding: 0.22rem 0.48rem;
+  font-size: 0.62rem;
 }
 
 .minigame-cover-hero__controls .ai-mission-select-replay {

@@ -24,6 +24,7 @@ class SoundEngine {
   private ambientStopTimer: ReturnType<typeof setTimeout> | null = null;
   private settings: SoundSettings = loadSettings();
   private waterTickTimer: ReturnType<typeof setInterval> | null = null;
+  private rebuildContextOnNextGesture = false;
 
   private ensureContext() {
     if (typeof window === 'undefined') return null;
@@ -62,6 +63,52 @@ class SoundEngine {
     }
   }
 
+  private async rebuildContext() {
+    const previousContext = this.ctx;
+    this.stopAmbient({ immediate: true });
+    this.ctx = null;
+    this.masterGain = null;
+    this.sfxGain = null;
+    this.ambientGain = null;
+    this.ambientNodes = [];
+    this.ambientStarted = false;
+
+    if (previousContext && previousContext.state !== 'closed') {
+      try {
+        await previousContext.close();
+      } catch {
+        /* Toss 광고 복귀 직후 닫기 실패는 새 컨텍스트 생성으로 복구 */
+      }
+    }
+
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended' || String(ctx.state) === 'interrupted') {
+      try {
+        await ctx.resume();
+      } catch {
+        /* 사용자 제스처 전에는 실패할 수 있음 */
+      }
+    }
+    this.primeOutput();
+  }
+
+  private primeOutput() {
+    const ctx = this.ctx;
+    if (!ctx || !this.masterGain || ctx.state !== 'running') return;
+
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      source.connect(this.masterGain);
+      source.start();
+      source.stop(ctx.currentTime + 0.01);
+    } catch {
+      /* 일부 WebView에서는 빈 버퍼 prime을 거부할 수 있음 */
+    }
+  }
+
   getSettings() {
     return { ...this.settings };
   }
@@ -84,9 +131,19 @@ class SoundEngine {
         /* WebView 정책 등으로 resume 실패 시 무시 */
       }
     }
+    this.primeOutput();
+  }
+
+  async recoverAfterAd() {
+    this.rebuildContextOnNextGesture = true;
+    await this.ensureRunning();
   }
 
   async unlock() {
+    if (this.rebuildContextOnNextGesture) {
+      this.rebuildContextOnNextGesture = false;
+      await this.rebuildContext();
+    }
     await this.ensureRunning();
   }
 
@@ -189,9 +246,8 @@ class SoundEngine {
     });
   }
 
-  play(id: SfxId) {
+  private playNow(id: SfxId) {
     if (this.settings.muted) return;
-    void this.ensureRunning();
 
     switch (id) {
       case 'tap':
@@ -290,6 +346,34 @@ class SoundEngine {
       default:
         break;
     }
+  }
+
+  play(id: SfxId) {
+    if (this.settings.muted) return;
+
+    if (this.rebuildContextOnNextGesture) {
+      this.rebuildContextOnNextGesture = false;
+      void this.rebuildContext().then(() => {
+        if (this.ctx?.state === 'running') {
+          this.playNow(id);
+        }
+      });
+      return;
+    }
+
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended' || String(ctx.state) === 'interrupted') {
+      void this.ensureRunning().then(() => {
+        if (this.ctx?.state === 'running') {
+          this.playNow(id);
+        }
+      });
+      return;
+    }
+
+    this.playNow(id);
   }
 
   startWaterLoop() {

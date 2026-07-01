@@ -1621,7 +1621,7 @@ export function CoffeeGame() {
               isWatering={isHolding}
               isReady={readyToDrink}
               tapBurst={tapBurst}
-              disabled={actionSyncing && !isDrinkCommitting}
+              disabled={actionSyncing && !isDrinkCommitting && !drinkUiActive}
               readyToDrink={readyToDrink}
               drinkUiActive={drinkUiActive}
               isDrinkCommitting={isDrinkCommitting}

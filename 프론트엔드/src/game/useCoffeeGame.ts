@@ -2590,7 +2590,7 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
 
   const claimAttendanceDaily = useCallback(async () => {
     const currentSession = sessionRef.current;
-    if (!currentSession?.userId || syncingRef.current || claimingAttendanceDaily) return false;
+    if (!currentSession?.userId || syncingRef.current || claimingAttendanceDaily || watchingAd) return false;
 
     const before = stateRef.current;
     const preview = applyClaimAttendanceDailyReward(before);
@@ -2603,14 +2603,25 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       return false;
     }
 
-    syncingRef.current = true;
     setClaimingAttendanceDaily(true);
-    setActionSyncing(true);
+    setWatchingAd(true);
+    setActionError(null);
     const epoch = stateEpochRef.current;
-    stateRef.current = preview.state;
-    setState(preview.state);
 
     try {
+      const rewarded = await watchRewardedAd('attendance-daily');
+      setWatchingAd(false);
+
+      if (!rewarded) {
+        showSceneDialogue('광고 시청을 완료해야 출석 보상을 받을 수 있어요.');
+        return false;
+      }
+
+      syncingRef.current = true;
+      setActionSyncing(true);
+      stateRef.current = preview.state;
+      setState(preview.state);
+
       const result = await claimAttendanceDailyRewardApi();
       applyAuthoritativeState(result.state, { epoch });
       showSceneDialogue(sceneDialogueForAttendanceDailyClaim(result.rewardCups ?? preview.rewardCups));
@@ -2628,8 +2639,9 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
       syncingRef.current = false;
       setClaimingAttendanceDaily(false);
       setActionSyncing(false);
+      setWatchingAd(false);
     }
-  }, [applyAuthoritativeState, claimingAttendanceDaily, showSceneDialogue]);
+  }, [applyAuthoritativeState, claimingAttendanceDaily, showSceneDialogue, watchingAd]);
 
   const claimAttendanceStreak = useCallback(async () => {
     const currentSession = sessionRef.current;
@@ -2951,10 +2963,11 @@ export function useCoffeeGame(options: { tutorialBypassQuota?: boolean } = {}) {
   const growthForReadyCheck = tutorialBypassQuotaRef.current
     ? Math.max(roundGrowth(state.growth), roundGrowth(displayGrowth))
     : roundGrowth(effectiveGrowth);
+  const readyGrowthReached = isReadyToDrinkGrowth(growthForReadyCheck);
   const drinkUiActive =
-    (isReadyToDrinkGrowth(growthForReadyCheck) || isDrinkCommitting) && !isHolding;
+    (readyGrowthReached || isDrinkCommitting) && !isHolding;
   const readyToDrink =
-    isReadyToDrinkGrowth(growthForReadyCheck) && !actionSyncing && !isHolding;
+    readyGrowthReached && (!actionSyncing || pendingWaterSyncRef.current) && !isHolding;
   const holdRemainingSec = Math.max(0, holdTargetSec - holdElapsedSec);
   const waterStatus = useMemo(
     () => getWaterStatus(state),

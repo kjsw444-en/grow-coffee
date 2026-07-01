@@ -15,7 +15,7 @@ export const SHARE_REWARD_MODULE_ID =
   import.meta.env.VITE_TOSS_SHARE_REWARD_MODULE_ID?.trim() ||
   'd2b00c15-3de1-437f-82b6-af3d1d87eb46';
 /** 공유 완료 시 지급 내린 커피 */
-export const SHARE_REWARD_COFFEE_AMOUNT = 25;
+export const SHARE_REWARD_COFFEE_AMOUNT = 10;
 
 /** 햇빛 방치 — 1분당 5%, 20분 = 100%, 하루 최대 2잔(200%) */
 export const PASSIVE_GROWTH_PER_MINUTE = 5;
