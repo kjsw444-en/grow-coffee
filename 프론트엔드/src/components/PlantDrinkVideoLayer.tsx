@@ -19,19 +19,22 @@ import {
   type CoffeePlayback,
   type SelectedCoffeeSlug,
 } from '../game/hiddenCoffeeVariants';
+import {
+  isCoffeeVideoBlobBuffered,
+  resolveCoffeeVideoPlaybackSrc,
+} from '../game/coffeeVideoBlobCache';
 import { isDrinkStage } from '../game/utils';
 
 export type PlantDrinkVideoHandle = {
-  playFromUserGesture: () => boolean;
+  unmute: () => Promise<void>;
 };
 
 type PlantDrinkVideoLayerProps = {
   active: boolean;
-  mounted?: boolean;
-  showPoster?: boolean;
   plantGrowth: number;
   selectedCoffeeVariant: SelectedCoffeeSlug;
   ownedCoffeeVariants: CoffeeVariantSlug[];
+  fallbackBgSrc?: string;
   onPlaybackStarted?: () => void;
   onPlaybackEnded?: () => void;
   onPlaybackFailed?: () => void;
@@ -42,6 +45,29 @@ const DRINK_LOADING_LINES = [
   '따뜻한 라떼 준비 중이에요 ☕',
   '조금만 기다려 주세요',
 ] as const;
+const DRINK_LOADING_MESSAGE_DELAY_MS = 500;
+
+function applyMountedVideoAttributes(video: HTMLVideoElement) {
+  video.playsInline = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.removeAttribute('controls');
+}
+
+function applyMutedVideoAttributes(video: HTMLVideoElement) {
+  applyMountedVideoAttributes(video);
+  video.muted = true;
+  video.defaultMuted = true;
+  video.setAttribute('muted', '');
+}
+
+function applyAudibleVideoAttributes(video: HTMLVideoElement) {
+  applyMountedVideoAttributes(video);
+  video.muted = false;
+  video.defaultMuted = false;
+  video.removeAttribute('muted');
+  video.volume = DRINK_VIDEO_VOLUME;
+}
 
 function PlantDrinkVideoLayerComponent(
   {
@@ -49,21 +75,20 @@ function PlantDrinkVideoLayerComponent(
     plantGrowth,
     selectedCoffeeVariant,
     ownedCoffeeVariants,
+    fallbackBgSrc = COFFEE_COMPLETE_BG_SRC,
     onPlaybackStarted,
     onPlaybackEnded,
     onPlaybackFailed,
   }: PlantDrinkVideoLayerProps,
   ref: ForwardedRef<PlantDrinkVideoHandle>,
 ) {
-  const hostRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wasActiveRef = useRef(false);
   const drinkVideoMutedRef = useRef(true);
   const drinkVideoStartedRef = useRef(false);
+  const soundRequestedRef = useRef(false);
   const settledRef = useRef(false);
-  const { unlock, unlocked } = useSound();
-  const unlockedRef = useRef(unlocked);
-  unlockedRef.current = unlocked;
+  const { unlock } = useSound();
 
   const onPlaybackStartedRef = useRef(onPlaybackStarted);
   const onPlaybackEndedRef = useRef(onPlaybackEnded);
@@ -74,6 +99,7 @@ function PlantDrinkVideoLayerComponent(
 
   const [blockedVideoSlugs, setBlockedVideoSlugs] = useState<SelectedCoffeeSlug[]>([]);
   const [videoReady, setVideoReady] = useState(false);
+  const [showLoadingMessage, setShowLoadingMessage] = useState(false);
   const [loadingLineIndex, setLoadingLineIndex] = useState(0);
 
   const drinkStage = isDrinkStage(plantGrowth);
@@ -91,6 +117,8 @@ function PlantDrinkVideoLayerComponent(
     : null;
 
   const drinkVideoSrc = playback?.video ?? null;
+  const playbackVideoSrc = drinkVideoSrc ? resolveCoffeeVideoPlaybackSrc(drinkVideoSrc) : null;
+  const hasBufferedVideo = drinkVideoSrc ? isCoffeeVideoBlobBuffered(drinkVideoSrc) : false;
   const loadingLine = DRINK_LOADING_LINES[loadingLineIndex % DRINK_LOADING_LINES.length];
 
   const settlePlayback = useCallback(
@@ -123,17 +151,31 @@ function PlantDrinkVideoLayerComponent(
 
   useEffect(() => {
     setVideoReady(false);
+    setShowLoadingMessage(false);
     setLoadingLineIndex(0);
     settledRef.current = false;
   }, [drinkVideoSrc, active]);
 
   useEffect(() => {
-    if (!active || videoReady) return undefined;
+    if (!active || videoReady || hasBufferedVideo) {
+      setShowLoadingMessage(false);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowLoadingMessage(true);
+    }, DRINK_LOADING_MESSAGE_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [active, hasBufferedVideo, videoReady]);
+
+  useEffect(() => {
+    if (!active || videoReady || !showLoadingMessage) return undefined;
     const id = window.setInterval(() => {
       setLoadingLineIndex((prev) => (prev + 1) % DRINK_LOADING_LINES.length);
     }, 2800);
     return () => window.clearInterval(id);
-  }, [active, videoReady]);
+  }, [active, showLoadingMessage, videoReady]);
 
   const markVideoBroken = useCallback(
     (current: CoffeePlayback | null) => {
@@ -141,6 +183,7 @@ function PlantDrinkVideoLayerComponent(
         settlePlayback('failed');
         return;
       }
+
       setBlockedVideoSlugs((prev) => {
         if (prev.includes(current.id)) return prev;
         const next = [...prev, current.id];
@@ -160,6 +203,7 @@ function PlantDrinkVideoLayerComponent(
     if (active && !wasActiveRef.current) {
       drinkVideoMutedRef.current = true;
       drinkVideoStartedRef.current = false;
+      soundRequestedRef.current = false;
       settledRef.current = false;
       setBlockedVideoSlugs([]);
     }
@@ -167,61 +211,39 @@ function PlantDrinkVideoLayerComponent(
   }, [active]);
 
   const playDrinkVideo = useCallback(
-    async (preferSound: boolean) => {
+    async () => {
       const video = videoRef.current;
       if (!video) return;
-
-      if (!video.paused && video.currentTime > 0.05) {
-        if (preferSound && drinkVideoMutedRef.current) {
-          await unlock();
-          video.muted = false;
-          drinkVideoMutedRef.current = false;
-          video.volume = DRINK_VIDEO_VOLUME;
-        }
-        return;
+      if (soundRequestedRef.current) {
+        applyAudibleVideoAttributes(video);
+      } else {
+        applyMutedVideoAttributes(video);
       }
+
+      if (!video.paused && video.currentTime > 0.05) return;
 
       video.loop = false;
       video.volume = DRINK_VIDEO_VOLUME;
-
-      if (preferSound) {
-        await unlock();
-        video.muted = false;
-        drinkVideoMutedRef.current = false;
-        try {
-          await video.play();
-          return;
-        } catch {
-          // Autoplay policy fallback: keep the stable bundle's muted path.
-        }
-      }
-
-      video.muted = true;
       drinkVideoMutedRef.current = true;
       await video.play().catch(() => undefined);
     },
-    [unlock],
+    [],
   );
 
   const unmuteDrinkVideo = useCallback(async () => {
     const video = videoRef.current;
     if (!video || !drinkVideoMutedRef.current) return;
 
-    await unlock();
-    video.muted = false;
+    soundRequestedRef.current = true;
+    applyAudibleVideoAttributes(video);
     drinkVideoMutedRef.current = false;
-    video.volume = DRINK_VIDEO_VOLUME;
+    await unlock();
     if (video.paused) {
       await video.play().catch(() => undefined);
     }
   }, [unlock]);
 
-  const playFromUserGesture = useCallback((): boolean => {
-    void unmuteDrinkVideo();
-    return true;
-  }, [unmuteDrinkVideo]);
-
-  useImperativeHandle(ref, () => ({ playFromUserGesture }), [playFromUserGesture]);
+  useImperativeHandle(ref, () => ({ unmute: unmuteDrinkVideo }), [unmuteDrinkVideo]);
 
   const markVideoReady = useCallback(() => {
     setVideoReady(true);
@@ -237,6 +259,11 @@ function PlantDrinkVideoLayerComponent(
 
     const video = videoRef.current;
     if (!video) return undefined;
+    if (soundRequestedRef.current) {
+      applyAudibleVideoAttributes(video);
+    } else {
+      applyMutedVideoAttributes(video);
+    }
 
     drinkVideoStartedRef.current = false;
     let cancelled = false;
@@ -244,7 +271,7 @@ function PlantDrinkVideoLayerComponent(
     const startOnce = () => {
       if (cancelled || drinkVideoStartedRef.current) return;
       drinkVideoStartedRef.current = true;
-      void playDrinkVideo(unlockedRef.current);
+      void playDrinkVideo();
     };
 
     const onLoadedData = () => {
@@ -269,12 +296,20 @@ function PlantDrinkVideoLayerComponent(
       if (cancelled) return;
       markVideoBroken(playback);
     };
+    const onNativeFullscreenEntered = () => {
+      console.log('[drink-video-native-fullscreen-entered]', video.currentSrc || video.src);
+    };
+    const onNativeFullscreenEnded = () => {
+      console.log('[drink-video-native-fullscreen-ended]', video.currentSrc || video.src);
+    };
 
     video.addEventListener('loadeddata', onLoadedData);
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('playing', onPlaying);
     video.addEventListener('ended', onEnded);
     video.addEventListener('error', onError);
+    video.addEventListener('webkitbeginfullscreen', onNativeFullscreenEntered);
+    video.addEventListener('webkitendfullscreen', onNativeFullscreenEnded);
 
     video.load();
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -289,47 +324,52 @@ function PlantDrinkVideoLayerComponent(
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('error', onError);
+      video.removeEventListener('webkitbeginfullscreen', onNativeFullscreenEntered);
+      video.removeEventListener('webkitendfullscreen', onNativeFullscreenEnded);
       video.pause();
     };
-  }, [active, drinkVideoSrc, playback, markVideoBroken, markVideoReady, playDrinkVideo, settlePlayback]);
+  }, [active, playbackVideoSrc, playback, markVideoBroken, markVideoReady, playDrinkVideo, settlePlayback]);
 
   if (!active) {
     return null;
   }
 
-  if (!drinkVideoSrc) {
+  if (!playbackVideoSrc) {
     return (
-      <div ref={hostRef} className="plant-scene__drink-media">
-        <img className="plant-scene__bg plant-scene__bg--fallback" src={COFFEE_COMPLETE_BG_SRC} alt="창가 배경" />
+      <div className="plant-scene__drink-media">
+        <img className="plant-scene__bg plant-scene__bg--fallback" src={fallbackBgSrc} alt="창가 배경" />
       </div>
     );
   }
 
   return (
-    <div ref={hostRef} className="plant-scene__drink-media" aria-busy={!videoReady}>
-      <button
-        type="button"
-        className={`plant-scene__drink-skeleton${videoReady ? ' plant-scene__drink-skeleton--hidden' : ''}`}
-        aria-label="커피마시기 영상 준비 중"
-        aria-live="polite"
-        onClick={cycleLoadingLine}
-      >
-        <span className="plant-scene__drink-skeleton-shimmer" aria-hidden="true" />
-        <span className="plant-scene__drink-skeleton-cup" aria-hidden="true">
-          ☕
-        </span>
-        <span className="plant-scene__drink-skeleton-text">{loadingLine}</span>
-        <span className="plant-scene__drink-skeleton-hint">탭하면 다음 안내를 볼 수 있어요</span>
-      </button>
+    <div className="plant-scene__drink-media plant-scene__drink-media--playback" aria-busy={!videoReady}>
+      {showLoadingMessage ? (
+        <button
+          type="button"
+          className={`plant-scene__drink-skeleton${videoReady ? ' plant-scene__drink-skeleton--hidden' : ''}`}
+          aria-label="커피마시기 영상 준비 중"
+          aria-live="polite"
+          onClick={cycleLoadingLine}
+        >
+          <span className="plant-scene__drink-skeleton-shimmer" aria-hidden="true" />
+          <span className="plant-scene__drink-skeleton-cup" aria-hidden="true">
+            ☕
+          </span>
+          <span className="plant-scene__drink-skeleton-text">{loadingLine}</span>
+          <span className="plant-scene__drink-skeleton-hint">탭하면 다음 안내를 볼 수 있어요</span>
+        </button>
+      ) : null}
       <video
-        key={drinkVideoSrc}
+        key={playbackVideoSrc}
         ref={videoRef}
         className={`plant-scene__bg plant-scene__bg--video${videoReady ? ' plant-scene__bg--video-ready' : ''}`}
-        src={drinkVideoSrc}
+        src={playbackVideoSrc}
         playsInline
         muted
         autoPlay
         preload="auto"
+        webkit-playsinline=""
         aria-label="커피마시기"
         onPointerDown={() => {
           if (!videoReady) {

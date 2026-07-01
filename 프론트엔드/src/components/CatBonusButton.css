@@ -65,11 +65,12 @@
 }
 
 .cat-bonus-btn--pressed .cat-bonus-btn__frame {
-  animation: cat-bonus-wiggle 0.42s ease-in-out infinite;
+  animation: cat-bonus-happy-dance 0.82s ease-in-out infinite;
 }
 
 .cat-bonus-btn--pressed .cat-bonus-btn__img {
   object-position: center bottom;
+  animation: cat-bonus-happy-squish 0.82s ease-in-out infinite;
 }
 
 .cat-bonus-btn:active:not(:disabled) {
@@ -82,6 +83,10 @@
 
 .cat-bonus-btn--nudge-pulse .cat-bonus-btn__img {
   filter: drop-shadow(0 6px 16px rgba(255, 120, 160, 0.42));
+}
+
+.cat-bonus-btn--pressed.cat-bonus-btn--nudge-pulse .cat-bonus-btn__frame {
+  animation: cat-bonus-happy-dance 0.82s ease-in-out infinite;
 }
 
 .cat-bonus-btn--nudge-pulse::after {
@@ -189,13 +194,43 @@
   opacity: 0.92;
 }
 
-@keyframes cat-bonus-wiggle {
+@keyframes cat-bonus-happy-dance {
   0%,
   100% {
-    transform: rotate(-4deg) translateX(-1px);
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  12% {
+    transform: translate(-3px, -1px) rotate(-6deg) scale(1.03);
+  }
+  24% {
+    transform: translate(3px, 0) rotate(5deg) scale(1.02);
+  }
+  36% {
+    transform: translate(-3px, -1px) rotate(-5deg) scale(1.03);
   }
   50% {
-    transform: rotate(4deg) translateX(1px);
+    transform: translate(3px, 0) rotate(5deg) scale(1.02);
+  }
+  64% {
+    transform: translate(-2px, -1px) rotate(-4deg) scale(1.03);
+  }
+  78% {
+    transform: translate(2px, 0) rotate(4deg) scale(1.01);
+  }
+}
+
+@keyframes cat-bonus-happy-squish {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+  }
+  25%,
+  65% {
+    transform: scaleX(1.04) scaleY(0.98);
+  }
+  45%,
+  82% {
+    transform: scaleX(0.98) scaleY(1.03);
   }
 }
 
@@ -298,6 +333,8 @@
 @media (prefers-reduced-motion: reduce) {
   .cat-bonus-btn-wrap--nudge::before,
   .cat-bonus-btn--nudge-pulse .cat-bonus-btn__frame,
+  .cat-bonus-btn--pressed .cat-bonus-btn__frame,
+  .cat-bonus-btn--pressed .cat-bonus-btn__img,
   .cat-bonus-btn--nudge-pulse::after,
   .cat-bonus-btn__roulette-bubble,
   .cat-bonus-btn__roulette-bubble::before,

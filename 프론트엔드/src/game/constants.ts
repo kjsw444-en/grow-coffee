@@ -31,8 +31,8 @@ export const TREE_GROWTH_DISPLAY_DECIMALS = 1;
 export const TREE_GROWTH_IDLE_DECIMALS = 0;
 /** 방치 커피 게이지 표시 소수 자릿수 */
 export const PASSIVE_GROWTH_DISPLAY_DECIMALS = 2;
-/** 마시기 mp4 프리로드 시작 성장률(%) — 첫 물주기 직후부터 버퍼링 */
-export const DRINK_VIDEO_PRELOAD_GROWTH_MIN = 25;
+/** 마시기 mp4 파일 warm-up 시작 성장률(%) — video DOM은 100% 클릭 후 mount */
+export const DRINK_VIDEO_PRELOAD_GROWTH_MIN = 75;
 /** 내부 growth 반올림·틱 감도 */
 export const GROWTH_DISPLAY_DECIMALS = 5;
 

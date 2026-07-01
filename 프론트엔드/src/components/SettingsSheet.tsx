@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
   BREWED_COFFEE_DRINK_OPTIONS,
   GOAL_AMOUNT,
@@ -13,6 +13,8 @@ import './SettingsSheet.css';
 
 const DRINK_VIDEO_ENABLED_STORAGE_KEY = 'grow-coffee-drink-video-enabled';
 const DRINK_VIDEO_SETTING_CHANGE_EVENT = 'grow-coffee-drink-video-setting-change';
+const RESET_OPERATOR_CODE = 'kjsw444@gmail.com';
+const COFFEE_GRANT_OPERATOR_CODE = 'kjsw444@naver.com';
 
 function readDrinkVideoEnabled() {
   if (typeof localStorage === 'undefined') return true;
@@ -28,7 +30,8 @@ type SettingsSheetProps = {
   isTossInApp: boolean;
   onLoginWithToss: () => void;
   onLogout: () => void;
-  onReset: () => void;
+  onReset: () => void | Promise<void>;
+  onOperatorGrantCoffee: () => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -49,10 +52,14 @@ export function SettingsSheet({
   onLoginWithToss,
   onLogout,
   onReset,
+  onOperatorGrantCoffee,
   onClose,
 }: SettingsSheetProps) {
   const isTossLinked = user.source === 'toss';
   const [drinkVideoEnabled, setDrinkVideoEnabled] = useState(readDrinkVideoEnabled);
+  const [operatorCode, setOperatorCode] = useState('');
+  const [operatorMessage, setOperatorMessage] = useState('');
+  const [codeInputOpen, setCodeInputOpen] = useState(false);
   const drinkOptionsLabel = BREWED_COFFEE_DRINK_OPTIONS.map(
     (cups) => `${cups.toLocaleString('ko-KR')}잔`,
   ).join(' · ');
@@ -62,6 +69,27 @@ export function SettingsSheet({
     localStorage.setItem(DRINK_VIDEO_ENABLED_STORAGE_KEY, next ? 'on' : 'off');
     window.dispatchEvent(new Event(DRINK_VIDEO_SETTING_CHANGE_EVENT));
     setDrinkVideoEnabled(next);
+  };
+
+  const handleOperatorSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = operatorCode.trim();
+
+    if (code === RESET_OPERATOR_CODE) {
+      setOperatorMessage('코드 확인: 진행 데이터를 초기화합니다.');
+      await onReset();
+      setOperatorCode('');
+      return;
+    }
+
+    if (code === COFFEE_GRANT_OPERATOR_CODE) {
+      setOperatorMessage('코드 확인: 커피 1,000잔씩 지급합니다.');
+      await onOperatorGrantCoffee();
+      setOperatorCode('');
+      return;
+    }
+
+    setOperatorMessage('코드가 올바르지 않아요.');
   };
 
   return (
@@ -163,9 +191,39 @@ export function SettingsSheet({
         <p className="settings__warn">
           게임 진행은 서버에 저장되고, 금액은 서버에서만 계산됩니다.
         </p>
-        <button type="button" className="settings__reset" onClick={onReset}>
-          진행 데이터 초기화
-        </button>
+        <div className="settings__operator">
+          {!codeInputOpen ? (
+            <button
+              type="button"
+              className="settings__operator-open"
+              onClick={() => {
+                setCodeInputOpen(true);
+                setOperatorMessage('');
+              }}
+            >
+              코드
+            </button>
+          ) : (
+            <form onSubmit={(event) => void handleOperatorSubmit(event)}>
+              <div className="settings__operator-row">
+                <input
+                  id="settings-operator-code"
+                  type="password"
+                  value={operatorCode}
+                  onChange={(event) => {
+                    setOperatorCode(event.target.value);
+                    if (operatorMessage) setOperatorMessage('');
+                  }}
+                  placeholder="코드 입력"
+                  autoComplete="off"
+                  autoFocus
+                />
+                <button type="submit">확인</button>
+              </div>
+              {operatorMessage ? <p className="settings__operator-message">{operatorMessage}</p> : null}
+            </form>
+          )}
+        </div>
         <button type="button" className="settings__close" onClick={onClose}>
           닫기
         </button>

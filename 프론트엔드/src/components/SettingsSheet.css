@@ -232,7 +232,6 @@
   color: var(--pastel-text-soft);
 }
 
-.settings__reset,
 .settings__close {
   width: 100%;
   min-height: 46px;
@@ -242,11 +241,65 @@
   cursor: pointer;
 }
 
-.settings__reset {
+.settings__operator {
   margin-bottom: 8px;
-  border: 1px solid var(--pastel-pink-deep);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings__operator-open {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--pastel-border);
+  border-radius: 999px;
   background: var(--pastel-bg-surface);
-  color: var(--pastel-text-warm);
+  color: var(--pastel-text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings__operator form {
+  padding: 12px;
+  border: 1px solid var(--pastel-pink-deep);
+  border-radius: 12px;
+  background: var(--pastel-bg-surface);
+}
+
+.settings__operator-row {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 8px;
+}
+
+.settings__operator input {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--pastel-border);
+  border-radius: 10px;
+  background: var(--pastel-bg-muted);
+  color: var(--pastel-text);
+  font: inherit;
+}
+
+.settings__operator button {
+  min-height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: var(--pastel-pink-deep);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings__operator-message {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pastel-text-soft);
 }
 
 .settings__close {

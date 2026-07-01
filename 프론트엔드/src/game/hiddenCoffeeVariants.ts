@@ -7,6 +7,7 @@ import {
   type CoffeeVariantSlug,
 } from './coffeeVariants';
 import { buildCoffeeVideoSrc, HIDDEN_VIDEO_VERSION } from '../services/mediaAssets';
+import { preloadCoffeeVideoBlob } from './coffeeVideoBlobCache';
 import { drinkPreviewImageSrc } from './drinkPreviewImages';
 
 /** 상점 잠금 상태 표시명 */
@@ -299,10 +300,14 @@ export function preloadCoffeePlayback(playback: CoffeePlayback) {
   }
 
   preloadedVideos.add(playback.video);
-  const video = document.createElement('video');
-  video.preload = 'auto';
-  video.muted = true;
-  video.playsInline = true;
-  video.src = playback.video;
-  video.load();
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.href = playback.video;
+  link.as = 'fetch';
+  link.type = 'video/mp4';
+  link.crossOrigin = 'anonymous';
+  link.setAttribute('data-drink-video-preload', playback.video);
+  document.head.appendChild(link);
+
+  void preloadCoffeeVideoBlob(playback.video);
 }

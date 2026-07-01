@@ -15,6 +15,10 @@ export default defineConfig({
       build: 'tsc -b && vite build',
     },
   },
+  webViewProps: {
+    allowsInlineMediaPlayback: true,
+    mediaPlaybackRequiresUserAction: false,
+  },
   permissions: [],
   outdir: 'dist',
 });

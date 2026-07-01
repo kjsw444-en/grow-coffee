@@ -143,6 +143,8 @@ export function CoffeeGame() {
     testBumpGrowth,
     testBumpPassiveGrowth,
     testSetTotalCoffees,
+    releaseTestAddSpentCoffeeCups,
+    releaseTestAddBrewedCoffees,
     purchaseVariant,
     selectVariant,
     reset,
@@ -1402,6 +1404,11 @@ export function CoffeeGame() {
     syncOnboardingUi,
   ]);
 
+  const handleOperatorGrantCoffee = useCallback(async () => {
+    await releaseTestAddBrewedCoffees(1000);
+    await releaseTestAddSpentCoffeeCups(1000);
+  }, [releaseTestAddBrewedCoffees, releaseTestAddSpentCoffeeCups]);
+
   const handleDrinkTap = useCallback(() => {
     completeDrink();
     void unlock().then(() => {
@@ -2036,6 +2043,7 @@ export function CoffeeGame() {
           onLoginWithToss={loginWithToss}
           onLogout={logout}
           onReset={handleReset}
+          onOperatorGrantCoffee={handleOperatorGrantCoffee}
           onClose={closeSettings}
         />
       )}

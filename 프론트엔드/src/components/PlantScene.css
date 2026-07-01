@@ -721,6 +721,11 @@
   background: linear-gradient(180deg, #f6e8d8 0%, #edd3b4 48%, #e2c29a 100%);
 }
 
+.plant-scene__drink-media--playback {
+  z-index: 3;
+  background: transparent;
+}
+
 .plant-scene__drink-media--warmup {
   z-index: 0;
   opacity: 0.001;
@@ -744,5 +749,39 @@
   object-fit: cover;
   object-position: center center;
   pointer-events: none;
+}
+
+.drink-video-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.drink-video-layer--standby {
+  z-index: 0;
+  opacity: 0;
+  visibility: visible;
+}
+
+.drink-video-layer--active {
+  z-index: 20;
+  opacity: 1;
+  visibility: visible;
+}
+
+.drink-video-layer video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
 }
 

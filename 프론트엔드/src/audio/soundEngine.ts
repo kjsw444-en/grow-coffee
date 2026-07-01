@@ -27,6 +27,14 @@ class SoundEngine {
 
   private ensureContext() {
     if (typeof window === 'undefined') return null;
+    if (this.ctx?.state === 'closed') {
+      this.ctx = null;
+      this.masterGain = null;
+      this.sfxGain = null;
+      this.ambientGain = null;
+      this.ambientNodes = [];
+      this.ambientStarted = false;
+    }
     if (!this.ctx) {
       const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return null;
@@ -69,7 +77,7 @@ class SoundEngine {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
-    if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+    if (ctx.state === 'suspended' || String(ctx.state) === 'interrupted') {
       try {
         await ctx.resume();
       } catch {
