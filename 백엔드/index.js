@@ -99,12 +99,39 @@ const app = express()
 const PORT = Number(process.env.PORT) || 8787
 const VIDEO_ASSETS_DIR = getVideoAssetsDir()
 
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true)
+
+    const allowed =
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin.endsWith('.apps.tossmini.com') ||
+      origin.endsWith('.private-apps.tossmini.com') ||
+      origin.endsWith('.toss.im')
+
+    callback(null, allowed)
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-grow-coffee-user', 'x-grow-coffee-dev'],
+}
+
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network'] === 'true') {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  }
+  next()
+})
+app.use(cors(corsOptions))
+
 if (fs.existsSync(VIDEO_ASSETS_DIR)) {
   app.use(
     '/assets/videos',
     express.static(VIDEO_ASSETS_DIR, {
       maxAge: '7d',
       setHeaders(res, filePath) {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
         if (filePath.endsWith('.mp4')) {
           res.setHeader('Content-Type', 'video/mp4')
         }
@@ -122,31 +149,6 @@ async function attachPlayerRank(userId, payload) {
   return { ...payload, playerRank }
 }
 
-app.use((req, res, next) => {
-  if (req.headers['access-control-request-private-network'] === 'true') {
-    res.setHeader('Access-Control-Allow-Private-Network', 'true')
-  }
-  next()
-})
-
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true)
-
-      const allowed =
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        origin.endsWith('.apps.tossmini.com') ||
-        origin.endsWith('.private-apps.tossmini.com') ||
-        origin.endsWith('.toss.im')
-
-      callback(null, allowed)
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-grow-coffee-user', 'x-grow-coffee-dev'],
-  }),
-)
 app.use(express.json({ limit: '512kb' }))
 
 app.get('/api/health', (_req, res) => {
