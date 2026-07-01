@@ -122,10 +122,12 @@ function PlantSceneComponent({
   const drinkVideoRef = useRef<PlantDrinkVideoHandle>(null);
   const drinkCompletionTriggeredRef = useRef(false);
   const [drinkVideoEnabled, setDrinkVideoEnabled] = useState(readDrinkVideoEnabled);
+  const [drinkVideoPlaying, setDrinkVideoPlaying] = useState(false);
   const drinkStage = isDrinkStage(plantGrowth) || isDrinkCommitting;
   const showAdSlot = growActionSlot === 'ad';
   const growHoldDisabled = disabled || showAdSlot || !canUseGrowHold;
-  const showDrinkVideo = drinkVideoEnabled && drinkUiActive && !isHolding && !suspendDrinkVideo;
+  const showDrinkVideo =
+    drinkVideoEnabled && drinkVideoPlaying && drinkUiActive && !isHolding && !suspendDrinkVideo && !isDrinkCommitting;
   const mountDrinkVideoLayer = drinkVideoEnabled && plantGrowth >= COFFEE_STAGE_MIN && !suspendDrinkVideo;
   const drinkReadyImageSrc =
     drinkStage && !showDrinkVideo
@@ -137,6 +139,7 @@ function PlantSceneComponent({
   const triggerDrinkCompletionOnce = () => {
     if (drinkCompletionTriggeredRef.current) return;
     drinkCompletionTriggeredRef.current = true;
+    setDrinkVideoPlaying(false);
     onDrinkTap();
   };
 
@@ -148,10 +151,7 @@ function PlantSceneComponent({
       return;
     }
 
-    const playbackStarted = drinkVideoRef.current?.playFromUserGesture() ?? false;
-    if (!playbackStarted) {
-      triggerDrinkCompletionOnce();
-    }
+    setDrinkVideoPlaying(true);
   };
 
   const handleDrinkVideoToggle = () => {
@@ -170,6 +170,12 @@ function PlantSceneComponent({
       window.removeEventListener(DRINK_VIDEO_SETTING_CHANGE_EVENT, syncDrinkVideoSetting);
     };
   }, []);
+
+  useEffect(() => {
+    if (drinkStage && drinkUiActive && !isDrinkCommitting) return;
+    setDrinkVideoPlaying(false);
+    drinkCompletionTriggeredRef.current = false;
+  }, [drinkStage, drinkUiActive, isDrinkCommitting]);
 
   return (
     <section className="plant-scene">
@@ -246,28 +252,30 @@ function PlantSceneComponent({
               <span aria-hidden="true">🎬</span>
             </button>
           ) : null}
-          <PlantSceneActionLayer
-            plantGrowth={plantGrowth}
-            growth={growth}
-            drinkStage={drinkStage}
-            showAdSlot={showAdSlot}
-            growHoldDisabled={growHoldDisabled}
-            readyToDrink={readyToDrink}
-            isDrinkCommitting={isDrinkCommitting}
-            disabled={disabled}
-            watchingAd={watchingAd}
-            watchAdDisabled={watchAdDisabled}
-            holdMode={holdMode}
-            isHolding={isHolding}
-            holdProgress={holdProgress}
-            holdElapsedSec={holdElapsedSec}
-            holdTargetSec={holdTargetSec}
-            holdRemainingSec={holdRemainingSec}
-            onPointerDown={onPointerDown}
-            onPointerUp={onPointerUp}
-            onDrinkTap={handleDrinkTap}
-            onWatchAd={onWatchAd}
-          />
+          {!showDrinkVideo ? (
+            <PlantSceneActionLayer
+              plantGrowth={plantGrowth}
+              growth={growth}
+              drinkStage={drinkStage}
+              showAdSlot={showAdSlot}
+              growHoldDisabled={growHoldDisabled}
+              readyToDrink={readyToDrink}
+              isDrinkCommitting={isDrinkCommitting}
+              disabled={disabled}
+              watchingAd={watchingAd}
+              watchAdDisabled={watchAdDisabled}
+              holdMode={holdMode}
+              isHolding={isHolding}
+              holdProgress={holdProgress}
+              holdElapsedSec={holdElapsedSec}
+              holdTargetSec={holdTargetSec}
+              holdRemainingSec={holdRemainingSec}
+              onPointerDown={onPointerDown}
+              onPointerUp={onPointerUp}
+              onDrinkTap={handleDrinkTap}
+              onWatchAd={onWatchAd}
+            />
+          ) : null}
           <DailyRitualGiftBox
             visible={ritualGiftVisible && !showDrinkVideo}
             disabled={ritualGiftDisabled}

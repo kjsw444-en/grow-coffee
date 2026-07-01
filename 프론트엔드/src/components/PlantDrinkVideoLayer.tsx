@@ -9,23 +9,9 @@ import {
   useState,
   type ForwardedRef,
 } from 'react';
+import { useSound } from '../audio/SoundProvider';
+import { COFFEE_COMPLETE_BG_SRC, DRINK_VIDEO_VOLUME } from '../game/constants';
 import type { CoffeeVariantSlug } from '../game/coffeeVariants';
-import {
-  attachVideoToDisplayHost,
-  guardInlinePresentation,
-  prepareDrinkVideoFirstFramePreview,
-  prepareDrinkVideoForAudiblePlay,
-} from '../game/drinkVideoCanvas';
-import {
-  claimPreparedVideoForDisplay,
-  getDrinkVideoPrepSnapshot,
-  markCoffeeVideoBuffered,
-  prepareCoffeePlaybackVideo,
-  releaseDisplayedVideoToPreload,
-  resetDrinkVideoPrep,
-  subscribeDrinkVideoPrep,
-  type DrinkVideoPrepState,
-} from '../game/drinkVideoPreparation';
 import {
   getActiveCoffeePlayback,
   getNextCoffeePlaybackFallback,
@@ -51,21 +37,15 @@ type PlantDrinkVideoLayerProps = {
   onPlaybackFailed?: () => void;
 };
 
-const PLAYBACK_BUFFER_MARK_SEC = 0.05;
-const PLAY_START_TIMEOUT_MS = 8_000;
-
-function restoreAudiblePlayback(video: HTMLVideoElement) {
-  video.muted = false;
-  video.defaultMuted = false;
-  video.volume = 1;
-  video.removeAttribute('muted');
-}
+const DRINK_LOADING_LINES = [
+  '곧 바리스타가 나와요…',
+  '따뜻한 라떼 준비 중이에요 ☕',
+  '조금만 기다려 주세요',
+] as const;
 
 function PlantDrinkVideoLayerComponent(
   {
     active,
-    mounted = active,
-    showPoster = true,
     plantGrowth,
     selectedCoffeeVariant,
     ownedCoffeeVariants,
@@ -76,14 +56,14 @@ function PlantDrinkVideoLayerComponent(
   ref: ForwardedRef<PlantDrinkVideoHandle>,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const mountedVideoRef = useRef<HTMLVideoElement | null>(null);
-  const mountedNetworkSrcRef = useRef<string | null>(null);
-  const mountedDirectVideoRef = useRef(false);
-  const markedBufferedRef = useRef(false);
-  const isPlayingRef = useRef(false);
-  const playRequestedRef = useRef(false);
-  const playStartTimeoutRef = useRef<number | null>(null);
-  const detachVideoListenersRef = useRef<(() => void) | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const wasActiveRef = useRef(false);
+  const drinkVideoMutedRef = useRef(true);
+  const drinkVideoStartedRef = useRef(false);
+  const settledRef = useRef(false);
+  const { unlock, unlocked } = useSound();
+  const unlockedRef = useRef(unlocked);
+  unlockedRef.current = unlocked;
 
   const onPlaybackStartedRef = useRef(onPlaybackStarted);
   const onPlaybackEndedRef = useRef(onPlaybackEnded);
@@ -93,12 +73,11 @@ function PlantDrinkVideoLayerComponent(
   onPlaybackFailedRef.current = onPlaybackFailed;
 
   const [blockedVideoSlugs, setBlockedVideoSlugs] = useState<SelectedCoffeeSlug[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playRequested, setPlayRequested] = useState(false);
-  const [prepState, setPrepState] = useState<DrinkVideoPrepState>('idle');
-  const [playFailed, setPlayFailed] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [loadingLineIndex, setLoadingLineIndex] = useState(0);
 
-  const showCoffeeVariant = isDrinkStage(plantGrowth) || plantGrowth >= 75;
+  const drinkStage = isDrinkStage(plantGrowth);
+  const showCoffeeVariant = drinkStage || plantGrowth >= 75;
   const storedPlayback = useMemo((): CoffeePlayback | null => {
     if (!showCoffeeVariant) return null;
     return getActiveCoffeePlayback(plantGrowth, selectedCoffeeVariant, ownedCoffeeVariants);
@@ -111,380 +90,259 @@ function PlantDrinkVideoLayerComponent(
       : storedPlayback
     : null;
 
-  const networkVideoSrc = playback?.video ?? null;
-  const posterSrc = playback?.drinkPreviewImage ?? null;
-  const prepReady = prepState === 'ready';
-  const prepFailed = prepState === 'failed' || (playRequested && playFailed && !isPlaying);
-  const showLoadingMessage = active && playRequested && !isPlaying && !prepReady && prepState !== 'failed';
-  const showRetry = playRequested && prepFailed;
-  const showStatusOverlay = active && playRequested && (showLoadingMessage || showRetry);
-  const showPosterImage = showPoster && active && !!posterSrc && !isPlaying;
+  const drinkVideoSrc = playback?.video ?? null;
+  const loadingLine = DRINK_LOADING_LINES[loadingLineIndex % DRINK_LOADING_LINES.length];
 
-  const syncPrepState = useCallback(() => {
-    if (!networkVideoSrc) {
-      setPrepState('idle');
-      return;
-    }
-    setPrepState(getDrinkVideoPrepSnapshot(networkVideoSrc).state);
-  }, [networkVideoSrc]);
+  const settlePlayback = useCallback(
+    (kind: 'ended' | 'failed') => {
+      if (settledRef.current) return;
+      settledRef.current = true;
 
-  const clearPlayStartTimeout = useCallback(() => {
-    if (playStartTimeoutRef.current === null) return;
-    window.clearTimeout(playStartTimeoutRef.current);
-    playStartTimeoutRef.current = null;
-  }, []);
-
-  const releaseMountedVideo = useCallback(() => {
-    detachVideoListenersRef.current?.();
-    detachVideoListenersRef.current = null;
-    const mountedVideo = mountedVideoRef.current;
-    if (mountedNetworkSrcRef.current) {
-      if (mountedDirectVideoRef.current) {
-        mountedVideo?.pause();
-        mountedVideo?.removeAttribute('src');
-        mountedVideo?.load();
-        mountedVideo?.remove();
-      } else {
-        releaseDisplayedVideoToPreload(mountedNetworkSrcRef.current);
-      }
-      mountedNetworkSrcRef.current = null;
-    }
-    mountedVideoRef.current = null;
-    mountedDirectVideoRef.current = false;
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    setPlayRequested(false);
-    playRequestedRef.current = false;
-  }, []);
-
-  const ensureVideoMounted = useCallback((): HTMLVideoElement | null => {
-    if (!networkVideoSrc) return null;
-
-    const host = hostRef.current;
-    if (!host) return null;
-
-    if (
-      mountedVideoRef.current &&
-      mountedNetworkSrcRef.current === networkVideoSrc &&
-      host.contains(mountedVideoRef.current)
-    ) {
-      return mountedVideoRef.current;
-    }
-
-    if (mountedNetworkSrcRef.current && mountedNetworkSrcRef.current !== networkVideoSrc) {
-      releaseMountedVideo();
-    }
-
-    const preparedVideo = prepState === 'ready' ? claimPreparedVideoForDisplay(networkVideoSrc, host) : null;
-    const video = preparedVideo ?? document.createElement('video');
-    if (!preparedVideo) {
-      video.crossOrigin = 'anonymous';
-      video.src = networkVideoSrc;
-      attachVideoToDisplayHost(video, host);
-      video.load();
-    }
-
-    mountedVideoRef.current = video;
-    mountedNetworkSrcRef.current = networkVideoSrc;
-    mountedDirectVideoRef.current = !preparedVideo;
-    markedBufferedRef.current = false;
-
-    const releaseInlineGuard = guardInlinePresentation(video);
-
-    const onPlaying = () => {
-      clearPlayStartTimeout();
-      isPlayingRef.current = true;
-      playRequestedRef.current = false;
-      setIsPlaying(true);
-      setPlayFailed(false);
-      restoreAudiblePlayback(video);
-      onPlaybackStartedRef.current?.();
-    };
-
-    const onPause = () => {
-      if (playRequestedRef.current && !video.ended) {
-        console.log('[drink-video] pause-ignored-before-playing', {
-          currentTime: video.currentTime,
-          readyState: video.readyState,
-          networkState: video.networkState,
-        });
+      if (kind === 'ended') {
+        onPlaybackEndedRef.current?.();
         return;
       }
-      if (!video.ended) {
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-      }
-    };
 
-    const onEnded = () => {
-      clearPlayStartTimeout();
-      isPlayingRef.current = false;
-      playRequestedRef.current = false;
-      setIsPlaying(false);
-      onPlaybackEndedRef.current?.();
-    };
-
-    const onDisplayReady = (eventName: string) => {
-      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-      setPrepState('ready');
-      console.log(`[drink-video] display-${eventName}`, {
-        networkSrc: networkVideoSrc,
-        readyState: video.readyState,
-        networkState: video.networkState,
-        currentSrc: video.currentSrc,
-        clientWidth: video.clientWidth,
-        clientHeight: video.clientHeight,
+      console.warn('[drink-video] playback-settled-failed', {
+        src: drinkVideoSrc,
       });
-    };
-
-    const onLoadedData = () => onDisplayReady('loadeddata');
-    const onCanPlay = () => onDisplayReady('canplay');
-
-    const onTimeUpdate = () => {
-      if (!video.paused && video.currentTime >= PLAYBACK_BUFFER_MARK_SEC && !markedBufferedRef.current) {
-        markedBufferedRef.current = true;
-        markCoffeeVideoBuffered(networkVideoSrc);
-      }
-    };
-
-    const onError = () => {
-      clearPlayStartTimeout();
-      if (playback) {
-        setBlockedVideoSlugs((prev) => {
-          if (prev.includes(playback.id)) return prev;
-          const next = [...prev, playback.id];
-          const fallback = getNextCoffeePlaybackFallback(playback, next, ownedCoffeeVariants);
-          if (fallback) preloadCoffeePlayback(fallback);
-          return next;
-        });
-      }
-      isPlayingRef.current = false;
-      playRequestedRef.current = false;
-      setIsPlaying(false);
-      setPlayFailed(true);
       onPlaybackFailedRef.current?.();
-      console.error('[drink-video] playback-error', {
-        networkSrc: networkVideoSrc,
-        error: video.error,
-        readyState: video.readyState,
-        networkState: video.networkState,
+    },
+    [drinkVideoSrc],
+  );
+
+  useEffect(() => {
+    if (!storedPlayback) return;
+    preloadCoffeePlayback(storedPlayback);
+  }, [storedPlayback]);
+
+  useEffect(() => {
+    if (!playback || playback.id === storedPlayback?.id) return;
+    preloadCoffeePlayback(playback);
+  }, [playback, storedPlayback?.id]);
+
+  useEffect(() => {
+    setVideoReady(false);
+    setLoadingLineIndex(0);
+    settledRef.current = false;
+  }, [drinkVideoSrc, active]);
+
+  useEffect(() => {
+    if (!active || videoReady) return undefined;
+    const id = window.setInterval(() => {
+      setLoadingLineIndex((prev) => (prev + 1) % DRINK_LOADING_LINES.length);
+    }, 2800);
+    return () => window.clearInterval(id);
+  }, [active, videoReady]);
+
+  const markVideoBroken = useCallback(
+    (current: CoffeePlayback | null) => {
+      if (!current) {
+        settlePlayback('failed');
+        return;
+      }
+      setBlockedVideoSlugs((prev) => {
+        if (prev.includes(current.id)) return prev;
+        const next = [...prev, current.id];
+        const fallback = getNextCoffeePlaybackFallback(current, next, ownedCoffeeVariants);
+        if (fallback) {
+          preloadCoffeePlayback(fallback);
+        } else {
+          settlePlayback('failed');
+        }
+        return next;
       });
-    };
+    },
+    [ownedCoffeeVariants, settlePlayback],
+  );
 
-    video.addEventListener('playing', onPlaying);
-    video.addEventListener('pause', onPause);
-    video.addEventListener('ended', onEnded);
-    video.addEventListener('loadeddata', onLoadedData);
-    video.addEventListener('canplay', onCanPlay);
-    video.addEventListener('timeupdate', onTimeUpdate);
-    video.addEventListener('error', onError);
+  useEffect(() => {
+    if (active && !wasActiveRef.current) {
+      drinkVideoMutedRef.current = true;
+      drinkVideoStartedRef.current = false;
+      settledRef.current = false;
+      setBlockedVideoSlugs([]);
+    }
+    wasActiveRef.current = active;
+  }, [active]);
 
-    detachVideoListenersRef.current = () => {
-      releaseInlineGuard();
-      video.removeEventListener('playing', onPlaying);
-      video.removeEventListener('pause', onPause);
-      video.removeEventListener('ended', onEnded);
-      video.removeEventListener('loadeddata', onLoadedData);
-      video.removeEventListener('canplay', onCanPlay);
-      video.removeEventListener('timeupdate', onTimeUpdate);
-      video.removeEventListener('error', onError);
-    };
+  const playDrinkVideo = useCallback(
+    async (preferSound: boolean) => {
+      const video = videoRef.current;
+      if (!video) return;
 
-    return video;
-  }, [clearPlayStartTimeout, networkVideoSrc, ownedCoffeeVariants, playback, prepState, releaseMountedVideo]);
+      if (!video.paused && video.currentTime > 0.05) {
+        if (preferSound && drinkVideoMutedRef.current) {
+          await unlock();
+          video.muted = false;
+          drinkVideoMutedRef.current = false;
+          video.volume = DRINK_VIDEO_VOLUME;
+        }
+        return;
+      }
 
-  const logPlayFailed = useCallback((video: HTMLVideoElement, error: unknown) => {
-    clearPlayStartTimeout();
-    const err = error as { name?: string; message?: string; code?: number } | null;
-    console.error('[drink-video play-failed]', {
-      name: err?.name,
-      message: err?.message,
-      code: err?.code,
-      currentSrc: video.currentSrc,
-      readyState: video.readyState,
-      networkState: video.networkState,
-      error: video.error,
-    });
-    isPlayingRef.current = false;
-    playRequestedRef.current = false;
-    setIsPlaying(false);
-    setPlayFailed(true);
-    onPlaybackFailedRef.current?.();
-  }, [clearPlayStartTimeout]);
+      video.loop = false;
+      video.volume = DRINK_VIDEO_VOLUME;
+
+      if (preferSound) {
+        await unlock();
+        video.muted = false;
+        drinkVideoMutedRef.current = false;
+        try {
+          await video.play();
+          return;
+        } catch {
+          // Autoplay policy fallback: keep the stable bundle's muted path.
+        }
+      }
+
+      video.muted = true;
+      drinkVideoMutedRef.current = true;
+      await video.play().catch(() => undefined);
+    },
+    [unlock],
+  );
+
+  const unmuteDrinkVideo = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !drinkVideoMutedRef.current) return;
+
+    await unlock();
+    video.muted = false;
+    drinkVideoMutedRef.current = false;
+    video.volume = DRINK_VIDEO_VOLUME;
+    if (video.paused) {
+      await video.play().catch(() => undefined);
+    }
+  }, [unlock]);
 
   const playFromUserGesture = useCallback((): boolean => {
-    if (!networkVideoSrc) {
-      console.log('[drink-video] gesture-play-skipped', { networkVideoSrc });
-      return false;
-    }
-
-    const video = ensureVideoMounted();
-    if (!video) {
-      console.log('[drink-video] gesture-play-skipped', {
-        hasVideo: false,
-        networkVideoSrc,
-        prepState,
-      });
-      setPlayRequested(true);
-      setPlayFailed(true);
-      onPlaybackFailedRef.current?.();
-      return false;
-    }
-
-    if (isPlayingRef.current && !video.paused) {
-      return true;
-    }
-
-    setPlayRequested(true);
-    playRequestedRef.current = true;
-    setPlayFailed(false);
-    isPlayingRef.current = true;
-    setIsPlaying(true);
-
-    console.log('[drink-video play]', {
-      currentSrc: video.currentSrc,
-      readyState: video.readyState,
-      networkState: video.networkState,
-      currentTime: video.currentTime,
-      paused: video.paused,
-      ended: video.ended,
-      muted: video.muted,
-      volume: video.volume,
-      controls: video.controls,
-      playsInline: video.playsInline,
-      error: video.error,
-    });
-
-    try {
-      prepareDrinkVideoForAudiblePlay(video);
-      video.muted = true;
-      video.defaultMuted = true;
-      video.setAttribute('muted', '');
-      clearPlayStartTimeout();
-      playStartTimeoutRef.current = window.setTimeout(() => {
-        if (!playRequestedRef.current || isPlayingRef.current && !video.paused) return;
-        logPlayFailed(video, new Error('play start timeout'));
-      }, PLAY_START_TIMEOUT_MS);
-      const playPromise = video.play();
-      playPromise
-        .then(() => {
-          window.setTimeout(() => {
-            if (!video.paused && !video.ended) restoreAudiblePlayback(video);
-          }, 80);
-        })
-        .catch((error) => logPlayFailed(video, error));
-      return true;
-    } catch (error) {
-      logPlayFailed(video, error);
-      return false;
-    }
-  }, [ensureVideoMounted, logPlayFailed, networkVideoSrc, prepState]);
-
-  const handleRetry = useCallback(() => {
-    if (!networkVideoSrc) return;
-    setPlayFailed(false);
-    playFromUserGesture();
-  }, [networkVideoSrc, playFromUserGesture]);
+    void unmuteDrinkVideo();
+    return true;
+  }, [unmuteDrinkVideo]);
 
   useImperativeHandle(ref, () => ({ playFromUserGesture }), [playFromUserGesture]);
 
-  useEffect(() => subscribeDrinkVideoPrep(syncPrepState), [syncPrepState]);
+  const markVideoReady = useCallback(() => {
+    setVideoReady(true);
+  }, []);
+
+  const cycleLoadingLine = useCallback(() => {
+    if (videoReady) return;
+    setLoadingLineIndex((prev) => (prev + 1) % DRINK_LOADING_LINES.length);
+  }, [videoReady]);
 
   useEffect(() => {
-    if (!networkVideoSrc) return;
-    void prepareCoffeePlaybackVideo({ video: networkVideoSrc });
-  }, [networkVideoSrc]);
+    if (!active || !drinkVideoSrc) return undefined;
 
-  useEffect(() => {
-    if (!mounted || !networkVideoSrc) return;
-    ensureVideoMounted();
-  }, [ensureVideoMounted, mounted, networkVideoSrc]);
+    const video = videoRef.current;
+    if (!video) return undefined;
 
-  useEffect(() => {
-    if (!active || prepState !== 'ready' || !networkVideoSrc) return;
+    drinkVideoStartedRef.current = false;
+    let cancelled = false;
 
-    const video = ensureVideoMounted();
-    if (!video || isPlayingRef.current) return;
-
-    prepareDrinkVideoFirstFramePreview(video);
-  }, [active, ensureVideoMounted, networkVideoSrc, prepState]);
-
-  useEffect(() => {
-    if (!active || !playRequested || prepState !== 'ready' || !networkVideoSrc) return;
-    ensureVideoMounted();
-  }, [active, ensureVideoMounted, networkVideoSrc, playRequested, prepState]);
-
-  useEffect(() => {
-    if (mounted) return;
-    markedBufferedRef.current = false;
-    playRequestedRef.current = false;
-    setPlayRequested(false);
-    setPlayFailed(false);
-    setIsPlaying(false);
-    releaseMountedVideo();
-  }, [mounted, releaseMountedVideo]);
-
-  useEffect(() => () => releaseMountedVideo(), [releaseMountedVideo]);
-
-  useEffect(() => {
-    return () => {
-      if (networkVideoSrc) resetDrinkVideoPrep(networkVideoSrc);
+    const startOnce = () => {
+      if (cancelled || drinkVideoStartedRef.current) return;
+      drinkVideoStartedRef.current = true;
+      void playDrinkVideo(unlockedRef.current);
     };
-  }, [networkVideoSrc]);
 
-  const layerClassName = [
-    'plant-scene__drink-media',
-    showPoster ? 'plant-scene__drink-media--solo' : '',
-    mounted && !active ? 'plant-scene__drink-media--warmup' : '',
-    'drink-video-layer',
-    showPoster ? '' : 'drink-video-layer--warmup-only',
-    isPlaying ? 'drink-video-layer--playing' : 'drink-video-layer--poster-front',
-    prepReady ? 'drink-video-layer--video-ready' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+    const onLoadedData = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        markVideoReady();
+      }
+      startOnce();
+    };
+    const onCanPlay = () => {
+      markVideoReady();
+      startOnce();
+    };
+    const onPlaying = () => {
+      markVideoReady();
+      onPlaybackStartedRef.current?.();
+    };
+    const onEnded = () => {
+      if (cancelled) return;
+      settlePlayback('ended');
+    };
+    const onError = () => {
+      if (cancelled) return;
+      markVideoBroken(playback);
+    };
 
-  if (!mounted) {
+    video.addEventListener('loadeddata', onLoadedData);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('ended', onEnded);
+    video.addEventListener('error', onError);
+
+    video.load();
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      markVideoReady();
+      startOnce();
+    }
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadeddata', onLoadedData);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
+      video.pause();
+    };
+  }, [active, drinkVideoSrc, playback, markVideoBroken, markVideoReady, playDrinkVideo, settlePlayback]);
+
+  if (!active) {
     return null;
   }
 
+  if (!drinkVideoSrc) {
+    return (
+      <div ref={hostRef} className="plant-scene__drink-media">
+        <img className="plant-scene__bg plant-scene__bg--fallback" src={COFFEE_COMPLETE_BG_SRC} alt="창가 배경" />
+      </div>
+    );
+  }
+
   return (
-    <div
-      ref={hostRef}
-      className={layerClassName}
-      aria-busy={showLoadingMessage}
-      aria-hidden={!isPlaying && !showPosterImage && !showStatusOverlay}
-      aria-label="커피마시기"
-    >
-      {showPosterImage ? (
-        <img
-          className="plant-scene__drink-fallback__poster"
-          src={posterSrc ?? undefined}
-          alt=""
-          draggable={false}
-        />
-      ) : null}
-      {showStatusOverlay ? (
-        <div className="plant-scene__drink-fallback plant-scene__drink-fallback--status-only">
-          <div className="plant-scene__drink-fallback__overlay plant-scene__drink-fallback__overlay--status-only">
-            {showLoadingMessage ? (
-              <p className="plant-scene__drink-fallback__message">영상 준비 중…</p>
-            ) : null}
-            {showRetry ? (
-              <>
-                <p className="plant-scene__drink-fallback__message">영상을 재생할 수 없어요</p>
-                <button
-                  type="button"
-                  className="plant-scene__drink-fallback__retry"
-                  onClick={handleRetry}
-                >
-                  다시 시도
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+    <div ref={hostRef} className="plant-scene__drink-media" aria-busy={!videoReady}>
+      <button
+        type="button"
+        className={`plant-scene__drink-skeleton${videoReady ? ' plant-scene__drink-skeleton--hidden' : ''}`}
+        aria-label="커피마시기 영상 준비 중"
+        aria-live="polite"
+        onClick={cycleLoadingLine}
+      >
+        <span className="plant-scene__drink-skeleton-shimmer" aria-hidden="true" />
+        <span className="plant-scene__drink-skeleton-cup" aria-hidden="true">
+          ☕
+        </span>
+        <span className="plant-scene__drink-skeleton-text">{loadingLine}</span>
+        <span className="plant-scene__drink-skeleton-hint">탭하면 다음 안내를 볼 수 있어요</span>
+      </button>
+      <video
+        key={drinkVideoSrc}
+        ref={videoRef}
+        className={`plant-scene__bg plant-scene__bg--video${videoReady ? ' plant-scene__bg--video-ready' : ''}`}
+        src={drinkVideoSrc}
+        playsInline
+        muted
+        autoPlay
+        preload="auto"
+        aria-label="커피마시기"
+        onPointerDown={() => {
+          if (!videoReady) {
+            cycleLoadingLine();
+            return;
+          }
+          void unmuteDrinkVideo();
+        }}
+        onClick={() => {
+          if (!videoReady) return;
+          void unmuteDrinkVideo();
+        }}
+      />
     </div>
   );
 }
